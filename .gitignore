@@ -41,3 +41,4 @@ secrets
 test_data
 test_reports/
 tests/perf_tests/input/*.json
+config-volume
