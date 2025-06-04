@@ -268,7 +268,11 @@ if [ "${SKIP_BRINGUP}" != "1" ] ; then
     echo '########################################'
     echo Launching SceneScape
     echo '########################################'
-
+    mkdir -p config-volume
+    if [ ! -e config-volume/tracker-config.json ] ; then
+        echo "Creating config-volume/tracker-config.json"
+        cp ./controller/config/tracker-config.json config-volume/
+    fi
     env SUPASS="${SUPASS}" docker compose up -d
 
     echo
