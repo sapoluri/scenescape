@@ -283,6 +283,8 @@ docker-compose.yml: ./sample_data/docker-compose-example.yml
 .env:
 	@echo "SECRETSDIR=$(SECRETSDIR)" > $@
 	@echo "VERSION=$(VERSION)" >> $@
+	@echo "GID=$$(id -g)" >> $@
+	@echo "UID=$$(id -u)" >> $@
 
 # ======================= Secrets Management =========================
 
