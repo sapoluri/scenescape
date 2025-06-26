@@ -56,13 +56,8 @@ def prepareObjDict(scene, obj, update_visibility):
     obj_dict['rotation'] = aobj.rotation
 
   if scene and scene.output_lla:
-    TRS_MAT = np.array([
-      [ 9.50211633e-01, 1.43764810e-01,-3.16662150e-01,-1.99839508e+06],
-      [-3.42381196e-01, 5.48274180e-01,-7.78470247e-01,-4.91256999e+06],
-      [ 6.09783110e-02, 8.38195973e-01, 5.63519781e-01, 3.53220928e+06],
-      [ 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
-    lat_long_alt = convertXYZToLLA(TRS_MAT, aobj.sceneLoc.asCartesianVector)
-    lat_long_alt = np.array([ lat_long_alt[1], lat_long_alt[0], lat_long_alt[2] ])  # [longitude, latitude, altitude]
+    lat_long_alt = convertXYZToLLA(scene.TRS_xyz_to_lla, aobj.sceneLoc.asCartesianVector)
+#    lat_long_alt = np.array([ lat_long_alt[1], lat_long_alt[0], lat_long_alt[2] ])  # [longitude, latitude, altitude]
     obj_dict['lat_long_alt'] = lat_long_alt.tolist()
 
   reid = aobj.reidVector
