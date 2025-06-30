@@ -12,11 +12,12 @@ from controller.tracking import (MAX_UNRELIABLE_TIME,
                                  NON_MEASUREMENT_TIME_STATIC)
 from scene_common import log
 from scene_common.camera import Camera
-from scene_common.earth_lla import convertLLAToECEF
+from scene_common.earth_lla import convertLLAToECEF, calculateTRSLocal2LLAFromImageMap
 from scene_common.geometry import Line, Point, Region, Tripwire
 from scene_common.scene_model import SceneModel
 from scene_common.timestamp import get_epoch_time, get_iso_time
 from scene_common.transform import CameraPose
+from typing import Optional
 
 DEBOUNCE_DELAY = 0.5
 
@@ -46,7 +47,7 @@ class Scene(SceneModel):
     self.tracker = None
     self.trackerType = None
     self.setTracker(self.DEFAULT_TRACKER)
-    self.TRS_xyz_to_lla = None
+    self._trs_xyz_to_lla = None
 
     # FIXME - only for backwards compatibility
     self.scale = scale
@@ -87,7 +88,9 @@ class Scene(SceneModel):
       self.regulated_rate = scene_data['regulated_rate']
     if 'external_update_rate' in scene_data:
       self.external_update_rate = scene_data['external_update_rate']
-    self.getTRSxyzToLLA()
+    # Access the property to trigger initialization
+    self._trs_xyz_to_lla = None
+    _ = self.trs_xyz_to_lla
     return
 
   def updateTracker(self, max_unreliable_time, non_measurement_time_dynamic,
@@ -383,7 +386,8 @@ class Scene(SceneModel):
     if 'tracker_config' in data:
       tracker_config = data['tracker_config']
       scene.updateTracker(tracker_config[0], tracker_config[1], tracker_config[2])
-    scene.getTRSxyzToLLA()
+    # Access the property to trigger lazy initialization if needed
+    _ = scene.trs_xyz_to_lla
     return scene
 
   def updateChildren(self, newChildren):
@@ -458,20 +462,17 @@ class Scene(SceneModel):
     opppt = cv2.undistortPoints(oppositepxpoint, cameraintrinsicsmatrix, distortionmatrix)
     return pt[0][0][0], pt[0][0][1], opppt[0][0][0] - pt[0][0][0], opppt[0][0][1] - pt[0][0][1]
 
-  def getTRSxyzToLLA(self):
+  @property
+  def trs_xyz_to_lla(self) -> Optional[np.ndarray]:
     """
-    Update the transformation matrix from TRS (Translation, Rotation, Scale) coordinates to LLA (Latitude, Longitude, Altitude) coordinates.
-    This method is a placeholder and should be implemented based on the specific requirements of the scene.
+    Get the transformation matrix from TRS (Translation, Rotation, Scale) coordinates to LLA (Latitude, Longitude, Altitude) coordinates.
+
+    The matrix is calculated lazily on first access and cached for subsequent calls.
     """
-    # Placeholder for actual implementation
-    # if self.output_lla and self.map_corners_lla:
-    #   run proper function from scene_common.earth_lla
-    #   input validation should happen here?
-    TRS_MAT = np.array([
-      [ 9.50211633e-01, 1.43764810e-01,-3.16662150e-01,-1.99839508e+06],
-      [-3.42381196e-01, 5.48274180e-01,-7.78470247e-01,-4.91256999e+06],
-      [ 6.09783110e-02, 8.38195973e-01, 5.63519781e-01, 3.53220928e+06],
-      [ 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
-    if self.TRS_xyz_to_lla is None:
-      self.TRS_xyz_to_lla = TRS_MAT
-    return self.TRS_xyz_to_lla
+    if self._trs_xyz_to_lla is None and self.output_lla and self.map_corners_lla is not None:
+      # termporarily hardcoded resx and resy for queuing scene (scene.png)
+      resx = 1200
+      resy = 1140
+      self._trs_xyz_to_lla = calculateTRSLocal2LLAFromImageMap(resx, resy, self.scale,
+                                                               self.map_corners_lla)
+    return self._trs_xyz_to_lla
