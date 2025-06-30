@@ -87,7 +87,7 @@ class Scene(SceneModel):
       self.regulated_rate = scene_data['regulated_rate']
     if 'external_update_rate' in scene_data:
       self.external_update_rate = scene_data['external_update_rate']
-    self.TRS_xyz_to_lla = self.updateTRSxyzToLLA()
+    self.getTRSxyzToLLA()
     return
 
   def updateTracker(self, max_unreliable_time, non_measurement_time_dynamic,
@@ -383,7 +383,7 @@ class Scene(SceneModel):
     if 'tracker_config' in data:
       tracker_config = data['tracker_config']
       scene.updateTracker(tracker_config[0], tracker_config[1], tracker_config[2])
-    scene.updateTRSxyzToLLA()
+    scene.getTRSxyzToLLA()
     return scene
 
   def updateChildren(self, newChildren):
@@ -458,7 +458,7 @@ class Scene(SceneModel):
     opppt = cv2.undistortPoints(oppositepxpoint, cameraintrinsicsmatrix, distortionmatrix)
     return pt[0][0][0], pt[0][0][1], opppt[0][0][0] - pt[0][0][0], opppt[0][0][1] - pt[0][0][1]
 
-  def updateTRSxyzToLLA(self):
+  def getTRSxyzToLLA(self):
     """
     Update the transformation matrix from TRS (Translation, Rotation, Scale) coordinates to LLA (Latitude, Longitude, Altitude) coordinates.
     This method is a placeholder and should be implemented based on the specific requirements of the scene.
@@ -472,5 +472,6 @@ class Scene(SceneModel):
       [-3.42381196e-01, 5.48274180e-01,-7.78470247e-01,-4.91256999e+06],
       [ 6.09783110e-02, 8.38195973e-01, 5.63519781e-01, 3.53220928e+06],
       [ 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
-    log.warning("computeTRSxyzToLLA not yet implemented - returning hardcoded value")
-    self.TRS_xyz_to_lla = TRS_MAT
+    if self.TRS_xyz_to_lla is None:
+      self.TRS_xyz_to_lla = TRS_MAT
+    return self.TRS_xyz_to_lla
