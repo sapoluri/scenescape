@@ -178,7 +178,7 @@ def extractTriangleMesh(map_info, rotation=None):
 def getMeshAxisAlignedProjectionToXY(mesh):
   """! Extract the projection of a mesh to Z=0 plane.
   @param mesh: Open3D triangle mesh
-  @return: list of the projection corners in XY plane, starting from (min_x, min_y) along x-axis.
+  @return: list of the projection corners in Z=0 plane, starting from (min_x, min_y, 0) along x-axis.
   """
   if not isinstance(mesh, o3d.t.geometry.TriangleMesh):
     raise TypeError("Input must be an Open3D TriangleMesh.")
@@ -188,9 +188,8 @@ def getMeshAxisAlignedProjectionToXY(mesh):
   # Get min and max bounds
   min_bound = bbox.min_bound.numpy()  # numpy array [min_x, min_y, min_z]
   max_bound = bbox.max_bound.numpy()  # numpy array [max_x, max_y, max_z]
-  # Extract the corners in (x, y) format
-  corners = np.array([ [min_bound[0], min_bound[1]],
-              [max_bound[0], min_bound[1]],
-              [max_bound[0], max_bound[1]],
-              [min_bound[0], max_bound[1]] ])
+  corners = np.array([ [min_bound[0], min_bound[1], 0.0],
+              [max_bound[0], min_bound[1], 0.0],
+              [max_bound[0], max_bound[1], 0.0],
+              [min_bound[0], max_bound[1], 0.0] ])
   return corners

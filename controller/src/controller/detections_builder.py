@@ -50,7 +50,6 @@ def prepareObjDict(scene, obj, update_visibility):
 
   if scene and scene.output_lla:
     lat_long_alt = convertXYZToLLA(scene.trs_xyz_to_lla, aobj.sceneLoc.asCartesianVector)
-#    lat_long_alt = np.array([ lat_long_alt[1], lat_long_alt[0], lat_long_alt[2] ])  # [longitude, latitude, altitude]
     obj_dict['lat_long_alt'] = lat_long_alt.tolist()
 
   reid = aobj.reidVector
