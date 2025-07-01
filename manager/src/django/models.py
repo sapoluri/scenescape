@@ -107,7 +107,7 @@ class Scene(models.Model):
   scale_z = models.FloatField("Z Scale", default=1.0, null=True, blank=False)
   map_processed = models.DateTimeField("Last Processed at", null=True, editable=False)
   output_lla = models.BooleanField(choices=BOOLEAN_CHOICES, default=False, null=True)
-  map_corners_lla = models.JSONField("Geospatial coordinates (lat, long, alt) of the four map corners in the [(0,0),(resx,0),(resx,resy),(0,resy)] order in JSON format", default=None, null=True, blank=True)
+  map_corners_lla = models.JSONField("Geospatial coordinates (lat, long, alt) of the four map corners in JSON format (from the bottom-left corner clock-wise)", default=None, null=True, blank=True)
   camera_calibration = models.CharField(
     "Calibration Type", max_length=20, choices=CALIBRATION_CHOICES, default=MANUAL)
   polycam_data = models.FileField(blank=True, null=True, validators=[

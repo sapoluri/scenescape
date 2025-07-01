@@ -12,11 +12,12 @@ from controller.tracking import (MAX_UNRELIABLE_TIME,
                                  NON_MEASUREMENT_TIME_STATIC)
 from scene_common import log
 from scene_common.camera import Camera
-from scene_common.earth_lla import convertLLAToECEF, calculateTRSLocal2LLAFromImageMap
+from scene_common.earth_lla import convertLLAToECEF, calculateTRSLocal2LLAFromSurfacePoints
 from scene_common.geometry import Line, Point, Region, Tripwire
 from scene_common.scene_model import SceneModel
 from scene_common.timestamp import get_epoch_time, get_iso_time
 from scene_common.transform import CameraPose
+from scene_common.mesh_util import getMeshAxisAlignedProjectionToXY
 from typing import Optional
 
 DEBOUNCE_DELAY = 0.5
@@ -54,8 +55,6 @@ class Scene(SceneModel):
 
     return
 
-
-
   def setTracker(self, trackerType):
     if trackerType not in self.available_trackers:
       log.error("Chosen tracker is not available")
@@ -88,8 +87,8 @@ class Scene(SceneModel):
       self.regulated_rate = scene_data['regulated_rate']
     if 'external_update_rate' in scene_data:
       self.external_update_rate = scene_data['external_update_rate']
+    self._invalidate_trs_xyz_to_lla()
     # Access the property to trigger initialization
-    self._trs_xyz_to_lla = None
     _ = self.trs_xyz_to_lla
     return
 
@@ -386,7 +385,7 @@ class Scene(SceneModel):
     if 'tracker_config' in data:
       tracker_config = data['tracker_config']
       scene.updateTracker(tracker_config[0], tracker_config[1], tracker_config[2])
-    # Access the property to trigger lazy initialization if needed
+    # Access the property to trigger initialization
     _ = scene.trs_xyz_to_lla
     return scene
 
@@ -470,9 +469,14 @@ class Scene(SceneModel):
     The matrix is calculated lazily on first access and cached for subsequent calls.
     """
     if self._trs_xyz_to_lla is None and self.output_lla and self.map_corners_lla is not None:
-      # termporarily hardcoded resx and resy for queuing scene (scene.png)
-      resx = 1200
-      resy = 1140
-      self._trs_xyz_to_lla = calculateTRSLocal2LLAFromImageMap(resx, resy, self.scale,
-                                                               self.map_corners_lla)
+      mesh_corners_xyz = getMeshAxisAlignedProjectionToXY(self.map_triangle_mesh)
+      self._trs_xyz_to_lla = calculateTRSLocal2LLAFromSurfacePoints(mesh_corners_xyz, self.map_corners_lla)
     return self._trs_xyz_to_lla
+
+  def _invalidate_trs_xyz_to_lla(self):
+    """
+    Invalidate the cached transformation matrix from TRS to LLA coordinates.
+    This method should be called when the scene geospatial mapping parameters change.
+    """
+    self._trs_xyz_to_lla = None
+    return
