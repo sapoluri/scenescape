@@ -28,6 +28,15 @@ This file is licensed under the Limited Edge Software Distribution License Agree
   <div class="card-body">
     <form enctype="multipart/form-data" class="" method="post" id="scene_update_form">
       {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       {% for field in form %}
       <div class="form-group row" id="{{ field.name }}_wrapper">
         <label class="col-sm-2 col-form-label" id="label_{{ field.name }}" for="id_{{ field.name }}">
