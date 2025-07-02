@@ -12,7 +12,6 @@ from django.forms import ModelForm, ValidationError
 
 from manager.models import SingletonSensor, Scene, Cam, ChildScene
 from scene_common.options import SINGLETON_CHOICES, AREA_CHOICES
-from manager.validators import validate_map_corners_lla
 
 class CamCalibrateForm(forms.ModelForm):
   class Meta:
