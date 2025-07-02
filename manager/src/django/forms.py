@@ -4,7 +4,6 @@
 
 import hashlib
 import json
-import os
 
 from django import forms
 from django.conf import settings
@@ -13,6 +12,7 @@ from django.forms import ModelForm, ValidationError
 
 from manager.models import SingletonSensor, Scene, Cam, ChildScene
 from scene_common.options import SINGLETON_CHOICES, AREA_CHOICES
+from manager.validators import validate_map_corners_lla
 
 class CamCalibrateForm(forms.ModelForm):
   class Meta:
@@ -82,30 +82,9 @@ class SceneUpdateForm(ModelForm):
         self.instance.polycam_hash = file_hash
     else:
       self.instance.polycam_hash = ""
+    if cleaned_data['output_lla'] and (cleaned_data['map_corners_lla'] is None or cleaned_data['map'] is None):
+      raise forms.ValidationError("Map corners LLA and map file must be provided when output LLA is enabled.")
     return cleaned_data
-
-  def clean_map_corners_lla(self):
-    map_corners_lla = self.cleaned_data['map_corners_lla']
-    if self.cleaned_data['output_lla'] == False:
-      return map_corners_lla
-    if not map_corners_lla:
-      raise forms.ValidationError("Map corners LLA field must be a JSON array with geographic coordinates of four points.")
-    try:
-      corners = json.loads(map_corners_lla) if isinstance(map_corners_lla, str) else map_corners_lla
-    except Exception:
-      raise forms.ValidationError("Map corners LLA field must be a valid JSON array.")
-    if not isinstance(corners, list) or len(corners) != 4:
-      raise forms.ValidationError("Map corners LLA must be a JSON array with exactly four points.")
-    for point in corners:
-      if not (isinstance(point, (list, tuple)) and len(point) == 3):
-        raise forms.ValidationError("Each point must be a list or tuple of two or three coordinates.")
-      try:
-        float(point[0])
-        float(point[1])
-        float(point[2])
-      except Exception:
-        raise forms.ValidationError("Each coordinate must be a number.")
-    return map_corners_lla
 
 class SingletonForm(forms.Form):
   area = forms.ChoiceField(choices=AREA_CHOICES,
