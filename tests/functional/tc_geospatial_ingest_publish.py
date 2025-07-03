@@ -62,7 +62,6 @@ class GeospatialIngestPublish(FunctionalTest):
   def eventReceived(self, pahoClient, userdata, message):
     data = message.payload.decode("utf-8")
     detectionData = json.loads(data)
-    print("Received detection data:", detectionData)
     try:
       self.verifyDetection(detectionData)
       self.outputReceived = True
@@ -81,7 +80,6 @@ class GeospatialIngestPublish(FunctionalTest):
           if self.detectionValidator:
             self.detectionValidator(object)
         except AssertionError as e:
-          print(f"LLA validation failed: {e}")
           raise
       else:
         assert "lat_long_alt" not in object
