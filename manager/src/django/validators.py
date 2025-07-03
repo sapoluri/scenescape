@@ -114,7 +114,7 @@ def validate_uuid(value):
 
 def validate_map_corners_lla(value):
   """
-  Validates that map_corners_lla is a JSON array containing exactly 4 corner coordinates.
+  Validates that map_corners_lla is an array containing exactly 4 corner coordinates.
   Each corner should be [latitude, longitude, altitude] where:
   - latitude: -90 to 90 degrees
   - longitude: -180 to 180 degrees
