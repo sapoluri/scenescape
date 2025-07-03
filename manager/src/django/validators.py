@@ -122,34 +122,20 @@ def validate_map_corners_lla(value):
   """
   if value is None:
     return  # Allow None values since field is nullable
-
-  # If value is a string, try to parse it as JSON
-  if isinstance(value, str):
-    if value.strip() == '':
-      return None # Allow empty strings
-    try:
-      value = json.loads(value)
-    except json.JSONDecodeError as e:
-      raise ValidationError(f"Invalid JSON format: {str(e)}")
-
   if not isinstance(value, list):
     raise ValidationError("map_corners_lla must be a JSON array of coordinates.")
-
   if len(value) != 4:
     raise ValidationError("map_corners_lla must contain exactly 4 corner coordinates.")
 
   for i, corner in enumerate(value):
     if not isinstance(corner, list) or len(corner) != 3:
       raise ValidationError(f"Corner {i+1} must be an array of [latitude, longitude, altitude].")
-
     try:
-      lat, lon, _ = float(corner[0]), float(corner[1]), float(corner[2])
-    except (ValueError, TypeError, IndexError):
+      lat, lon, alt = float(corner[0]), float(corner[1]), float(corner[2])
+    except (ValueError, TypeError):
       raise ValidationError(f"Corner {i+1} coordinates must be numeric values.")
-
     if not (-90 <= lat <= 90):
       raise ValidationError(f"Corner {i+1} latitude ({lat}) must be between -90 and 90 degrees.")
-
     if not (-180 <= lon <= 180):
       raise ValidationError(f"Corner {i+1} longitude ({lon}) must be between -180 and 180 degrees.")
 

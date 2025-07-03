@@ -68,7 +68,7 @@ class SingletonDetailsForm(ModelForm):
 class SceneUpdateForm(ModelForm):
   class Meta:
     model = Scene
-    fields = '__all__'
+    fields = ('__all__')
 
   def clean(self):
     cleaned_data = super().clean()
