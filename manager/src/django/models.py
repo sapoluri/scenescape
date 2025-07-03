@@ -305,7 +305,7 @@ class Scene(models.Model):
     if not mScene:
       mScene = ScenescapeScene(self.name, self.map.path if self.map else None, self.scale)
       mScene.output_lla = self.output_lla
-      mScene.map_corners_lla = json.loads(self.map_corners_lla) if self.map_corners_lla else None
+      mScene.map_corners_lla = self.map_corners_lla
       mScene.mesh_translation = [self.translation_x, self.translation_y, self.translation_z]
       mScene.mesh_rotation = [self.rotation_x, self.rotation_y, self.rotation_z]
       try:
