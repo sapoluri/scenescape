@@ -59,6 +59,7 @@ class GeospatialIngestPublish(FunctionalTest):
     self.pubsub.subscribe(self.topic)
     return
 
+  # TODO: refactor this function: we should not use exceptions to control the flow
   def eventReceived(self, pahoClient, userdata, message):
     data = message.payload.decode("utf-8")
     detectionData = json.loads(data)
@@ -76,11 +77,12 @@ class GeospatialIngestPublish(FunctionalTest):
       assert "translation" in object
       if self.outputLLA:
         assert "lat_long_alt" in object
-        try:
-          if self.detectionValidator:
+        if self.detectionValidator:
+          try:
             self.detectionValidator(object)
-        except AssertionError as e:
-          raise
+          except ValueError as e:
+            print(e)
+            raise AssertionError(f"Detection validation failed: {e}")
       else:
         assert "lat_long_alt" not in object
     return
@@ -235,8 +237,8 @@ def _verifyLLA(detected_object):
   - The translation of the detected object is:
     [3.8679791719486474, 2.7517397452609087, 1.1225254457301852e-19]
   '''
-  assert np.allclose(detected_object['lat_long_alt'], EXPECTED_DETECTION_LLA, rtol=1e-8), \
-    f"LLA verification failed! Expected LLA: {EXPECTED_DETECTION_LLA}, got: {detected_object['lat_long_alt']}"
+  if not np.allclose(detected_object['lat_long_alt'], EXPECTED_DETECTION_LLA, rtol=1e-8):
+    raise ValueError(f"LLA verification failed! Expected LLA: {EXPECTED_DETECTION_LLA}, got: {detected_object['lat_long_alt']}")
 
 def test_geospatial_ingest_publish(request, record_xml_attribute):
   test = GeospatialIngestPublish(TEST_NAME, request, record_xml_attribute)
