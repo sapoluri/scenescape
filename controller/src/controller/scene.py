@@ -2,14 +2,12 @@
 # SPDX-License-Identifier: LicenseRef-Intel-Edge-Software
 # This file is licensed under the Limited Edge Software Distribution License Agreement.
 
-import cv2
 import itertools
+from typing import Optional
+
+import cv2
 import numpy as np
 
-from controller.ilabs_tracking import IntelLabsTracking
-from controller.tracking import (MAX_UNRELIABLE_TIME,
-                                 NON_MEASUREMENT_TIME_DYNAMIC,
-                                 NON_MEASUREMENT_TIME_STATIC)
 from scene_common import log
 from scene_common.camera import Camera
 from scene_common.earth_lla import convertLLAToECEF, calculateTRSLocal2LLAFromSurfacePoints
@@ -18,7 +16,11 @@ from scene_common.scene_model import SceneModel
 from scene_common.timestamp import get_epoch_time, get_iso_time
 from scene_common.transform import CameraPose
 from scene_common.mesh_util import getMeshAxisAlignedProjectionToXY
-from typing import Optional
+
+from controller.ilabs_tracking import IntelLabsTracking
+from controller.tracking import (MAX_UNRELIABLE_TIME,
+                                 NON_MEASUREMENT_TIME_DYNAMIC,
+                                 NON_MEASUREMENT_TIME_STATIC)
 
 DEBOUNCE_DELAY = 0.5
 
