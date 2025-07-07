@@ -2,17 +2,15 @@
 # SPDX-License-Identifier: LicenseRef-Intel-Edge-Software
 # This file is licensed under the Limited Edge Software Distribution License Agreement.
 
-import json
+import os
+import re
 import tempfile
+import uuid
+from zipfile import ZipFile
 
 from django.core.exceptions import ValidationError
-from PIL import Image
-from zipfile import ZipFile
 import open3d as o3d
-import os
-import cv2
-import re
-import uuid
+from PIL import Image
 
 def validate_glb(value):
   with tempfile.NamedTemporaryFile(suffix=".glb") as glb_file:
