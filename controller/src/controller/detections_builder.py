@@ -49,8 +49,9 @@ def prepareObjDict(scene, obj, update_visibility):
     obj_dict['rotation'] = aobj.rotation
 
   if scene and scene.output_lla:
-    lat_long_alt = convertXYZToLLA(scene.trs_xyz_to_lla, aobj.sceneLoc.asCartesianVector)
-    obj_dict['lat_long_alt'] = lat_long_alt.tolist()
+    if not np.isnan(scene.trs_xyz_to_lla[0, 0]):
+      lat_long_alt = convertXYZToLLA(scene.trs_xyz_to_lla, aobj.sceneLoc.asCartesianVector)
+      obj_dict['lat_long_alt'] = lat_long_alt.tolist()
 
   reid = aobj.reidVector
   if reid is not None:

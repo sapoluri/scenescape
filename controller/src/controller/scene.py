@@ -471,7 +471,12 @@ class Scene(SceneModel):
     The matrix is calculated lazily on first access and cached for subsequent calls.
     """
     if self._trs_xyz_to_lla is None and self.output_lla and self.map_corners_lla is not None:
-      mesh_corners_xyz = getMeshAxisAlignedProjectionToXY(self.map_triangle_mesh)
+      try:
+        mesh_corners_xyz = getMeshAxisAlignedProjectionToXY(self.map_triangle_mesh)
+      except Exception as e:
+        log.warn("Failed to get mesh projection to XY plane (check that the map is configured for the scene):", e)
+        self._trs_xyz_to_lla = np.full((4, 4), fill_value=np.nan)
+        return self._trs_xyz_to_lla
       self._trs_xyz_to_lla = calculateTRSLocal2LLAFromSurfacePoints(mesh_corners_xyz, self.map_corners_lla)
     return self._trs_xyz_to_lla
 
