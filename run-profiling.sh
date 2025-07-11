@@ -61,7 +61,7 @@ summary() {
     echo "Container Python version: $(docker exec -it ${CONTAINER_ID} python3 --version)"
     echo "Container Python HAVE_PERF_TRAMPOLINE: $(docker exec -it ${CONTAINER_ID} python3 -m sysconfig | grep HAVE_PERF_TRAMPOLINE)"
     echo "Host Python version: $(python3 --version)"
-    echo "Host Python HAVE_PERF_TRAMPOLINE: $(docker exec -it ${CONTAINER_ID} python3 -m sysconfig | grep HAVE_PERF_TRAMPOLINE)"
+    echo "Host Python HAVE_PERF_TRAMPOLINE: $(python3 -m sysconfig | grep HAVE_PERF_TRAMPOLINE)"
 }
 
 OUTDIR="perf-out-${PROFILE}-$(date '+%Y-%m-%d_%H-%M-%S')"
@@ -72,17 +72,17 @@ cd "$OUTDIR"
 on-host-cgroup() {
     echo "Type Ctrl+C to stop profiling..."
     sudo perf record -F ${SAMPLING_FREQ} --call-graph ${UNWIND_METHOD} -e cpu-clock --cgroup system.slice/docker-${FULL_CONTAINER_ID}.scope -g
-    docker exec ${CONTAINER_ID} mv /tmp/perf-${CONTAINER_PID}.map /home/scenescape/SceneScape/media
-    docker run -v ./:/output -v scenescape_vol-media:/input alpine mv /input/perf-${CONTAINER_PID}.map /output/perf-${HOST_PID}.map
-    sudo cp perf-${HOST_PID}.map /tmp
+#    docker exec ${CONTAINER_ID} mv /tmp/perf-${CONTAINER_PID}.map /home/scenescape/SceneScape/media
+#    docker run -v ./:/output -v scenescape_vol-media:/input alpine mv /input/perf-${CONTAINER_PID}.map /output/perf-${HOST_PID}.map
+#    sudo cp perf-${HOST_PID}.map /tmp
 }
 
 on-host-by-pid() {
     echo "Profiling for ${DURATION} seconds..."
     sudo perf record -F 1${SAMPLING_FREQ} -p ${HOST_PID} -g -- sleep ${DURATION}
-    docker exec ${CONTAINER_ID} mv /tmp/perf-${CONTAINER_PID}.map /home/scenescape/SceneScape/media
-    docker run -v ./:/output -v scenescape_vol-media:/input alpine mv /input/perf-${CONTAINER_PID}.map /output/perf-${HOST_PID}.map
-    sudo cp perf-${HOST_PID}.map /tmp
+#    docker exec ${CONTAINER_ID} mv /tmp/perf-${CONTAINER_PID}.map /home/scenescape/SceneScape/media
+#    docker run -v ./:/output -v scenescape_vol-media:/input alpine mv /input/perf-${CONTAINER_PID}.map /output/perf-${HOST_PID}.map
+#    sudo cp perf-${HOST_PID}.map /tmp
 }
 
 in-container() {
