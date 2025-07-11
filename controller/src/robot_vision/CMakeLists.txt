@@ -41,7 +41,7 @@ find_package(OpenMP)
 
 message(STATUS ${Python_INCLUDE_DIRS} ${Python_VERSION} ${Python_LIBRARIES})
 
-set(CMAKE_CXX_FLAGS "-O2 -g -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "-g -fno-omit-frame-pointer")
 
 set(PROJECT_SOURCE_LIST
   ${CMAKE_SOURCE_DIR}/src/rv/tracking/TrackedObject.cpp
