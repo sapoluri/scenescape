@@ -2,7 +2,7 @@
 #
 # INTEL CONFIDENTIAL
 #
-# Copyright (c) 2019-2023 Intel Corporation
+# Copyright (c) 2019-2025 Intel Corporation
 #
 # This software and the related documents are Intel copyrighted materials, and
 # your use of them is governed by the express license under which they were
@@ -96,3 +96,12 @@ if(PROJECT_BUILD_TESTING)
   include(${CMAKE_SOURCE_DIR}/cmake/gtest.cmake)
   add_subdirectory(test)
 endif(PROJECT_BUILD_TESTING)
+
+#####################################################################
+# benchmarks
+#####################################################################
+
+option(BUILD_BENCHMARKS "Build performance benchmarks" OFF)
+if(BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif(BUILD_BENCHMARKS)
