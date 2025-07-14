@@ -5,6 +5,9 @@
 #include "rv/Utils.hpp"
 #include "rv/tracking/TrackManager.hpp"
 #include <iostream>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace rv {
 namespace tracking {
@@ -57,11 +60,29 @@ void TrackManager::reactivateTrack(const Id &id)
 
 void TrackManager::predict(const std::chrono::system_clock::time_point &timestamp)
 {
+  // Convert map to vector for parallel iteration
+  std::vector<std::reference_wrapper<MultiModelKalmanEstimator>> estimators;
+  estimators.reserve(mKalmanEstimators.size());
+  
   for (auto &element : mKalmanEstimators)
   {
-    auto &estimator = element.second;
-    estimator.predict(timestamp);
+    estimators.push_back(std::ref(element.second));
   }
+
+#ifdef _OPENMP
+  // Parallelize the prediction step
+  #pragma omp parallel for
+  for (size_t i = 0; i < estimators.size(); ++i)
+  {
+    estimators[i].get().predict(timestamp);
+  }
+#else
+  // Fallback to sequential execution
+  for (auto &estimator : estimators)
+  {
+    estimator.get().predict(timestamp);
+  }
+#endif
 
   mMeasurementMap.clear();
 }
@@ -69,11 +90,29 @@ void TrackManager::predict(const std::chrono::system_clock::time_point &timestam
 
 void TrackManager::predict(double deltaT)
 {
+  // Convert map to vector for parallel iteration
+  std::vector<std::reference_wrapper<MultiModelKalmanEstimator>> estimators;
+  estimators.reserve(mKalmanEstimators.size());
+  
   for (auto &element : mKalmanEstimators)
   {
-    auto &estimator = element.second;
-    estimator.predict(deltaT);
+    estimators.push_back(std::ref(element.second));
   }
+
+#ifdef _OPENMP
+  // Parallelize the prediction step
+  #pragma omp parallel for
+  for (size_t i = 0; i < estimators.size(); ++i)
+  {
+    estimators[i].get().predict(deltaT);
+  }
+#else
+  // Fallback to sequential execution
+  for (auto &estimator : estimators)
+  {
+    estimator.get().predict(deltaT);
+  }
+#endif
 
   mMeasurementMap.clear();
 }

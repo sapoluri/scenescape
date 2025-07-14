@@ -37,6 +37,7 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 CONFIG REQUIRED)
+find_package(OpenMP)
 
 message(STATUS ${Python_INCLUDE_DIRS} ${Python_VERSION} ${Python_LIBRARIES})
 
@@ -68,6 +69,11 @@ ${PYTHON_INCLUDE_DIRS}
 ${pybind11_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCV_LIBS} ${Python_LIBRARIES})
+
+# Link OpenMP if available
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
 set(TRACKING_MODULE_SOURCE_LIST
   ${CMAKE_SOURCE_DIR}/python/src/robot_vision/extensions/tracking.cpp
