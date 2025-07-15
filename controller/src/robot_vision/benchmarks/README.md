@@ -19,11 +19,13 @@ This is a realistic benchmark focused on measuring the performance of people tra
 ### 2. Run Benchmarks
 
 **Human-readable output:**
+
 ```bash
 ./run_benchmarks.sh
 ```
 
 **JSON output for analysis:**
+
 ```bash
 ./run_benchmarks.sh --json
 ```
@@ -39,11 +41,13 @@ This is a realistic benchmark focused on measuring the performance of people tra
 The build script will automatically configure the project, but you may need to install dependencies:
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get install cmake build-essential libbenchmark-dev
 ```
 
 **macOS:**
+
 ```bash
 brew install cmake google-benchmark
 ```
@@ -51,18 +55,24 @@ brew install cmake google-benchmark
 ## Scripts
 
 ### build_benchmark.sh
+
 Builds the benchmark executable from scratch:
+
 - Cleans previous build
 - Configures with Release mode and benchmarks enabled
 - Builds the RobotVisionBenchmarks target
 
 ### run_benchmarks.sh
+
 Runs the tracking benchmarks:
+
 - **Default**: Human-readable console output
 - **--json flag**: Saves results to `out/rv_benchmark_<git_hash>.json`
 
 ### compare_benchmarks.sh
+
 Compares two benchmark result files:
+
 - Uses Google Benchmark's official compare.py tool
 - Shows performance differences between runs
 - Automatically downloads comparison tools on first use
