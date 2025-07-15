@@ -20,7 +20,7 @@
 #####################################################################
 
 set(CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 
 # Check if benchmark library is available
 find_package(benchmark QUIET)
