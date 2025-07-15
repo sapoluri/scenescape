@@ -63,7 +63,7 @@ void TrackManager::predict(const std::chrono::system_clock::time_point &timestam
   // Convert map to vector for parallel iteration
   std::vector<std::reference_wrapper<MultiModelKalmanEstimator>> estimators;
   estimators.reserve(mKalmanEstimators.size());
-  
+
   for (auto &element : mKalmanEstimators)
   {
     estimators.push_back(std::ref(element.second));
@@ -93,7 +93,7 @@ void TrackManager::predict(double deltaT)
   // Convert map to vector for parallel iteration
   std::vector<std::reference_wrapper<MultiModelKalmanEstimator>> estimators;
   estimators.reserve(mKalmanEstimators.size());
-  
+
   for (auto &element : mKalmanEstimators)
   {
     estimators.push_back(std::ref(element.second));
@@ -119,15 +119,50 @@ void TrackManager::predict(double deltaT)
 
 void TrackManager::correct()
 {
+  // Convert map to vector for parallel iteration
+  std::vector<std::pair<Id, std::reference_wrapper<MultiModelKalmanEstimator>>> estimators;
+  estimators.reserve(mKalmanEstimators.size());
+
+  for (auto &element : mKalmanEstimators)
+  {
+    estimators.push_back(std::make_pair(element.first, std::ref(element.second)));
+  }
+
+#ifdef _OPENMP
+  // Parallelize the correction step
+  #pragma omp parallel for
+  for (size_t i = 0; i < estimators.size(); ++i)
+  {
+    auto const &id = estimators[i].first;
+    auto &estimator = estimators[i].second.get();
+
+    if (mMeasurementMap.count(id))
+    {
+      auto const measurement = mMeasurementMap.find(id);
+      estimator.correct(measurement->second);
+    }
+  }
+#else
+  // Fallback to sequential execution
+  for (auto &element : estimators)
+  {
+    auto const &id = element.first;
+    auto &estimator = element.second.get();
+
+    if (mMeasurementMap.count(id))
+    {
+      auto const measurement = mMeasurementMap.find(id);
+      estimator.correct(measurement->second);
+    }
+  }
+#endif
+
+  // Update counters sequentially to avoid race conditions
   for (auto &element : mKalmanEstimators)
   {
     auto const &id = element.first;
     if (mMeasurementMap.count(id))
     {
-      auto &estimator = element.second;
-      auto const measurement = mMeasurementMap.find(id);
-      estimator.correct(measurement->second);
-
       // Reset non measurement frames counter, increment tracked frames
       mNonMeasurementFrames[id] = 0;
       mNumberOfTrackedFrames[id]++;
