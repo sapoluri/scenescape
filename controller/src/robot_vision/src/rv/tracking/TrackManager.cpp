@@ -5,9 +5,7 @@
 #include "rv/Utils.hpp"
 #include "rv/tracking/TrackManager.hpp"
 #include <iostream>
-#ifdef _OPENMP
 #include <omp.h>
-#endif
 
 namespace rv {
 namespace tracking {
@@ -69,21 +67,12 @@ void TrackManager::predict(const std::chrono::system_clock::time_point &timestam
     estimators.push_back(std::ref(element.second));
   }
 
-#ifdef _OPENMP
   // Parallelize the prediction step
   #pragma omp parallel for
   for (size_t i = 0; i < estimators.size(); ++i)
   {
     estimators[i].get().predict(timestamp);
   }
-#else
-  // Fallback to sequential execution
-  for (auto &estimator : estimators)
-  {
-    estimator.get().predict(timestamp);
-  }
-#endif
-
   mMeasurementMap.clear();
 }
 
@@ -99,20 +88,12 @@ void TrackManager::predict(double deltaT)
     estimators.push_back(std::ref(element.second));
   }
 
-#ifdef _OPENMP
   // Parallelize the prediction step
   #pragma omp parallel for
   for (size_t i = 0; i < estimators.size(); ++i)
   {
     estimators[i].get().predict(deltaT);
   }
-#else
-  // Fallback to sequential execution
-  for (auto &estimator : estimators)
-  {
-    estimator.get().predict(deltaT);
-  }
-#endif
 
   mMeasurementMap.clear();
 }
@@ -128,7 +109,6 @@ void TrackManager::correct()
     estimators.push_back(std::make_pair(element.first, std::ref(element.second)));
   }
 
-#ifdef _OPENMP
   // Parallelize the correction step
   #pragma omp parallel for
   for (size_t i = 0; i < estimators.size(); ++i)
@@ -142,20 +122,6 @@ void TrackManager::correct()
       estimator.correct(measurement->second);
     }
   }
-#else
-  // Fallback to sequential execution
-  for (auto &element : estimators)
-  {
-    auto const &id = element.first;
-    auto &estimator = element.second.get();
-
-    if (mMeasurementMap.count(id))
-    {
-      auto const measurement = mMeasurementMap.find(id);
-      estimator.correct(measurement->second);
-    }
-  }
-#endif
 
   // Update counters sequentially to avoid race conditions
   for (auto &element : mKalmanEstimators)

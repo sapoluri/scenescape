@@ -5,9 +5,7 @@
 #include <functional>
 #include <numeric>
 #include <opencv2/core.hpp>
-#ifdef _OPENMP
 #include <omp.h>
-#endif
 
 #include "rv/tracking/ObjectMatching.hpp"
 #include "rv/apollo/multi_hm_bipartite_graph_matcher.hpp"
@@ -109,7 +107,6 @@ void match(const std::vector<TrackedObject> &tracks,
   apollo::perception::common::SecureMat<double> *costMatrix = matcher.cost_matrix();
   costMatrix->Resize(tracks.size(), measurements.size());
 
-#ifdef _OPENMP
   // Parallelize the cost matrix computation
   #pragma omp parallel for collapse(2)
   for (size_t i = 0; i < tracks.size(); ++i)
@@ -119,16 +116,6 @@ void match(const std::vector<TrackedObject> &tracks,
       (*costMatrix)(i, j) = distanceFunction(measurements[j], tracks[i]);
     }
   }
-#else
-  // Fallback to sequential execution
-  for (size_t i = 0; i < tracks.size(); ++i)
-  {
-    for (size_t j = 0; j < measurements.size(); ++j)
-    {
-      (*costMatrix)(i, j) = distanceFunction(measurements[j], tracks[i]);
-    }
-  }
-#endif
 
   matcher.Match(matcherOptions, &assignments, &unassignedTracks, &unassignedMeasurements);
 }
