@@ -152,7 +152,6 @@ class SceneController:
             if aobj:
               computeCameraBounds(scene_obj, aobj, obj)
           objects.append(obj)
-
       new_jdata = {
         'timestamp': jdata['timestamp'],
         'objects': objects,

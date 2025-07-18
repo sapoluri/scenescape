@@ -298,15 +298,15 @@ class Scene(SceneModel):
       return updated
 
     object_coords = [(obj.sceneLoc.x, obj.sceneLoc.y) for obj in mature_objects]
-
+    objects = []
     for key, region in regions.items():
       regionObjects = region.objects.get(detectionType, [])
-
-      if hasattr(region, 'polygon') and region.polygon is not None:
-        visibility_results = region.polygon.isPointsInside(object_coords)
-        objects = [obj for obj, is_visible in zip(mature_objects, visibility_results) if is_visible]
-      else:
-        objects = [obj for obj in mature_objects if (region.isPointWithin(obj.sceneLoc) or self.isIntersecting(obj, region))]
+      results = region.polygon.isPointsInside(object_coords)
+      for obj, is_inside in zip(mature_objects, results):
+        if is_inside:
+          objects.append(obj)
+        elif self.isIntersecting(obj, region):
+          objects.append(obj)
 
       cur = set(x.gid for x in objects)
       prev = set(x.gid for x in regionObjects)
@@ -393,21 +393,12 @@ class Scene(SceneModel):
 
     for sname, camera in valid_cameras:
       region = camera.pose.regionOfView
-
-      if hasattr(region, 'polygon') and region.polygon is not None:
-        visibility_results = region.polygon.isPointsInside(object_coords)
-        for obj, is_visible in zip(curObjects, visibility_results):
-          if not hasattr(obj, 'visibility'):
-            obj.visibility = []
-          if is_visible:
-            obj.visibility.append(camera.cameraID)
-      else:
-        for obj in curObjects:
-          if not hasattr(obj, 'visibility'):
-            obj.visibility = []
-          if region.isPointWithin(obj.sceneLoc):
-            obj.visibility.append(camera.cameraID)
-
+      visibility_results = region.polygon.isPointsInside(object_coords)
+      for obj, is_visible in zip(curObjects, visibility_results):
+        if not hasattr(obj, 'visibility'):
+          obj.visibility = []
+        if is_visible:
+          obj.visibility.append(camera.cameraID)
     return
 
   @classmethod
