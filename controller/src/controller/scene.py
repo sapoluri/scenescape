@@ -52,6 +52,7 @@ class Scene(SceneModel):
     self.persist_attributes = {}
     self.setTracker(self.DEFAULT_TRACKER)
     self._trs_xyz_to_lla = None
+    self.use_tracker = True
 
     # FIXME - only for backwards compatibility
     self.scale = scale
@@ -73,6 +74,7 @@ class Scene(SceneModel):
     self.cameraPose = None
     if 'transform' in scene_data:
       self.cameraPose = CameraPose(scene_data['transform'], None)
+    self.use_tracker = scene_data.get('use_tracker', True)
     self.output_lla = scene_data.get('output_lla', False)
     self.map_corners_lla = scene_data.get('map_corners_lla', None)
     self.updateChildren(scene_data.get('children', []))
@@ -197,7 +199,8 @@ class Scene(SceneModel):
                               self.ref_camera_frame_rate,
                               self.max_unreliable_time,
                               self.non_measurement_time_dynamic,
-                              self.non_measurement_time_static)
+                              self.non_measurement_time_static,
+                              self.use_tracker)
     self.updateEvents(detectionType, when)
     return
 
@@ -380,6 +383,7 @@ class Scene(SceneModel):
     scene.uid = data['uid']
     scene.mesh_translation = data.get('mesh_translation', None)
     scene.mesh_rotation = data.get('mesh_rotation', None)
+    scene.use_tracker = data.get('use_tracker', True)
     scene.output_lla = data.get('output_lla', None)
     scene.map_corners_lla = data.get('map_corners_lla', None)
     scene.retrack = data.get('retrack', True)

@@ -25,7 +25,7 @@ class Tracking(Thread):
   def __init__(self):
     super().__init__()
     self.trackers = {}
-    self._objects = self.curObjects = []
+    self.all_tracker_objects = self.curObjects = []
     self.already_tracked_objects = []
     self.queue = Queue()
     self.uuid_manager = UUIDManager()
@@ -42,7 +42,8 @@ class Tracking(Thread):
                    ref_camera_frame_rate, \
                    max_unreliable_time, \
                    non_measurement_time_dynamic, \
-                   non_measurement_time_static):
+                   non_measurement_time_static, \
+                   use_tracker=True):
     self.createTrackers(categories, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static)
 
     if not categories:
@@ -124,8 +125,9 @@ class Tracking(Thread):
       if objects is None:
         self.queue.task_done()
         break
+
       self.trackCategory(objects, when, already_tracked_objects)
-      self.curObjects = (self._objects + self.already_tracked_objects).copy()
+      self.curObjects = (self.all_tracker_objects).copy()
       self.queue.task_done()
     return
 
@@ -181,7 +183,7 @@ class Tracking(Thread):
 
   def groupObjects(self, objects):
     ogroups = {}
-    for key in self._objects:
+    for key in self.all_tracker_objects:
       ogroups[key] = []
     for obj in objects:
       if isinstance(obj, MovingObject):
