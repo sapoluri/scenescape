@@ -169,3 +169,6 @@ RUN pip3 install --break-system-packages --upgrade --no-cache-dir coverage==7.9.
 RUN : \
     ; eval WSHOME=~$WSUSER \
     ;
+
+ENV PATH="/home/scenescape/.local/bin:${PATH}"
+ENTRYPOINT ["/bin/bash", "-c"]
