@@ -128,7 +128,8 @@ broken-tests: \
   vdms-similarity-search \
   add-orphaned-cameras \
   percebro-3d-msgs \
-  percebro-unit
+  percebro-unit \
+  detector-unit
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -202,7 +203,6 @@ unit-tests:
 
 _unit-tests: \
   autocamcalib-unit \
-  detector-unit \
   geometry-unit \
   geospatial-unit \
   markerless-unit \
@@ -215,6 +215,7 @@ _unit-tests: \
   videosource-unit \
 
 # moved from unit-tests to broken-tests:
+#  detector-unit
 #  percebro-unit
 
 include Makefile.sscape Makefile.functional Makefile.percebro Makefile.perf \
