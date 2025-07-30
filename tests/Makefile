@@ -126,10 +126,7 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
-  add-orphaned-cameras \
-  percebro-3d-msgs \
-  percebro-unit \
-  detector-unit
+  add-orphaned-cameras
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -167,7 +164,6 @@ _functional-tests: \
   scene-import \
 
 # moved from functional to broken-tests:
-#  percebro-3d-msgs
 #  add-orphaned-cameras
 
 non-functional-tests:
@@ -216,7 +212,6 @@ _unit-tests: \
 
 # moved from unit-tests to broken-tests:
 #  detector-unit
-#  percebro-unit
 
 include Makefile.sscape Makefile.functional Makefile.percebro Makefile.perf \
         Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
