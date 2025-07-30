@@ -170,5 +170,6 @@ RUN : \
     ; eval WSHOME=~$WSUSER \
     ;
 
+WORKDIR /home/scenescape/SceneScape
 ENV PATH="/home/scenescape/.local/bin:${PATH}"
 ENTRYPOINT ["/bin/bash", "-c"]
