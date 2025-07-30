@@ -7,6 +7,7 @@ IMAGE=scenescape
 BASE_IMAGE=$(IMAGE)-manager-test
 VERSION:=$(shell cat ../version.txt)
 
+
 TEST_DATA=test_data
 TESTS_DIRECTORY=tests
 COVERAGE_CMD=coverage run
