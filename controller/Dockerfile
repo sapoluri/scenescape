@@ -94,6 +94,13 @@ RUN cd /tmp/controller \
 FROM ${RUNTIME_OS_IMAGE} AS scenescape-controller-runtime
 
 ARG USER_ID
+ARG GROUP_ID
+
+RUN : \
+    && if [ -z "$USER_ID" ] || [ -z "$GROUP_ID" ]; then \
+        echo "ERROR: USER_ID and GROUP_ID must be set as build arguments."; \
+        exit 1; \
+    fi
 ARG CERTDOMAIN=scenescape.intel.com
 ARG PYTHON_VERSION=3.12
 
@@ -122,13 +129,13 @@ RUN : \
     # delete ubuntu user if exists
     && userdel -f -r ubuntu || true \
     # create scenescape user
-    && useradd -r -m -s /bin/bash $WSUSER \
+    && groupadd -g ${GROUP_ID} $WSUSER \
+    && useradd -r -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash $WSUSER \
     && usermod -a -G video,users $WSUSER \
     && eval WSHOME=~$WSUSER \
     && chmod a+rX "${WSHOME}"
 
-# TODO: uncomment when issue with accessing the secrets is resolved
-# USER $WSUSER
+
 
 # install only required runtime dependencies
 COPY controller/requirements-runtime.txt /tmp
@@ -146,9 +153,10 @@ COPY --chown=$WSUSER:$WSUSER ./controller/src/schema/metadata.schema.json $SCENE
 COPY --chown=$WSUSER:$WSUSER ./controller/config/tracker-config.json $SCENESCAPE_HOME/tracker-config.json
 COPY --chown=$WSUSER:$WSUSER --from=scenescape-common-base-24-04 /tmp/tools/waitforbroker $SCENESCAPE_HOME/tools/waitforbroker
 COPY --chown=$WSUSER:$WSUSER ./controller/src/controller-cmd $SCENESCAPE_HOME/controller-cmd
-COPY --chown=$WSUSER:$WSUSER ./controller/src/controller-init /usr/local/bin/
 
-ENTRYPOINT ["/usr/local/bin/controller-init"]
+USER $WSUSER
+
+ENTRYPOINT ["/home/scenescape/SceneScape/controller-cmd"]
 
 # ---------- Controller Test Stage ------------------
 # This stage is meant to be used for test execution (not for final runtime)
