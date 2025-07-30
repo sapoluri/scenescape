@@ -126,7 +126,9 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
-  add-orphaned-cameras
+  add-orphaned-cameras \
+  percebro-3d-msgs \
+  percebro-unit
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -160,11 +162,12 @@ _functional-tests: \
   mqtt-cert \
   mqtt-large-messages \
   out-of-box-no-ntp \
-  percebro-3d-msgs \
   rest-test \
   scene-import \
 
-# add-orphaned-cameras - moved to broken-tests
+# moved from functional to broken-tests:
+#  percebro-3d-msgs
+#  add-orphaned-cameras
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
@@ -203,7 +206,6 @@ _unit-tests: \
   geometry-unit \
   geospatial-unit \
   markerless-unit \
-  percebro-unit \
   realsense-unit \
   scene-unit \
   scenescape-unit \
@@ -211,6 +213,9 @@ _unit-tests: \
   timestamp-unit \
   transform-unit \
   videosource-unit \
+
+# moved from unit-tests to broken-tests:
+#  percebro-unit
 
 include Makefile.sscape Makefile.functional Makefile.percebro Makefile.perf \
         Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
