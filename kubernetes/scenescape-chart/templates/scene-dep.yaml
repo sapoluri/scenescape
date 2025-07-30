@@ -24,7 +24,8 @@ spec:
         command: ["/bin/sh", "-c", "until wget -q --spider http://web.{{ .Release.Namespace }}.svc.cluster.local; do sleep 1; done"]
       containers:
         - args:
-          - controller
+          - --restauth=/run/secrets/controller.auth
+          - --brokerauth=/run/secrets/controller.auth
           - --broker
           - broker.{{ .Release.Namespace }}.svc.cluster.local
           - --resturl
