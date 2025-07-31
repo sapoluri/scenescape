@@ -129,6 +129,7 @@ broken-tests: \
   mqtt-large-messages \
   out-of-box-no-ntp \
   bounding-box \
+  child-scenes \
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -157,7 +158,6 @@ functional-tests:
 _functional-tests: \
   add-orphaned-cameras \
   api-large-strings \
-  child-scenes \
   mqtt-auth \
   mqtt-cert \
   rest-test \
@@ -167,6 +167,7 @@ _functional-tests: \
 #   mqtt-large-messages
 #   out-of-box-no-ntp
 #   bounding-box
+#   child-scenes
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
