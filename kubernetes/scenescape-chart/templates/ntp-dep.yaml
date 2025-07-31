@@ -18,6 +18,9 @@ spec:
         app: {{ .Release.Name }}-ntpserv
     spec:
       shareProcessNamespace: true
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
       initContainers:
         - command:
           - sh
@@ -25,11 +28,32 @@ spec:
           - touch /tmp/healthy
           image: busybox
           name: init-healthy-file
+          securityContext:
+            readOnlyRootFilesystem : true
+            allowPrivilegeEscalation: true
           volumeMounts:
           - name: healthy-file
             mountPath: /tmp
+        - command:
+          - sh
+          - -c
+          - "sudo chmod 1750 /etc/chrony && sudo chmod 1750 /run/chrony && sudo chmod 1750 /var/lib/chrony"
+          image: busybox
+          name: init-chrony-permissions
+          securityContext:
+            readOnlyRootFilesystem : true
+          volumeMounts:
+          - name: etc-chrony
+            mountPath: /etc/chrony
+            readonly: false
+          - name: run-chrony
+            mountPath: /run/chrony
+            readonly: false
+          - name: var-lib-chrony
+            mountPath: /var/lib/chrony
+            readonly: false
       containers:
-        - image: {{ .Values.ntpserv.image }}
+        - image: cturra/ntp
           name: {{ .Release.Name }}-ntpserv
           env:
           - name: NTP_SERVERS
@@ -49,6 +73,8 @@ spec:
             value: {{ .Values.proxy.noProxy }}
 {{- end }}
           imagePullPolicy: Always
+          securityContext:
+            readOnlyRootFilesystem : true
           ports:
           - containerPort: 123
           readinessProbe:
@@ -60,6 +86,15 @@ spec:
           volumeMounts:
           - name: healthy-file
             mountPath: /tmp
+          - name: etc-chrony
+            mountPath: /etc/chrony
+            readonly: false
+          - name: run-chrony
+            mountPath: /run/chrony
+            readonly: false
+          - name: var-lib-chrony
+            mountPath: /var/lib/chrony
+            readonly: false
           resources: {}
       restartPolicy: Always
       {{- with .Values.imagePullSecrets }}
@@ -69,6 +104,24 @@ spec:
       volumes:
       - name: healthy-file
         emptyDir: {}
+      # - name: etc-chrony
+      #   emptyDir: {}
+      # - name: run-chrony
+      #   emptyDir: {}
+      # - name: var-lib-chrony
+      #   emptyDir: {}
+      - name: etc-chrony
+        persistentVolumeClaim:
+          claimName: ntp-etc-chrony-pvc
+          readOnly: false
+      - name: run-chrony
+        persistentVolumeClaim:
+          claimName: ntp-run-chrony-pvc
+          readOnly: false
+      - name: var-lib-chrony
+        persistentVolumeClaim:
+          claimName: ntp-var-lib-chrony-pvc
+          readOnly: false
 status: {}
 ---
 apiVersion: v1
