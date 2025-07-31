@@ -216,9 +216,6 @@ _unit-tests: \
   transform-unit \
   videosource-unit \
 
-# moved from unit-tests to broken-tests:
-#  detector-unit
-
 include Makefile.sscape Makefile.functional Makefile.percebro Makefile.perf \
         Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
 
