@@ -91,7 +91,6 @@ release-tests: \
   3d-ui-calibration-points \
   additional-floor-plans \
   camera-deletion \
-  check-openvino-version \
   different-formats-maps \
   live-view-button \
   non-functional-tests \
@@ -160,7 +159,6 @@ _functional-tests: \
   mqtt-cert \
   mqtt-large-messages \
   out-of-box-no-ntp \
-  percebro-3d-msgs \
   rest-test \
   scene-import \
 
@@ -197,32 +195,19 @@ unit-tests:
 
 _unit-tests: \
   autocamcalib-unit \
-  detector-unit \
   geometry-unit \
   geospatial-unit \
   markerless-unit \
-  percebro-unit \
-  realsense-unit \
   scene-unit \
   scenescape-unit \
   schema-unit \
   timestamp-unit \
   transform-unit \
-  videosource-unit \
 
-include Makefile.sscape Makefile.functional Makefile.percebro Makefile.perf \
+include Makefile.sscape Makefile.functional Makefile.perf \
         Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
 
 # Recipes below must be in alphabetical order
-
-check-openvino-version: # NEX-T10407
-	$(eval LOGFILE=$(TEST_DATA)/$@-$(shell date -u +"%F-%T").log)
-	@set -ex \
-	  ; echo RUNNING TEST $@ \
-	  ; cd .. \
-	  ; tools/scenescape-start --image $(IMAGE)-percebro tests/check-openvino-version.py 2>&1 | tee -i $(LOGFILE) \
-	  ; echo "MAKE_TARGET: $@" | tee -ia $(LOGFILE) \
-	  ; echo END TEST $@
 
 malformed-json:
 	$(eval LOGFILE=$(TEST_DATA)/$@-$(shell date -u +"%F-%T").log)
@@ -272,6 +257,3 @@ system-stability: # NEX-T10411
 	$(call set-prefix)
 	$(eval HOURS ?= 24)
 	$(call common-recipe, $(COMPOSE)/$(PREFIX)broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/$(PREFIX)retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml, tests/system/stability/tc_sscape_stability.py --hours=$(HOURS),'pgserver web scene',true)
-
-v4l-resolution: # NEX-T10513
-	../tools/scenescape-start --image $(IMAGE)-percebro ./v4l-resolution.py 0
