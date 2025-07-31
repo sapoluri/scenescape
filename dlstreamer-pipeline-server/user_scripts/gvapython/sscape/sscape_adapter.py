@@ -17,7 +17,7 @@ from pytz import timezone
 from utils import publisher_utils as utils
 from sscape_utils import getMACAddress, detectionPolicy, detection3DPolicy, \
   reidPolicy, classificationPolicy, ocrPolicy
-from car_license_plate_utils import Object3DChainedDataProcessor
+from sscape_3d_detector import Object3DChainedDataProcessor
 
 ROOT_CA = os.environ.get('ROOT_CA', '/run/secrets/certs/scenescape-ca.pem')
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
