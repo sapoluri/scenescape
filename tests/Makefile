@@ -126,7 +126,6 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
-  add-orphaned-cameras
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -153,6 +152,7 @@ functional-tests:
 	$(MAKE) -Otarget _$@ SECRETSDIR=$(PWD)/manager/secrets SUPASS=$(SUPASS) BASE_IMAGE=$(BASE_IMAGE) -k
 
 _functional-tests: \
+  add-orphaned-cameras \
   api-large-strings \
   bounding-box \
   child-scenes \
@@ -162,9 +162,6 @@ _functional-tests: \
   out-of-box-no-ntp \
   rest-test \
   scene-import \
-
-# moved from functional to broken-tests:
-#  add-orphaned-cameras
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
