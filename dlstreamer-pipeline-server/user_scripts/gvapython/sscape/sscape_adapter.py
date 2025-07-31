@@ -112,7 +112,7 @@ class PostInferenceDataPublish:
     return
 
   def annotateObjects(self, img):
-    objColors = ((0, 0, 255), (66, 186, 150), (207, 83, 294), (31, 156, 238))
+    objColors = ((0, 0, 255), (66, 186, 150), (207, 83, 255), (31, 156, 238))
     
     if 'car' in self.frame_level_data['objects']:
       intrinsics = self.frame_level_data.get('initial_intrinsics')

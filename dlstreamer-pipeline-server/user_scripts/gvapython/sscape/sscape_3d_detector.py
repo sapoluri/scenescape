@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 
 # Buffer added to vehicle bounds to account for potential inaccuracies in 3D object detection.
 VEHICLE_BOUNDS_BUFFER = 0.15
-
+OVERLAP_SCORE_THRESHOLD = 0.1
 
 class Object3DChainedDataProcessor:
     """Utility class for associating 3D primary objects with 2D secondary objects"""
@@ -207,7 +207,7 @@ class Object3DChainedDataProcessor:
                     
                 secondary_bbox = secondary_obj['bounding_box_px']
                 score = self.calculate3DOverlapScore(primary_obj, secondary_bbox, intrinsics, use_face_projection=True)
-                if score > 0.1:
+                if score > OVERLAP_SCORE_THRESHOLD:
                     secondary_scores.append((score, secondary_idx, secondary_obj))
             
             secondary_scores.sort(reverse=True, key=lambda x: x[0])
