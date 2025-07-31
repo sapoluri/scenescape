@@ -163,13 +163,20 @@ ENTRYPOINT ["/home/scenescape/SceneScape/controller-cmd"]
 FROM scenescape-controller-runtime AS scenescape-controller-test
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python test dependencies
+WORKDIR /workspace
+
+# Install Python test dependencies as root
+USER root
 RUN pip3 install --break-system-packages --upgrade --no-cache-dir coverage==7.9.2 pytest==8.4.1 psutil
 
 RUN : \
     ; eval WSHOME=~$WSUSER \
     ;
 
-WORKDIR /home/scenescape/SceneScape
-ENV PATH="/home/scenescape/.local/bin:${PATH}"
-ENTRYPOINT ["/bin/bash", "-c"]
+# Execute tests as the scenescape user
+USER $WSUSER
+
+# ENTRYPOINT runs all arguments as a single, properly quoted command.
+# This pattern allows the container to execute any command passed at runtime (e.g., via docker run or a wrapper script),
+# preserving spaces and special characters. The -- makes all following arguments available as $@, and exec "$@" runs them as a command.
+ENTRYPOINT ["/bin/bash", "-c", "exec \"$@\"", "--"]
