@@ -115,27 +115,22 @@ class PostInferenceDataPublish:
     objColors = ((0, 0, 255), (66, 186, 150), (207, 83, 294), (31, 156, 238))
     
     if 'car' in self.frame_level_data['objects']:
-      intrinsics = self.frame_level_data.get('file_intrinsics')
+      intrinsics = self.frame_level_data.get('initial_intrinsics')
       self.sub_detector.annotateObjectAssociations(img, self.frame_level_data['objects'], objColors, 'car', 'license_plate', intrinsics=intrinsics)
       return
     
     for otype, objects in self.frame_level_data['objects'].items():
       if otype == "person":
         cindex = 0
-      elif otype == "vehicle" or otype == "bicycle" or otype == "car":
+      elif otype == "vehicle" or otype == "bicycle":
         cindex = 1
       else:
         cindex = 2
-  
       for obj in objects:
-        if 'translation' in obj and 'rotation' in obj:
-          intrinsics = self.frame_level_data.get('file_intrinsics')        
-          self.sub_detector.annotate3DObject(img, obj, intrinsics)
-          continue
         topleft_cv = (int(obj['bounding_box_px']['x']), int(obj['bounding_box_px']['y']))
         bottomright_cv = (int(obj['bounding_box_px']['x'] + obj['bounding_box_px']['width']),
                         int(obj['bounding_box_px']['y'] + obj['bounding_box_px']['height']))
-        cv2.rectangle(img, topleft_cv, bottomright_cv, objColors[cindex], 2)
+        cv2.rectangle(img, topleft_cv, bottomright_cv, objColors[cindex], 4)
     return
 
   def annotateFPS(self, img, fpsval):
@@ -159,6 +154,7 @@ class PostInferenceDataPublish:
       _, jpeg = cv2.imencode(".jpg", image)
     jpeg = base64.b64encode(jpeg).decode('utf-8')
     imgdatadict['image'] = jpeg
+
     return
 
   def buildObjData(self, gvadata):
@@ -169,8 +165,8 @@ class PostInferenceDataPublish:
       'debug_processing_time': now - float(gvadata['timestamp_for_next_block']),
       'rate': float(gvadata['fps'])
     })
-    if 'file_intrinsics' in gvadata:
-      self.frame_level_data['file_intrinsics'] = gvadata['file_intrinsics']
+    if 'initial_intrinsics' in gvadata:
+      self.frame_level_data['initial_intrinsics'] = gvadata['initial_intrinsics']
     objects = defaultdict(list)
     if 'objects' in gvadata and len(gvadata['objects']) > 0:
       framewidth, frameheight = gvadata['resolution']['width'], gvadata['resolution']['height']
@@ -183,14 +179,16 @@ class PostInferenceDataPublish:
 
     self.processSubDetections(objects)
     self.frame_level_data['objects'] = objects
+    return
 
   def processSubDetections(self, objects):
     """process sub detection when multiple models are chained together in the pipeline"""
     if 'car' in objects and 'license_plate' in objects:
-      intrinsics = self.frame_level_data.get('file_intrinsics')
+      intrinsics = self.frame_level_data.get('initial_intrinsics')
       sub_detections = self.sub_detector.associateObjects(objects, 'car', 'license_plate', intrinsics=intrinsics)
       if sub_detections:
         self.frame_level_data['sub_detections'] = sub_detections
+    return
 
   def processFrame(self, frame):
     if self.client.is_connected():
@@ -211,6 +209,7 @@ class PostInferenceDataPublish:
           self.buildImgData(imgdatadict, frame, False)
         self.client.publish(f"scenescape/image/calibration/camera/{self.cameraid}", json.dumps(imgdatadict))
         self.is_publish_calibration_image = False
+
       self.client.publish(f"scenescape/data/camera/{self.cameraid}", json.dumps(self.frame_level_data))
       frame.add_message(json.dumps(self.frame_level_data))
     return True

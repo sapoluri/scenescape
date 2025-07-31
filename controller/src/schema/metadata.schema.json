@@ -302,7 +302,7 @@
           "items": {
             "type": "string"
           },
-          "examples": [["license_plate"], ["face", "emotion"]]
+          "examples": [["license_plate"], ["person", "vest", "apriltag"]]
         }
       },
       "required": ["timestamp", "id", "objects"]
