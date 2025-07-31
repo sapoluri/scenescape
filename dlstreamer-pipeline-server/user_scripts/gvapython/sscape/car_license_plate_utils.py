@@ -150,8 +150,8 @@ class Object3DChainedDataProcessor:
             
             primary_width = primary_x2 - primary_x1
             primary_height = primary_y2 - primary_y1
-            margin_x = primary_width * OBJECT_BOUNDS_BUFFER
-            margin_y = primary_height * OBJECT_BOUNDS_BUFFER
+            margin_x = primary_width * VEHICLE_BOUNDS_BUFFER
+            margin_y = primary_height * VEHICLE_BOUNDS_BUFFER
             
             expanded_primary_x1 = primary_x1 - margin_x
             expanded_primary_y1 = primary_y1 - margin_y
