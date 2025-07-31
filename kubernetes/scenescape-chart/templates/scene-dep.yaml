@@ -60,7 +60,7 @@ spec:
           readinessProbe:
             exec:
               command:
-              - true
+              - "true"
             initialDelaySeconds: 5
             periodSeconds: 1
           securityContext:
