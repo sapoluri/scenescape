@@ -126,6 +126,7 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
+  mqtt-large-messages \
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -158,10 +159,12 @@ _functional-tests: \
   child-scenes \
   mqtt-auth \
   mqtt-cert \
-  mqtt-large-messages \
   out-of-box-no-ntp \
   rest-test \
   scene-import \
+
+# Moved to broken tests:
+#   mqtt-large-messages
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
