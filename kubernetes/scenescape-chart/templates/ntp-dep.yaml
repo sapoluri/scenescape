@@ -33,7 +33,7 @@ spec:
           - name: healthy-file
             mountPath: /tmp
       containers:
-        - image: cturra/ntp
+        - image: {{ .Values.ntpserv.image }}
           name: {{ .Release.Name }}-ntpserv
           env:
           - name: NTP_SERVERS
