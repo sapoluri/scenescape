@@ -129,54 +129,6 @@ spec:
   resources:
     requests:
       storage: {{ .Values.userAccessConfig.storage }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ntp-etc-chrony-pvc
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "{{ int .Values.pvc.hookWeight }}"
-spec:
-  storageClassName: {{ .Values.pvc.storageClassName }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ntp-run-chrony-pvc
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "{{ int .Values.pvc.hookWeight }}"
-spec:
-  storageClassName: {{ .Values.pvc.storageClassName }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ntp-var-lib-chrony-pvc
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "{{ int .Values.pvc.hookWeight }}"
-spec:
-  storageClassName: {{ .Values.pvc.storageClassName }}
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
 {{- if .Values.tests.enabled }}
 ---
 apiVersion: v1
