@@ -30,30 +30,30 @@ spec:
           name: init-healthy-file
           securityContext:
             readOnlyRootFilesystem : true
-            allowPrivilegeEscalation: true
           volumeMounts:
           - name: healthy-file
             mountPath: /tmp
-        - command:
-          - sh
-          - -c
-          - "sudo chmod 1750 /etc/chrony && sudo chmod 1750 /run/chrony && sudo chmod 1750 /var/lib/chrony"
-          image: busybox
-          name: init-chrony-permissions
-          securityContext:
-            readOnlyRootFilesystem : true
-          volumeMounts:
-          - name: etc-chrony
-            mountPath: /etc/chrony
-            readonly: false
-          - name: run-chrony
-            mountPath: /run/chrony
-            readonly: false
-          - name: var-lib-chrony
-            mountPath: /var/lib/chrony
-            readonly: false
+        # - command:
+        #   - sh
+        #   - -c
+        #   - "chmod 1750 /etc/chrony && chmod 1750 /run/chrony && chmod 1750 /var/lib/chrony"
+        #   image: busybox
+        #   name: init-chrony-permissions
+        #   securityContext:
+        #     readOnlyRootFilesystem : true
+        #     allowPrivilegeEscalation: true
+        #   volumeMounts:
+        #   - name: etc-chrony
+        #     mountPath: /etc/chrony
+        #     readonly: false
+        #   - name: run-chrony
+        #     mountPath: /run/chrony
+        #     readonly: false
+        #   - name: var-lib-chrony
+        #     mountPath: /var/lib/chrony
+        #     readonly: false
       containers:
-        - image: cturra/ntp
+        - image: simonrupf/chronyd
           name: {{ .Release.Name }}-ntpserv
           env:
           - name: NTP_SERVERS
@@ -104,25 +104,15 @@ spec:
       volumes:
       - name: healthy-file
         emptyDir: {}
-      # - name: etc-chrony
-      #   emptyDir: {}
-      # - name: run-chrony
-      #   emptyDir: {}
-      # - name: var-lib-chrony
-      #   emptyDir: {}
       - name: etc-chrony
-        persistentVolumeClaim:
-          claimName: ntp-etc-chrony-pvc
-          readOnly: false
+        emptyDir:
+          medium: Memory
       - name: run-chrony
-        persistentVolumeClaim:
-          claimName: ntp-run-chrony-pvc
-          readOnly: false
+        emptyDir:
+          medium: Memory
       - name: var-lib-chrony
-        persistentVolumeClaim:
-          claimName: ntp-var-lib-chrony-pvc
-          readOnly: false
-status: {}
+        emptyDir:
+          medium: Memory
 ---
 apiVersion: v1
 kind: Service
