@@ -18,6 +18,7 @@ spec:
         app: {{ .Release.Name }}-scene
     spec:
       securityContext:
+        runAsUser: 1000
         runAsNonRoot: true
       shareProcessNamespace: true
       initContainers:
