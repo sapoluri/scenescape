@@ -19,8 +19,8 @@ spec:
     spec:
       shareProcessNamespace: true
       securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: chrony
+        runAsGroup: chrony
       initContainers:
         - command:
           - sh
@@ -36,12 +36,13 @@ spec:
         # - command:
         #   - sh
         #   - -c
-        #   - "chmod 1750 /etc/chrony && chmod 1750 /run/chrony && chmod 1750 /var/lib/chrony"
+        #   - "chown -R chrony:chrony /etc/chrony && chown -R chrony:chrony /run/chrony && chown -R chrony:chrony /var/lib/chrony"
         #   image: busybox
         #   name: init-chrony-permissions
         #   securityContext:
-        #     readOnlyRootFilesystem : true
-        #     allowPrivilegeEscalation: true
+        #     capabilities:
+        #       add:
+        #         - CHOWN
         #   volumeMounts:
         #   - name: etc-chrony
         #     mountPath: /etc/chrony
@@ -53,7 +54,7 @@ spec:
         #     mountPath: /var/lib/chrony
         #     readonly: false
       containers:
-        - image: simonrupf/chronyd
+        - image: cturra/ntp
           name: {{ .Release.Name }}-ntpserv
           env:
           - name: NTP_SERVERS
@@ -74,6 +75,9 @@ spec:
 {{- end }}
           imagePullPolicy: Always
           securityContext:
+            capabilities:
+              add:
+                - CHOWN
             readOnlyRootFilesystem : true
           ports:
           - containerPort: 123
