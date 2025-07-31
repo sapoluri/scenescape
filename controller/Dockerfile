@@ -155,7 +155,7 @@ COPY --chown=$WSUSER:$WSUSER --from=scenescape-common-base-24-04 /tmp/tools/wait
 COPY --chown=$WSUSER:$WSUSER ./controller/src/controller-cmd $SCENESCAPE_HOME/controller-cmd
 
 USER $WSUSER
-
+HEALTHCHECK CMD true
 ENTRYPOINT ["/home/scenescape/SceneScape/controller-cmd"]
 
 # ---------- Controller Test Stage ------------------
