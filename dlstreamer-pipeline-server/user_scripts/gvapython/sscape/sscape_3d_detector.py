@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+# Buffer added to vehicle bounds to account for potential inaccuracies in 3D object detection.
 VEHICLE_BOUNDS_BUFFER = 0.15
 
 

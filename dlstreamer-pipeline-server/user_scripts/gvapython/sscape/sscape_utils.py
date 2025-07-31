@@ -6,7 +6,7 @@ import base64
 import os
 from uuid import getnode as get_mac
 
-## Polices to post process data
+## Policies to post process data
 
 def detectionPolicy(pobj, item, fw, fh):
   pobj.update({
