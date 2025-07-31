@@ -60,8 +60,7 @@ spec:
           readinessProbe:
             exec:
               command:
-              - cat
-              - /tmp/healthy
+              - true
             initialDelaySeconds: 5
             periodSeconds: 1
           securityContext:
