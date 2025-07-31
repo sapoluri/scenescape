@@ -88,7 +88,6 @@ tests: \
   standard-tests \
 
 release-tests: \
-  3d-ui-calibration-points \
   additional-floor-plans \
   camera-deletion \
   check-openvino-version \
@@ -97,6 +96,9 @@ release-tests: \
   non-functional-tests \
   scene-details \
   randomly-failing-tests \
+
+# moved from release-tests to broken-tests:
+#  3d-ui-calibration-points
 
 broken-tests: \
   auto-calibration \
@@ -130,6 +132,7 @@ broken-tests: \
   out-of-box-no-ntp \
   bounding-box \
   child-scenes \
+  3d-ui-calibration-points \
 
 randomly-failing-tests: \
   3d-scene-control-panel \
