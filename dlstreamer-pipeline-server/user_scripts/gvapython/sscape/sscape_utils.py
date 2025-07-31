@@ -1,16 +1,12 @@
 # SPDX-FileCopyrightText: (C) 2024 - 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-import math
-from scipy.spatial.transform import Rotation
-import numpy as np
-import cv2
 import struct
 import base64
 import os
 from uuid import getnode as get_mac
 
-## Polices to post process data from the detector
+## Polices to post process data
 
 def detectionPolicy(pobj, item, fw, fh):
   pobj.update({
@@ -82,7 +78,6 @@ def detection3DPolicy(pobj, item, fw, fh):
 def reidPolicy(pobj, item, fw, fh):
   detectionPolicy(pobj, item, fw, fh)
   reid_vector = item['tensors'][1]['data']
-  # following code snippet is from percebro/modelchain.py
   v = struct.pack("256f",*reid_vector)
   pobj['reid'] = base64.b64encode(v).decode('utf-8')
   return
@@ -94,7 +89,6 @@ def classificationPolicy(pobj, item, fw, fh):
   return
 
 def ocrPolicy(pobj, item, fw, fh):
-  """Extract OCR text from classification layers"""
   detection3DPolicy(pobj, item, fw, fh)
   pobj['text'] = ''
   for key, value in item.items():
@@ -124,86 +118,3 @@ def computeObjBoundingBoxParams(pobj, fw, fh, x, y, w, h, xminnorm=None, yminnor
     'bounding_box_px': {'x': x, 'y': y, 'width': w, 'height': h}
   })
   return
-
-def getCuboidVertices(bbox3D, rotation=None):
-  """ Creates vertices for cuboid based on (x, y, z) and (width, height, depth)."""
-
-  width = bbox3D['width']
-  height = bbox3D['height']
-  depth = bbox3D['depth']
-  x = bbox3D['x']
-  y = bbox3D['y']
-  z = bbox3D['z']
-
-  vertices = np.zeros([3, 8])
-
-  # Setup X, Y and Z respectively
-  vertices[0, [0, 1, 4, 5]], vertices[0, [2, 3, 6, 7]] = width / 2, -width / 2
-  vertices[1, [0, 3, 4, 7]], vertices[1, [1, 2, 5, 6]] = height / 2, -height / 2
-  vertices[2, [0, 1, 2, 3]], vertices[2, [4, 5, 6, 7]] = 0, depth
-
-  # Rotate
-  if rotation is not None:
-    if len(rotation) == 3:
-      vertices = rotationAsMatrix(rotation) @ vertices
-    elif len(rotation) == 4:
-      vertices = Rotation.from_quat(rotation).as_matrix() @ vertices
-
-  # Translate
-  vertices[0, :] += x
-  vertices[1, :] += y
-  vertices[2, :] += z
-
-  vertices = np.transpose(vertices)
-  return vertices
-
-def rotationAsMatrix(rotation):
-  rotation_x = np.array([
-    [1, 0, 0],
-    [0, math.cos(rotation[0]), -math.sin(rotation[0])],
-    [0, math.sin(rotation[0]), math.cos(rotation[0])]
-  ])
-
-  rotation_y = np.array([
-    [math.cos(rotation[1]), 0, math.sin(rotation[1])],
-    [0, 1, 0],
-    [-math.sin(rotation[1]), 0, math.cos(rotation[1])]
-  ])
-
-  rotation_z = np.array([
-    [math.cos(rotation[2]), -math.sin(rotation[2]), 0],
-    [math.sin(rotation[2]), math.cos(rotation[2]), 0],
-    [0, 0, 1]
-  ])
-
-  rotation_as_matrix = np.dot(rotation_z, np.dot(rotation_y, rotation_x))
-  return rotation_as_matrix
-
-def annotate3DObject(img, obj, intrinsics, color=(66, 186, 150), thickness=2):
-    """Annotate 3D object on the image"""
-    vertex_idxs = [0, 1, 2, 3, 7, 6, 5, 4, 7, 3, 0, 4, 5, 1, 2, 6]
-    rotation = obj['rotation']
-    
-    # Create cuboid vertices based on translation, rotation, and size
-    vertices = getCuboidVertices(obj['bounding_box_3D'], rotation)
-    intrinsics = np.array(intrinsics).reshape(3, 3)
-    pts_img = intrinsics @ vertices.T
-    transformed_vertices = None
-    if np.all(np.absolute(pts_img[2]) > 1e-7) :
-      pts_img = pts_img[:2] / pts_img[2]
-      transformed_vertices = pts_img.T.astype(np.int32)
-    else:
-      print("Division by zero: bbox", obj['bounding_box_3D'],
-              "image coords", pts_img)
-      return
-    
-    if transformed_vertices is None:
-      return
-    
-    for idx in range(len(vertex_idxs)-1):
-      cv2.line( img,
-                transformed_vertices[vertex_idxs[idx]],
-                transformed_vertices[vertex_idxs[idx+1]],
-                color=(255,0,0) if idx == 0 else color,
-                thickness=2 )
-    return

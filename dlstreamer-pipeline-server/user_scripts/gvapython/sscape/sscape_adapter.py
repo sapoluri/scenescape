@@ -11,14 +11,13 @@ from datetime import datetime
 
 import cv2
 import ntplib
-import numpy as np
 import paho.mqtt.client as mqtt
 from pytz import timezone
 
 from utils import publisher_utils as utils
 from sscape_utils import getMACAddress, detectionPolicy, detection3DPolicy, \
   reidPolicy, classificationPolicy, ocrPolicy
-from car_license_plate_utils import CarLicensePlateProcessor
+from car_license_plate_utils import Object3DChainedDataProcessor
 
 ROOT_CA = os.environ.get('ROOT_CA', '/run/secrets/certs/scenescape-ca.pem')
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
@@ -40,7 +39,6 @@ class PostDecodeTimestampCapture:
     self.ntpServer = ntpServer
     self.lastTimeSync = None
     self.timeOffset = 0
-    self.ts = None
     self.timestamp_for_next_block = None
     self.fps = 5.0
     self.fps_alpha = 0.75 # for weighted average
@@ -83,10 +81,7 @@ class PostInferenceDataPublish:
     self.setupMQTT()
     self.metadatagenpolicy = metadatapolicies[metadatagenpolicy]
     self.frame_level_data = {'id': cameraid, 'debug_mac': getMACAddress()}
-    
-    # Initialize car/license plate processor for specific use cases
-    self.car_lp_processor = CarLicensePlateProcessor()
-    return
+    self.sub_detector = Object3DChainedDataProcessor()
 
   def on_connect(self, client, userdata, flags, rc):
     if rc == 0:
@@ -119,17 +114,14 @@ class PostInferenceDataPublish:
   def annotateObjects(self, img):
     objColors = ((0, 0, 255), (255, 128, 128), (207, 83, 294), (31, 156, 238))
     
-    # Special handling for car-license plate associations
     if 'car' in self.frame_level_data['objects']:
       intrinsics = self.frame_level_data.get('file_intrinsics')
-      self.car_lp_processor.annotateCarLicensePlates(img, self.frame_level_data['objects'], objColors, intrinsics=intrinsics)
+      self.sub_detector.annotateObjectAssociations(img, self.frame_level_data['objects'], objColors, 'car', 'license_plate', intrinsics=intrinsics)
       return
     
     for otype, objects in self.frame_level_data['objects'].items():
       if otype == "person":
         cindex = 0
-        # annotation of pose not supported
-        #self.annotateHPE(frame, obj)
       elif otype == "vehicle" or otype == "bicycle" or otype == "car":
         cindex = 1
       else:
@@ -138,9 +130,8 @@ class PostInferenceDataPublish:
       for obj in objects:
         if 'translation' in obj and 'rotation' in obj:
           intrinsics = self.frame_level_data.get('file_intrinsics')        
-          self.annotate3DObject(img, obj, intrinsics)
+          self.sub_detector.annotate3DObject(img, obj, intrinsics)
           continue
-        print(obj)
         topleft_cv = (int(obj['bounding_box_px']['x']), int(obj['bounding_box_px']['y']))
         bottomright_cv = (int(obj['bounding_box_px']['x'] + obj['bounding_box_px']['width']),
                         int(obj['bounding_box_px']['y'] + obj['bounding_box_px']['height']))
@@ -168,7 +159,6 @@ class PostInferenceDataPublish:
       _, jpeg = cv2.imencode(".jpg", image)
     jpeg = base64.b64encode(jpeg).decode('utf-8')
     imgdatadict['image'] = jpeg
-
     return
 
   def buildObjData(self, gvadata):
@@ -191,19 +181,16 @@ class PostInferenceDataPublish:
         vaobj['id'] = len(objects[otype]) + 1
         objects[otype].append(vaobj)
 
-    # Apply domain-specific processing (e.g., car-license plate associations)
-    self.applyDomainSpecificProcessing(objects)
+    self.processSubDetections(objects)
     self.frame_level_data['objects'] = objects
 
-  def applyDomainSpecificProcessing(self, objects):
-    """Apply domain-specific processing like car-license plate associations"""
+  def processSubDetections(self, objects):
+    """process sub detection when multiple models are chained together in the pipeline"""
     if 'car' in objects and 'license_plate' in objects:
-      # Get camera intrinsics for 3D processing
       intrinsics = self.frame_level_data.get('file_intrinsics')
-      inference_keys = self.car_lp_processor.associateLicensePlates(objects, intrinsics=intrinsics)
-      if inference_keys:
-        self.frame_level_data['inference_keys'] = inference_keys
-    return
+      sub_detections = self.sub_detector.associateObjects(objects, 'car', 'license_plate', intrinsics=intrinsics)
+      if sub_detections:
+        self.frame_level_data['sub_detections'] = sub_detections
 
   def processFrame(self, frame):
     if self.client.is_connected():
@@ -224,7 +211,6 @@ class PostInferenceDataPublish:
           self.buildImgData(imgdatadict, frame, False)
         self.client.publish(f"scenescape/image/calibration/camera/{self.cameraid}", json.dumps(imgdatadict))
         self.is_publish_calibration_image = False
-      self.frame_level_data['number_of_objects'] = sum(len(v) for v in self.frame_level_data['objects'].values())
       self.client.publish(f"scenescape/data/camera/{self.cameraid}", json.dumps(self.frame_level_data))
       frame.add_message(json.dumps(self.frame_level_data))
     return True

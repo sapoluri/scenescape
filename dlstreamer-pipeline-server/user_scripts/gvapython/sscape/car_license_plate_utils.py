@@ -8,8 +8,8 @@ from scipy.spatial.transform import Rotation
 VEHICLE_BOUNDS_BUFFER = 0.15
 
 
-class CarLicensePlateProcessor:
-    """Utility class for processing car and license plate associations and annotations using 3D bounding boxes"""
+class Object3DChainedDataProcessor:
+    """Utility class for associating 3D primary objects with 2D secondary objects"""
     
     def __init__(self):
         self.associations_created = 0
@@ -17,7 +17,7 @@ class CarLicensePlateProcessor:
     def getCuboidVertices(self, bbox3D, rotation=None):
         """Creates vertices for cuboid based on (x, y, z) and (width, height, depth)"""
         width = bbox3D['width']
-        height = bbox3D['height']  
+        height = bbox3D['height']
         depth = bbox3D['depth']
         x = bbox3D['x']
         y = bbox3D['y']
@@ -45,7 +45,6 @@ class CarLicensePlateProcessor:
     
     def findClosestFace(self, vertices):
         """Find the closest face of the 3D bounding box (smallest average z)"""
-        # Define the 6 faces by their 4 corner indices
         faces = [
             [0, 1, 2, 3],  # bottom
             [4, 5, 6, 7],  # top  
@@ -86,12 +85,10 @@ class CarLicensePlateProcessor:
             # Get 3D vertices
             vertices = self.getCuboidVertices(car_3d['bounding_box_3D'], car_3d.get('rotation'))
             
-            # Project to 2D
             projected_vertices = self.project3DTo2D(vertices, intrinsics)
             if projected_vertices is None:
                 return None
                 
-            # Get bounding rectangle
             x_coords = projected_vertices[:, 0]
             y_coords = projected_vertices[:, 1] 
             
@@ -108,7 +105,6 @@ class CarLicensePlateProcessor:
     def calculate3DFaceBounds2D(self, car_3d, intrinsics):
         """Calculate 2D projection of the closest face of a 3D car bounding box"""
         try:
-            # Get 3D vertices  
             vertices = self.getCuboidVertices(car_3d['bounding_box_3D'], car_3d.get('rotation'))
             
             # Find closest face
@@ -134,54 +130,44 @@ class CarLicensePlateProcessor:
             print(f"Error calculating 3D face bounds: {e}")
             return None
         
-    def calculate3DOverlapScore(self, car_3d, plate_bbox, intrinsics, use_face_projection=True):
-        """Calculate overlap score between 3D car bounding box and 2D license plate using Percebro methodology"""
+    def calculate3DOverlapScore(self, primary_obj_3d, secondary_bbox, intrinsics, use_face_projection=True):
         try:
-            # Get 2D projection of car's 3D bounding box
             if use_face_projection:
-                # Use closest face projection (like Percebro's approach)
-                car_2d_bounds = self.calculate3DFaceBounds2D(car_3d, intrinsics)
+                primary_2d_bounds = self.calculate3DFaceBounds2D(primary_obj_3d, intrinsics)
             else:
-                # Use full 3D box projection
-                car_2d_bounds = self.calculate3DBounds2D(car_3d, intrinsics)
+                primary_2d_bounds = self.calculate3DBounds2D(primary_obj_3d, intrinsics)
                 
-            if car_2d_bounds is None:
+            if primary_2d_bounds is None:
                 return 0.0
                 
-            # Extract license plate coordinates
-            plate_x1, plate_y1 = plate_bbox['x'], plate_bbox['y']
-            plate_x2, plate_y2 = plate_x1 + plate_bbox['width'], plate_y1 + plate_bbox['height']
-            plate_center_x = (plate_x1 + plate_x2) / 2
-            plate_center_y = (plate_y1 + plate_y2) / 2
+            secondary_x1, secondary_y1 = secondary_bbox['x'], secondary_bbox['y']
+            secondary_x2, secondary_y2 = secondary_x1 + secondary_bbox['width'], secondary_y1 + secondary_bbox['height']
+            secondary_center_x = (secondary_x1 + secondary_x2) / 2
+            secondary_center_y = (secondary_y1 + secondary_y2) / 2
             
-            # Extract car projected coordinates
-            car_x1, car_y1 = car_2d_bounds['x'], car_2d_bounds['y']
-            car_x2, car_y2 = car_x1 + car_2d_bounds['width'], car_y1 + car_2d_bounds['height']
+            primary_x1, primary_y1 = primary_2d_bounds['x'], primary_2d_bounds['y']
+            primary_x2, primary_y2 = primary_x1 + primary_2d_bounds['width'], primary_y1 + primary_2d_bounds['height']
             
-            # Expand car bounds by buffer to account for license plates on bumpers
-            car_width = car_x2 - car_x1
-            car_height = car_y2 - car_y1
-            margin_x = car_width * VEHICLE_BOUNDS_BUFFER
-            margin_y = car_height * VEHICLE_BOUNDS_BUFFER
+            primary_width = primary_x2 - primary_x1
+            primary_height = primary_y2 - primary_y1
+            margin_x = primary_width * OBJECT_BOUNDS_BUFFER
+            margin_y = primary_height * OBJECT_BOUNDS_BUFFER
             
-            expanded_car_x1 = car_x1 - margin_x
-            expanded_car_y1 = car_y1 - margin_y
-            expanded_car_x2 = car_x2 + margin_x
-            expanded_car_y2 = car_y2 + margin_y
+            expanded_primary_x1 = primary_x1 - margin_x
+            expanded_primary_y1 = primary_y1 - margin_y
+            expanded_primary_x2 = primary_x2 + margin_x
+            expanded_primary_y2 = primary_y2 + margin_y
             
-            # Check if plate center is within expanded car bounds
-            if (expanded_car_x1 <= plate_center_x <= expanded_car_x2 and
-                expanded_car_y1 <= plate_center_y <= expanded_car_y2):
+            if (expanded_primary_x1 <= secondary_center_x <= expanded_primary_x2 and
+                expanded_primary_y1 <= secondary_center_y <= expanded_primary_y2):
                 
-                # Calculate distance-based score (closer = higher score)
-                car_center_x = (car_x1 + car_x2) / 2
-                car_center_y = (car_y1 + car_y2) / 2
-                distance = ((plate_center_x - car_center_x) ** 2 + (plate_center_y - car_center_y) ** 2) ** 0.5
+                primary_center_x = (primary_x1 + primary_x2) / 2
+                primary_center_y = (primary_y1 + primary_y2) / 2
+                distance = ((secondary_center_x - primary_center_x) ** 2 + (secondary_center_y - primary_center_y) ** 2) ** 0.5
                 
-                # Normalize distance by car diagonal
-                car_diagonal = (car_width ** 2 + car_height ** 2) ** 0.5
-                if car_diagonal > 0:
-                    normalized_distance = distance / car_diagonal
+                primary_diagonal = (primary_width ** 2 + primary_height ** 2) ** 0.5
+                if primary_diagonal > 0:
+                    normalized_distance = distance / primary_diagonal
                     return max(0, 1.0 - normalized_distance)
             
             return 0.0
@@ -189,222 +175,107 @@ class CarLicensePlateProcessor:
             print(f"Error calculating 3D overlap score: {e}")
             return 0.0
 
-    def associateLicensePlates(self, objects, intrinsics=None):
-        """Create associations between cars and license plates using 3D bounding boxes (Percebro methodology)"""
-        cars = objects.get('car', [])
-        license_plates = objects.get('license_plate', [])
+    def associateObjects(self, objects, primary_type='car', secondary_type='license_plate', intrinsics=None):
+        primary_objects = objects.get(primary_type, [])
+        secondary_objects = objects.get(secondary_type, [])
         
-        if not cars or not license_plates:
+        if not primary_objects or not secondary_objects or intrinsics is None:
             return []
         
-        used_plates = set()
+        used_secondary = set()
         associations_created = 0
-        inference_keys = ['license_plate']
+        sub_detections = [secondary_type]
         
-        for car_idx, car in enumerate(cars):
-            associated_plates = []
+        for primary_idx, primary_obj in enumerate(primary_objects):
+            associated_secondary = []
             
-            # Check if car has 3D bounding box data
-            has_3d_data = ('bounding_box_3D' in car or 
-                          ('translation' in car and 'rotation' in car and 'size' in car))
+            if 'bounding_box_3D' not in primary_obj and 'translation' in primary_obj:
+                primary_obj['bounding_box_3D'] = {
+                    'x': primary_obj['translation'][0],
+                    'y': primary_obj['translation'][1], 
+                    'z': primary_obj['translation'][2],
+                    'width': primary_obj['size'][0],
+                    'height': primary_obj['size'][1],
+                    'depth': primary_obj['size'][2]
+                }
             
-            if has_3d_data and intrinsics is not None:
-                # Use 3D-based association (Percebro methodology)
-                # Ensure car has proper 3D data structure
-                if 'bounding_box_3D' not in car and 'translation' in car:
-                    car['bounding_box_3D'] = {
-                        'x': car['translation'][0],
-                        'y': car['translation'][1], 
-                        'z': car['translation'][2],
-                        'width': car['size'][0],
-                        'height': car['size'][1],
-                        'depth': car['size'][2]
-                    }
-                
-                # Find best matching license plates using 3D projection
-                plate_scores = []
-                for plate_idx, plate in enumerate(license_plates):
-                    if plate_idx in used_plates:
-                        continue
-                        
-                    plate_bbox = plate['bounding_box_px']
-                    # Use face-based projection for more accurate association
-                    score = self.calculate3DOverlapScore(car, plate_bbox, intrinsics, use_face_projection=True)
-                    if score > 0.1:  # Minimum threshold
-                        plate_scores.append((score, plate_idx, plate))
-                        
-            else:
-                # Fallback to 2D-based association for cars without 3D data
-                if 'bounding_box_px' not in car:
+            secondary_scores = []
+            for secondary_idx, secondary_obj in enumerate(secondary_objects):
+                if secondary_idx in used_secondary:
                     continue
                     
-                car_bbox = car['bounding_box_px']
-                plate_scores = []
-                for plate_idx, plate in enumerate(license_plates):
-                    if plate_idx in used_plates:
-                        continue
-                        
-                    plate_bbox = plate['bounding_box_px']
-                    score = self.calculate2DOverlapScore(car_bbox, plate_bbox)
-                    if score > 0.1:  # Minimum threshold
-                        plate_scores.append((score, plate_idx, plate))
+                secondary_bbox = secondary_obj['bounding_box_px']
+                score = self.calculate3DOverlapScore(primary_obj, secondary_bbox, intrinsics, use_face_projection=True)
+                if score > 0.1:
+                    secondary_scores.append((score, secondary_idx, secondary_obj))
             
-            # Sort by score and take the best matches
-            plate_scores.sort(reverse=True, key=lambda x: x[0])
+            secondary_scores.sort(reverse=True, key=lambda x: x[0])
             
-            for score, plate_idx, plate in plate_scores[:2]:  # Max 2 plates per car
-                # Extract OCR text
-                plate_info = {
-                    'bounding_box_px': plate['bounding_box_px'],
-                    'confidence': plate['confidence'],
-                    'text': plate.get('text', '')
+            for score, secondary_idx, secondary_obj in secondary_scores[:2]:
+                secondary_info = {
+                    'bounding_box_px': secondary_obj['bounding_box_px'],
+                    'confidence': secondary_obj['confidence'],
                 }
-                associated_plates.append(plate_info)
-                used_plates.add(plate_idx)
+                
+                if 'text' in secondary_obj:
+                    secondary_info['text'] = secondary_obj['text']
+                    
+                associated_secondary.append(secondary_info)
+                used_secondary.add(secondary_idx)
                 associations_created += 1
                 
-            # Add license plates to car object
-            if associated_plates:
-                car['license_plates'] = associated_plates
+            if associated_secondary:
+                primary_obj[f'{secondary_type}s'] = associated_secondary
         
-        # Remove associated license plates from the main objects list
-        if used_plates:
-            remaining_plates = [plate for idx, plate in enumerate(license_plates) if idx not in used_plates]
-            if remaining_plates:
-                objects['license_plate'] = remaining_plates
-            else:
-                # Remove license_plate category entirely if all plates were associated
-                if 'license_plate' in objects:
-                    del objects['license_plate']
-        
+        remaining_secondary = [obj for idx, obj in enumerate(secondary_objects) if idx not in used_secondary]
+        if remaining_secondary:
+            print(f"Warning: Not all {secondary_type} objects were associated with {primary_type} objects. Remaining: {len(remaining_secondary)}")
+            
+        del objects[secondary_type]
         self.associations_created = associations_created
-        print(f"3D Association: Created {associations_created} car-license plate associations")
-        return inference_keys
-    
-    def calculate2DOverlapScore(self, car_bbox, plate_bbox):
-        """Fallback 2D overlap calculation for cars without 3D data"""
-        try:
-            # Extract coordinates
-            car_x1, car_y1 = car_bbox['x'], car_bbox['y']
-            car_x2, car_y2 = car_x1 + car_bbox['width'], car_y1 + car_bbox['height']
-            
-            plate_x1, plate_y1 = plate_bbox['x'], plate_bbox['y']
-            plate_x2, plate_y2 = plate_x1 + plate_bbox['width'], plate_y1 + plate_bbox['height']
-            
-            # Check if plate center is within expanded car bounds
-            plate_center_x = (plate_x1 + plate_x2) / 2
-            plate_center_y = (plate_y1 + plate_y2) / 2
-            
-            # Expand car bounds to account for license plates on bumpers
-            car_width = car_x2 - car_x1
-            car_height = car_y2 - car_y1
-            margin_x = car_width * VEHICLE_BOUNDS_BUFFER
-            margin_y = car_height * VEHICLE_BOUNDS_BUFFER
-            
-            expanded_car_x1 = car_x1 - margin_x
-            expanded_car_y1 = car_y1 - margin_y
-            expanded_car_x2 = car_x2 + margin_x
-            expanded_car_y2 = car_y2 + margin_y
-            
-            # Check if plate center is within expanded car
-            if (expanded_car_x1 <= plate_center_x <= expanded_car_x2 and
-                expanded_car_y1 <= plate_center_y <= expanded_car_y2):
-                # Calculate distance-based score (closer = higher score)
-                car_center_x = (car_x1 + car_x2) / 2
-                car_center_y = (car_y1 + car_y2) / 2
-                distance = ((plate_center_x - car_center_x) ** 2 + (plate_center_y - car_center_y) ** 2) ** 0.5
-                # Normalize distance by car diagonal
-                car_diagonal = (car_width ** 2 + car_height ** 2) ** 0.5
-                if car_diagonal > 0:
-                    normalized_distance = distance / car_diagonal
-                    return max(0, 1.0 - normalized_distance)
-            
-            return 0.0
-        except Exception as e:
-            print(f"Error calculating 2D overlap score: {e}")
-            return 0.0
+        return sub_detections
 
-    def annotateCarLicensePlates(self, img, objects, obj_colors, intrinsics=None):
-        """Annotate cars and their associated license plates (supports both 2D and 3D)"""
-        cars = objects.get('car', [])
+    def annotateObjectAssociations(self, img, objects, obj_colors, primary_type='car', secondary_type='license_plate', intrinsics=None):
+        primary_objects = objects.get(primary_type, [])
         
-        for obj in cars:
-            # Check if this is a 3D object
-            has_3d_data = ('bounding_box_3D' in obj or 
-                          ('translation' in obj and 'rotation' in obj and 'size' in obj))
-            
-            if has_3d_data and intrinsics is not None:
-                # Draw 3D car bounding box
-                self.annotate3DCarWithPlates(img, obj, obj_colors, intrinsics)
-            else:
-                # Draw 2D car bounding box (fallback)
-                if 'bounding_box_px' in obj:
-                    topleft_cv = (int(obj['bounding_box_px']['x']), int(obj['bounding_box_px']['y']))
-                    bottomright_cv = (int(obj['bounding_box_px']['x'] + obj['bounding_box_px']['width']),
-                                    int(obj['bounding_box_px']['y'] + obj['bounding_box_px']['height']))
-                    cv2.rectangle(img, topleft_cv, bottomright_cv, obj_colors[1], 2)  # Car color
-                
-                # Annotate associated license plates
-                if 'license_plates' in obj:
-                    for plate in obj['license_plates']:
-                        # Draw license plate bounding box
-                        plate_topleft = (int(plate['bounding_box_px']['x']), int(plate['bounding_box_px']['y']))
-                        plate_bottomright = (int(plate['bounding_box_px']['x'] + plate['bounding_box_px']['width']),
-                                           int(plate['bounding_box_px']['y'] + plate['bounding_box_px']['height']))
-                        cv2.rectangle(img, plate_topleft, plate_bottomright, obj_colors[3], 2)  # License plate color
-                        
-                        # Draw OCR text
-                        if 'text' in plate and plate['text']:
-                            self.annotatePlate(img, plate['bounding_box_px'], plate['text'])
-    
-    def annotate3DCarWithPlates(self, img, car_obj, obj_colors, intrinsics):
-        """Annotate 3D car with its associated license plates"""
-        try:
-            # Ensure car has proper 3D data structure
-            if 'bounding_box_3D' not in car_obj and 'translation' in car_obj:
-                car_obj['bounding_box_3D'] = {
-                    'x': car_obj['translation'][0],
-                    'y': car_obj['translation'][1], 
-                    'z': car_obj['translation'][2],
-                    'width': car_obj['size'][0],
-                    'height': car_obj['size'][1],
-                    'depth': car_obj['size'][2]
+        if not primary_objects or intrinsics is None:
+            return
+        
+        for obj in primary_objects:
+            if 'bounding_box_3D' not in obj and 'translation' in obj:
+                obj['bounding_box_3D'] = {
+                    'x': obj['translation'][0],
+                    'y': obj['translation'][1], 
+                    'z': obj['translation'][2],
+                    'width': obj['size'][0],
+                    'height': obj['size'][1],
+                    'depth': obj['size'][2]
                 }
             
-            # Draw 3D car bounding box
-            self.annotate3DObject(img, car_obj, intrinsics, color=obj_colors[1])
+            self.annotate3DObject(img, obj, intrinsics, color=obj_colors[1])
             
-            # Annotate associated license plates
-            if 'license_plates' in car_obj:
-                for plate in car_obj['license_plates']:
-                    # Draw license plate bounding box
-                    plate_topleft = (int(plate['bounding_box_px']['x']), int(plate['bounding_box_px']['y']))
-                    plate_bottomright = (int(plate['bounding_box_px']['x'] + plate['bounding_box_px']['width']),
-                                       int(plate['bounding_box_px']['y'] + plate['bounding_box_px']['height']))
-                    cv2.rectangle(img, plate_topleft, plate_bottomright, obj_colors[3], 2)  # License plate color
+            secondary_key = f'{secondary_type}s'
+            if secondary_key in obj:
+                for secondary_obj in obj[secondary_key]:
+                    secondary_topleft = (int(secondary_obj['bounding_box_px']['x']), int(secondary_obj['bounding_box_px']['y']))
+                    secondary_bottomright = (int(secondary_obj['bounding_box_px']['x'] + secondary_obj['bounding_box_px']['width']),
+                                           int(secondary_obj['bounding_box_px']['y'] + secondary_obj['bounding_box_px']['height']))
+                    cv2.rectangle(img, secondary_topleft, secondary_bottomright, obj_colors[3], 2)
                     
-                    # Draw OCR text
-                    if 'text' in plate and plate['text']:
-                        self.annotatePlate(img, plate['bounding_box_px'], plate['text'])
-                        
-        except Exception as e:
-            print(f"Error annotating 3D car: {e}")
+                    if 'text' in secondary_obj and secondary_obj['text']:
+                        self.annotateText(img, secondary_obj['bounding_box_px'], secondary_obj['text'])
     
     def annotate3DObject(self, img, obj, intrinsics, color=(66, 186, 150), thickness=2):
-        """Annotate 3D object on the image"""
         try:
             vertex_idxs = [0, 1, 2, 3, 7, 6, 5, 4, 7, 3, 0, 4, 5, 1, 2, 6]
             rotation = obj.get('rotation')
             
-            # Create cuboid vertices based on 3D bounding box
             vertices = self.getCuboidVertices(obj['bounding_box_3D'], rotation)
             
-            # Project to 2D
             transformed_vertices = self.project3DTo2D(vertices, intrinsics)
             if transformed_vertices is None:
                 return
             
-            # Draw the 3D bounding box
             for idx in range(len(vertex_idxs)-1):
                 if (vertex_idxs[idx] < len(transformed_vertices) and 
                     vertex_idxs[idx+1] < len(transformed_vertices)):
@@ -416,9 +287,7 @@ class CarLicensePlateProcessor:
         except Exception as e:
             print(f"Error annotating 3D object: {e}")
 
-    def annotatePlate(self, frame, bounds, text):
-        """Annotate license plate text near the bounding box"""
-        # Calculate text scale based on plate width for readability
+    def annotateText(self, frame, bounds, text):
         scale = 1
         lsize = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1*scale, 5*scale)[0]
 
@@ -431,16 +300,13 @@ class CarLicensePlateProcessor:
         end_x = int(bounds['x'])
         top_y = int(bounds['y'] + 10)
         
-        # Check if annotation is within image bounds
         if self.pointsInsideImage(frame, [[start_x, top_y], [end_x, bottom_y]]):
-            # Draw text with black outline and white fill for better visibility
             cv2.putText(frame, text, (start_x, bottom_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 1 * scale, (0,0,0), int(5 * scale))
             cv2.putText(frame, text, (start_x, bottom_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 1 * scale, (255,255,255), int(2 * scale))
 
     def pointsInsideImage(self, frame, img_pts):
-        """Check if points are within image boundaries"""
         frame_height, frame_width = frame.shape[:2]
         for point in img_pts:
             pt_x = int(point[0])

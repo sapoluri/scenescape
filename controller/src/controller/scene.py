@@ -154,8 +154,8 @@ class Scene(SceneModel):
             agnosticx, agnosticy, agnosticw, agnostich = self.computePixelsToMeterPlane(x, y, w, h,
                                   camera.pose.intrinsics.intrinsics, camera.pose.intrinsics.distortion)
             obj['bounding_box'] = {'x': agnosticx, 'y': agnosticy, 'width': agnosticw, 'height': agnostich}
-          # Handle chained inferences
-          for key in obj.get('inference_keys', []):
+          # Handle chained sub detections
+          for key in obj.get('sub_detections', []):
             for lp in obj[key]:
               if 'bounding_box' not in lp and 'bounding_box_px' in lp:
                 x = lp['bounding_box_px']['x']

@@ -295,10 +295,10 @@
             }
           }
         },
-        "inference_keys": {
-          "title": "Inference Keys",
+        "sub_detections": {
+          "title": "Sub-Detections",
           "type": "array",
-          "description": "Array of inference keys associated with the detector output.",
+          "description": "Array of sub-detections associated with the detector output.",
           "items": {
             "type": "string"
           },
