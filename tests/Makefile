@@ -141,6 +141,16 @@ basic-acceptance-tests: \
   mqtt-tripwire \
   unit-tests \
 
+#Temp K8s BAT target
+# Not sorted alphabetically on purpose
+basic-acceptance-tests-k8s: \
+  idc-error-metric \
+  msoce-metric \
+  velocity-metric \
+  distance-msoce \
+  inference-performance \
+  inference-threading \
+
 # FIXME: run functional tests in parallel
 standard-tests: \
   _functional-tests \

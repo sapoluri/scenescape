@@ -323,6 +323,17 @@ run_basic_acceptance_tests: setup_tests
 	$(MAKE) --trace -C tests basic-acceptance-tests -j 1 SUPASS=$(SUPASS) $${DLS_ARG} || (echo "Basic acceptance tests failed" && exit 1)
 	@echo "DONE ==> Running basic acceptance tests"
 
+#Temp K8s BAT target
+.PHONY: run_basic_acceptance_tests_k8s
+run_basic_acceptance_tests_k8s: setup_tests
+	@if [ "$${DLS}" = "1" ]; then \
+	    $(MAKE) $(DLSTREAMER_SAMPLE_VIDEOS); \
+	fi
+	@echo "Running basic acceptance tests..."
+	@DLS_ARG=""; [ "$${DLS}" = "1" ] && DLS_ARG="DLS=1"; \
+	$(MAKE) --trace -C tests basic-acceptance-tests-k8s -j 1 SUPASS=$(SUPASS) $${DLS_ARG} || (echo "Basic acceptance tests failed" && exit 1)
+	@echo "DONE ==> Running basic acceptance tests"
+
 # ============================= Lint ==================================
 
 .PHONY: lint-all
