@@ -105,8 +105,6 @@ broken-tests: \
   april-tag-setup \
   rtsp-stream \
   orphaned-sensor \
-  delete-roi-mqtt \
-  delete-tripwire-mqtt \
   geospatial-ingest-publish \
   manual-camera-calibration \
   camera-perspective \
@@ -178,7 +176,7 @@ _metric-tests: \
   msoce-metric \
 
 ui-tests:
-	$(MAKE) -Otarget _$@ SECRETSDIR=$(PWD)/manager/secrets SUPASS=$(SUPASS) SUPASS=$(SUPASS) -k
+	$(MAKE) -Otarget _$@ SECRETSDIR=$(PWD)/manager/secrets SUPASS=$(SUPASS) -k
 
 _ui-tests: \
   3d-camera-control-panel \
@@ -189,6 +187,7 @@ _ui-tests: \
   delete-sensor-mqtt \
   delete-sensor-scene \
   delete-sensors \
+  delete-tripwire-mqtt \
   object-crud \
   persistence \
   restricted-media-access \
