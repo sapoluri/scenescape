@@ -24,23 +24,6 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-      initContainers:
-      - name: chown-media-initcontainer
-        image: busybox
-        securityContext:
-          readOnlyRootFilesystem: true
-        command: ["/bin/sh", "-c", "chown -R 1000:1000 /workspace"]
-        volumeMounts:
-        - mountPath: /workspace/media
-          name: media-storage
-      - name: chown-model-initcontainer
-        image: busybox
-        securityContext:
-          readOnlyRootFilesystem: true
-        command: ["/bin/sh", "-c", "chown -R 33:33 /workspace"]
-        volumeMounts:
-        - mountPath: /workspace/models
-          name: models-storage
       containers:
         - args:
           - webserver

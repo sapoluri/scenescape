@@ -27,7 +27,14 @@ FROM ubuntu:22.04 AS scenescape-manager-runtime
 USER root
 SHELL ["/bin/bash", "-e", "-o", "pipefail", "-c"]
 ARG USER_ID
+ARG GROUP_ID
 ARG CERTDOMAIN=scenescape.intel.com
+
+RUN : \
+    && if [ -z "$USER_ID" ] || [ -z "$GROUP_ID" ]; then \
+        echo "ERROR: USER_ID and GROUP_ID must be set as build arguments."; \
+        exit 1; \
+    fi
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WSUSER=scenescape
@@ -112,7 +119,8 @@ RUN : \
     ; chmod og-w /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf
 
 RUN : \
-    ; useradd -r -m -s /bin/bash $WSUSER \
+    ; groupadd -g ${GROUP_ID} $WSUSER \
+    ; useradd -r -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash $WSUSER \
     ; usermod -a -G video,users $WSUSER \
     ; eval WSHOME=~$WSUSER \
     ; chmod a+rX "${WSHOME}" \
@@ -155,6 +163,8 @@ COPY ./manager/config/webserver-init \
      ./manager/config/scenescape-init \
      /usr/local/bin/
 
+USER $WSUSER
+HEALTHCHECK CMD true
 ENTRYPOINT ["/usr/local/bin/scenescape-init"]
 
 # ---------- Manager Test Stage ------------------
