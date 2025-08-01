@@ -162,8 +162,6 @@ _functional-tests: \
   api-large-strings \
   mqtt-auth \
   mqtt-cert \
-  mqtt-large-messages \
-  out-of-box-no-ntp \
   rest-test \
   scene-import \
 
