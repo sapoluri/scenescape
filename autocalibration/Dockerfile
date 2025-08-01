@@ -100,7 +100,6 @@ RUN mkdir -p $NETVLAD_MODEL_DIR && \
 # Create a startup script that ensures model directory permissions and checks NetVLAD model
 RUN echo '#!/bin/bash\n\
 set -e\n\
-# chown -R $WSUSER:$WSUSER $NETVLAD_MODEL_DIR  # <-- Remove or comment out this line\n\
 if [ "$SKIP_MODEL_DOWNLOAD" != "1" ]; then\n\
     echo "Checking NetVLAD model..."\n\
     python3 /usr/local/bin/download_models.py\n\
