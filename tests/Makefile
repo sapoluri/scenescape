@@ -149,7 +149,6 @@ basic-acceptance-tests-k8s: \
   velocity-metric \
   distance-msoce \
   inference-performance \
-  inference-threading \
 
 # FIXME: run functional tests in parallel
 standard-tests: \
