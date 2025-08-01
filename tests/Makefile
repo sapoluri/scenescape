@@ -108,6 +108,7 @@ broken-tests: \
   mqtt-sensor-roi \
   mqtt-slow-sensor-roi \
   orphaned-sensor \
+  sensors-send-events \
   delete-tripwire-mqtt \
   geospatial-ingest-publish \
   manual-camera-calibration \
