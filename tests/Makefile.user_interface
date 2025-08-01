@@ -202,7 +202,7 @@ show-telemetry-button: # NEX-T10435
 	$(eval COMPOSE_FILES := $(COMPOSE)/$(PREFIX)broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/$(PREFIX)retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml)
 	$(call common-recipe, $(COMPOSE_FILES), tests/ui/tc_show_telemetry_button.py, '$(SERVICES)', true, /run/secrets/controller.auth)
 
-superuser-crud-operations: # NEX-
+superuser-crud-operations: # NEX-T10418
 	$(call set-prefix)
 	$(eval OLDSECRETSDIR := $(SECRETSDIR))
 	$(eval SECRETSDIR := $(PWD)/manager/secrets)
