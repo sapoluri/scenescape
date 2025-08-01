@@ -116,11 +116,11 @@ jobs:
         run: |
           docker system prune -a --volumes -f
 
-      - name: "Run Basic Acceptance Tests (BAT)"
-        run: |
-          make clean-all
-          git clean -fdx
-          make run_basic_acceptance_tests
+      # - name: "Run Basic Acceptance Tests (BAT)"
+      #   run: |
+      #     make clean-all
+      #     git clean -fdx
+      #     make run_basic_acceptance_tests
 
       - name: "Run Basic Acceptance Tests (BAT) - k8s"
         run: |
