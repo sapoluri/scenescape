@@ -8,6 +8,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime
+from uuid import getnode as get_mac
 
 import cv2
 import ntplib
@@ -15,21 +16,34 @@ import paho.mqtt.client as mqtt
 from pytz import timezone
 
 from utils import publisher_utils as utils
-from sscape_utils import getMACAddress, detectionPolicy, detection3DPolicy, \
-  reidPolicy, classificationPolicy, ocrPolicy
+from sscape_policies import (
+  detectionPolicy,
+  detection3DPolicy,
+  reidPolicy,
+  classificationPolicy,
+  ocrPolicy,
+)
 from sscape_3d_detector import Object3DChainedDataProcessor
 
-ROOT_CA = os.environ.get('ROOT_CA', '/run/secrets/certs/scenescape-ca.pem')
+ROOT_CA = os.environ.get("ROOT_CA", "/run/secrets/certs/scenescape-ca.pem")
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 TIMEZONE = "UTC"
 
 metadatapolicies = {
-"detectionPolicy": detectionPolicy,
-"detection3DPolicy": detection3DPolicy,
-"reidPolicy": reidPolicy,
-"classificationPolicy": classificationPolicy,
-"ocrPolicy": ocrPolicy
+  "detectionPolicy": detectionPolicy,
+  "detection3DPolicy": detection3DPolicy,
+  "reidPolicy": reidPolicy,
+  "classificationPolicy": classificationPolicy,
+  "ocrPolicy": ocrPolicy,
 }
+
+def getMACAddress():
+  if 'MACADDR' in os.environ:
+    return os.environ['MACADDR']
+
+  a = get_mac()
+  h = iter(hex(a)[2:].zfill(12))
+  return ":".join(i + next(h) for i in h)
 
 class PostDecodeTimestampCapture:
   def __init__(self, ntpServer=None):
