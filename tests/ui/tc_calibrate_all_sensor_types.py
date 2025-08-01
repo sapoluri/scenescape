@@ -11,7 +11,6 @@ from abc import ABC, abstractmethod
 import time
 import re
 
-
 class TestSensorCalibrationBase(ABC):
   """! Base class for testing sensor calibration."""
 

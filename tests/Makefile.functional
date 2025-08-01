@@ -98,6 +98,7 @@ out-of-box: # NEX-T10417
 	$(call common-recipe, $(COMPOSE_FILES), tests/ui/tc_out_of_box.py, '$(SERVICES)', true, /run/secrets/browser.auth)
 	$(eval SECRETSDIR := $(OLDSECRETSDIR))
 
+
 out-of-box-no-ntp: # NEX-T10417
 	$(call set-prefix)
 	$(eval SERVICES := $(strip pgserver web queuing-video retail-video scene))
@@ -114,11 +115,12 @@ orphaned-sensor: # NEX-T10398
 
 reid-performance-degradation: # NEX-T10541
 	$(call set-prefix)
+	$(eval IMAGE_OLD := $(BASE_IMAGE))
+	$(eval BASE_IMAGE := $(IMAGE)-controller-test)
 	$(eval SERVICES := $(strip pgserver web queuing-video retail-video scene))
 	$(eval COMPOSE_FILES := $(COMPOSE)/$(PREFIX)broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver_default.yml:$(COMPOSE)/vdms.yml:$(COMPOSE)/$(PREFIX)retail_video_reid.yml:$(COMPOSE)/$(PREFIX)queuing_video_reid.yml:$(COMPOSE)/scene_reid.yml:$(COMPOSE)/web.yml)
 	$(eval OLDSECRETSDIR := $(SECRETSDIR))
 	$(eval SECRETSDIR := $(PWD)/manager/secrets)
-	$(eval BASE_IMAGE=$(IMAGE)-controller-test)
 	$(call common-recipe, $(COMPOSE_FILES), tests/functional/tc_reid_performance_degradation.py, '$(SERVICES)', true)
 	$(eval SECRETSDIR := $(OLDSECRETSDIR))
 	$(eval BASE_IMAGE := $(IMAGE_OLD))
@@ -127,6 +129,7 @@ reid-unique-count: # NEX-T10539
 	$(call set-prefix)
 	$(eval SERVICES := $(strip pgserver web queuing-video retail-video scene))
 	$(eval COMPOSE_FILES := $(COMPOSE)/$(PREFIX)broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver_default.yml:$(COMPOSE)/vdms.yml:$(COMPOSE)/$(PREFIX)retail_video_reid.yml:$(COMPOSE)/$(PREFIX)queuing_video_reid.yml:$(COMPOSE)/scene_reid.yml:$(COMPOSE)/web.yml)
+	$(eval BASE_IMAGE=$(IMAGE)-controller-test)
 	$(eval OLDSECRETSDIR := $(SECRETSDIR))
 	$(eval SECRETSDIR := $(PWD)/manager/secrets)
 	$(call common-recipe, $(COMPOSE_FILES), tests/functional/tc_reid_unique_count.py, '$(SERVICES)', true)
