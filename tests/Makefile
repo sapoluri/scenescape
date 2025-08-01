@@ -76,13 +76,18 @@ define common-recipe =
 	  ; echo END TEST $@
 endef
 
+define set-prefix
+    $(eval PREFIX = $(if $(DLS),dlstreamer/,))
+endef
+
+# For DLStreamer tests, run the target with DLS=1
+
 # Not sorted alphabetically on purpose
 tests: \
   basic-acceptance-tests \
   standard-tests \
 
 release-tests: \
-  3d-ui-calibration-points \
   additional-floor-plans \
   camera-deletion \
   different-formats-maps \
@@ -90,6 +95,10 @@ release-tests: \
   non-functional-tests \
   scene-details \
   randomly-failing-tests \
+  reid-performance-degradation \
+
+# moved from release-tests to broken-tests:
+#  3d-ui-calibration-points
 
 broken-tests: \
   auto-calibration \
@@ -106,6 +115,11 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
+  mqtt-large-messages \
+  out-of-box-no-ntp \
+  bounding-box \
+  child-scenes \
+  3d-ui-calibration-points \
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -113,6 +127,7 @@ randomly-failing-tests: \
 # Not sorted alphabetically on purpose
 basic-acceptance-tests: \
   deploy \
+  infra-tests \
   geometry-conformance \
   metric-tests \
   out-of-box \
@@ -133,16 +148,17 @@ functional-tests:
 _functional-tests: \
   add-orphaned-cameras \
   api-large-strings \
-  bounding-box \
-  child-scenes \
   mqtt-auth \
   mqtt-cert \
-  mqtt-large-messages \
-  sensors-send-events \
-  out-of-box-no-ntp \
   rest-test \
   reid-unique-count \
   scene-import \
+
+# Moved to broken tests:
+#   mqtt-large-messages
+#   out-of-box-no-ntp
+#   bounding-box
+#   child-scenes
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
@@ -196,9 +212,10 @@ _unit-tests: \
   transform-unit \
 
 include Makefile.sscape Makefile.functional Makefile.perf \
-        Makefile.external_models Makefile.reports Makefile.user_interface Makefile.metric
+        Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
 
 # Recipes below must be in alphabetical order
+
 malformed-json:
 	$(eval LOGFILE=$(TEST_DATA)/$@-$(shell date -u +"%F-%T").log)
 	@set -ex \
@@ -244,5 +261,6 @@ deploy: # NEX-T10422
 	  ; echo END TEST $@
 
 system-stability: # NEX-T10411
+  $(call set-prefix)
 	$(eval HOURS ?= 24)
-	$(call common-recipe, $(COMPOSE)/dlstreamer/broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/dlstreamer/retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml, tests/system/stability/tc_sscape_stability.py --hours=$(HOURS),'pgserver web scene',true)
+	$(call common-recipe, $(COMPOSE)/$(PREFIX)/broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/$(PREFIX)/retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml, tests/system/stability/tc_sscape_stability.py --hours=$(HOURS),'pgserver web scene',true)
