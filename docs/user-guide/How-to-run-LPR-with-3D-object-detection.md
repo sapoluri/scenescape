@@ -70,7 +70,7 @@ Create a file named `deepscenario-lpr-config.json` in `scenescape/dlstreamer-pip
       {
         "name": "deepscenario-cam1",
         "source": "gstreamer",
-        "pipeline": "multifilesrc loop=TRUE location=/home/pipeline-server/videos/input-video.ts name=source ! decodebin ! videoconvert ! video/x-raw,format=BGR ! gvapython class=PostDecodeTimestampCapture function=processFrame module=/home/pipeline-server/user_scripts/gvapython/sscape/sscape_adapter.py name=timesync ! gvapython module=/home/pipeline-server/user_scripts/DeepScenario.py function=process_frame class=DeepScenario arg=[\"/home/pipeline-server/user_scripts/intrinsics.json\"] ! queue ! gvadeskew intrinsics-file=/home/pipeline-server/user_scripts/intrinsics.json ! queue ! gvadetect inference-region=1 model=/home/pipeline-server/models/yolov8_license_plate_detector/yolov8_license_plate_detector.xml ! queue ! gvaclassify model=/home/pipeline-server/models/ch_PP-OCRv4_rec_infer/ch_PP-OCRv4_rec_infer.xml ! gvametaconvert add-tensor-data=true name=metaconvert ! gvapython class=PostInferenceDataPublish function=processFrame module=/home/pipeline-server/user_scripts/gvapython/sscape/sscape_adapter.py name=datapublisher ! gvametapublish name=destination ! appsink sync=true",
+        "pipeline": "multifilesrc loop=TRUE location=/home/pipeline-server/videos/input-video.ts name=source ! decodebin ! videoconvert ! video/x-raw,format=BGR ! gvapython class=PostDecodeTimestampCapture function=processFrame module=/home/pipeline-server/user_scripts/gvapython/sscape/sscape_adapter.py name=timesync ! gvapython class=DeepScenario module=/home/pipeline-server/user_scripts/DeepScenario.py function=process_frame name=deepscenario ! queue ! gvadeskew intrinsics-file=/home/pipeline-server/user_scripts/intrinsics.json ! queue ! gvadetect inference-region=1 model=/home/pipeline-server/models/yolov8_license_plate_detector/yolov8_license_plate_detector.xml ! queue ! gvaclassify model=/home/pipeline-server/models/ch_PP-OCRv4_rec_infer/ch_PP-OCRv4_rec_infer.xml ! gvametaconvert add-tensor-data=true name=metaconvert ! gvapython class=PostInferenceDataPublish function=processFrame module=/home/pipeline-server/user_scripts/gvapython/sscape/sscape_adapter.py name=datapublisher ! gvametapublish name=destination ! appsink sync=true",
         "auto_start": true,
         "parameters": {
           "type": "object",
@@ -85,6 +85,24 @@ Create a file named `deepscenario-lpr-config.json` in `scenescape/dlstreamer-pip
               "properties": {
                 "ntpServer": {
                   "type": "string"
+                }
+              }
+            },
+            "deepscenario_config": {
+              "element": {
+                "name": "deepscenario",
+                "property": "kwarg",
+                "format": "json"
+              },
+              "type": "object",
+              "properties": {
+                "intrinsics_path": {
+                  "type": "string",
+                  "description": "Path to the camera intrinsics file."
+                },
+                "max_distance": {
+                  "type": "number",
+                  "description": "Maximum distance from camera for object detection. Objects beyond this threshold will be dropped."
                 }
               }
             },
@@ -105,6 +123,10 @@ Create a file named `deepscenario-lpr-config.json` in `scenescape/dlstreamer-pip
                 },
                 "cameraid": {
                   "type": "string"
+                },
+                "deepscenario_config": {
+                  "intrinsics_path": "/home/pipeline-server/user_scripts/intrinsics.json",
+                  "max_distance": 28.0
                 },
                 "metadatagenpolicy": {
                   "type": "string",
@@ -150,6 +172,10 @@ The `deepscenario-config.json` file can be edited using [DLStreamer Pipeline Ser
 - Output destinations
 - Model-specific settings
 - Camera intrinsics
+
+#### About the `max_distance` Parameter
+
+The `max_distance` parameter in the DeepScenario model is used for depth-based filtering of objects detected in the frame. It acts as a threshold, ensuring that objects beyond the specified distance from the camera are not considered for detection. The value of `max_distance` can be adjusted in the `deepscenario_config` section of the pipeline configuration to suit specific use cases.
 
 ### 5. Configure Camera Intrinsics
 
