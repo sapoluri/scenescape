@@ -76,18 +76,13 @@ define common-recipe =
 	  ; echo END TEST $@
 endef
 
-define set-prefix
-    $(eval PREFIX = $(if $(DLS),dlstreamer/,))
-endef
-
-# For DLStreamer tests, run the target with DLS=1
-
 # Not sorted alphabetically on purpose
 tests: \
   basic-acceptance-tests \
   standard-tests \
 
 release-tests: \
+  3d-ui-calibration-points \
   additional-floor-plans \
   camera-deletion \
   different-formats-maps \
@@ -95,42 +90,22 @@ release-tests: \
   non-functional-tests \
   scene-details \
   randomly-failing-tests \
-  reid-performance-degradation \
-
-# moved from release-tests to broken-tests:
-#  3d-ui-calibration-points
 
 broken-tests: \
   auto-calibration \
-  3d-camera-control-panel \
   april-tag-setup \
-  rtsp-stream \
   views-unit \
   mqtt-sensor-roi \
   mqtt-slow-sensor-roi \
   orphaned-sensor \
-  sensors-send-events \
-  delete-roi-mqtt \
   delete-tripwire-mqtt \
   geospatial-ingest-publish \
-  delete-sensor-mqtt \
-  delete-sensor-scene \
-  delete-sensors \
-  restricted-media-access \
-  sensor-area \
-  sensor-location \
-  calibrate-all-sensor-types \
   manual-camera-calibration \
   camera-perspective \
   camera-status \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   vdms-similarity-search \
-  mqtt-large-messages \
-  out-of-box-no-ntp \
-  bounding-box \
-  child-scenes \
-  3d-ui-calibration-points \
 
 randomly-failing-tests: \
   3d-scene-control-panel \
@@ -138,7 +113,6 @@ randomly-failing-tests: \
 # Not sorted alphabetically on purpose
 basic-acceptance-tests: \
   deploy \
-  infra-tests \
   geometry-conformance \
   metric-tests \
   out-of-box \
@@ -159,17 +133,16 @@ functional-tests:
 _functional-tests: \
   add-orphaned-cameras \
   api-large-strings \
+  bounding-box \
+  child-scenes \
   mqtt-auth \
   mqtt-cert \
+  mqtt-large-messages \
+  sensors-send-events \
+  out-of-box-no-ntp \
   rest-test \
   reid-unique-count \
   scene-import \
-
-# Moved to broken tests:
-#   mqtt-large-messages
-#   out-of-box-no-ntp
-#   bounding-box
-#   child-scenes
 
 non-functional-tests:
 	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
@@ -187,15 +160,24 @@ _metric-tests: \
   msoce-metric \
 
 ui-tests:
-	$(MAKE) -Otarget _$@ SUPASS=$(SUPASS) -k
+	$(MAKE) -Otarget _$@ SECRETSDIR=$(PWD)/manager/secrets SUPASS=$(SUPASS) SUPASS=$(SUPASS) -k
 
 _ui-tests: \
+  3d-camera-control-panel \
   add-delete-3d-object \
   camera-intrinsics \
+  calibrate-all-sensor-types \
+  delete-roi-mqtt \
+  delete-sensor-mqtt \
+  delete-sensor-scene \
+  delete-sensors \
   object-crud \
   persistence \
+  restricted-media-access \
   scenes-summary \
+  sensor-area \
   sensor-scene \
+  sensor-location \
   upload-3d-glb-file \
   view-3d-glb-file \
 
@@ -214,10 +196,9 @@ _unit-tests: \
   transform-unit \
 
 include Makefile.sscape Makefile.functional Makefile.perf \
-        Makefile.external_models Makefile.reports Makefile.infra Makefile.user_interface Makefile.metric
+        Makefile.external_models Makefile.reports Makefile.user_interface Makefile.metric
 
 # Recipes below must be in alphabetical order
-
 malformed-json:
 	$(eval LOGFILE=$(TEST_DATA)/$@-$(shell date -u +"%F-%T").log)
 	@set -ex \
@@ -263,6 +244,5 @@ deploy: # NEX-T10422
 	  ; echo END TEST $@
 
 system-stability: # NEX-T10411
-	$(call set-prefix)
 	$(eval HOURS ?= 24)
-	$(call common-recipe, $(COMPOSE)/$(PREFIX)broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/$(PREFIX)retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml, tests/system/stability/tc_sscape_stability.py --hours=$(HOURS),'pgserver web scene',true)
+	$(call common-recipe, $(COMPOSE)/dlstreamer/broker.yml:$(COMPOSE)/ntp.yml:$(COMPOSE)/pgserver.yml:$(COMPOSE)/dlstreamer/retail_video.yml:$(COMPOSE)/scene.yml:$(COMPOSE)/web.yml, tests/system/stability/tc_sscape_stability.py --hours=$(HOURS),'pgserver web scene',true)

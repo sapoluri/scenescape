@@ -658,8 +658,9 @@ def create_sensor_from_scene(browser, sensor_id, sensor_name, scene_name):
   @return   bool                       Boolean representing success.
   """
   assert navigate_to_scene(browser, scene_name)
-  browser.find_element(By.ID, "sensors-tab").click()
-  browser.find_element(By.ID, "new-sensor").click()
+  wait = WebDriverWait(browser, 5)
+  wait.until(EC.element_to_be_clickable((By.ID, "sensors-tab"))).click()
+  wait.until(EC.element_to_be_clickable((By.ID, "new-sensor"))).click()
   create_sensor(browser, sensor_id, sensor_name, scene_name)
   assert navigate_to_scene(browser, scene_name)
 
@@ -866,11 +867,11 @@ def create_roi(browser, polygon_name, x, y, side_length = 250):
     browser.setViewportSize( min_viewport_width, min_viewport_height )
     print("Viewport size set to:", browser.execute_script("return [window.innerWidth, window.innerHeight];"))
 
-  browser.find_element(By.ID, "regions-tab").click()
-  browser.find_element(By.ID,"new-roi").click()
-  svg = browser.find_element(By.ID, "svgout")
+  wait = WebDriverWait(browser, 5)
+  wait.until(EC.element_to_be_clickable((By.ID, "regions-tab"))).click()
+  wait.until(EC.element_to_be_clickable((By.ID, "new-roi"))).click()
 
-  time.sleep(1)
+  svg = wait.until(EC.presence_of_element_located((By.ID, "svgout")))
   action = browser.actionChains()
   action.drag_and_drop_by_offset(svg, x, y)
   action.perform()
@@ -1182,8 +1183,9 @@ def open_scene_manage_sensors_tab(browser):
   @param    browser                    Object wrapping the Selenium driver.
   @return   True                       Returns True if the action is successful.
   """
-  browser.find_element(By.ID, "sensors-tab").click()
-  browser.find_element(By.CSS_SELECTOR, "#sensors > div > div > div > div > div > a:nth-child(1)").click()
+  wait = WebDriverWait(browser, 5)
+  wait.until(EC.element_to_be_clickable((By.ID, "sensors-tab"))).click()
+  wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[id^='sensor_calibrate_']"))).click()
   return True
 
 def mse(mat1, mat2):
