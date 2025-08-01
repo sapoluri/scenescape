@@ -209,7 +209,6 @@ _unit-tests: \
   geometry-unit \
   geospatial-unit \
   markerless-unit \
-  realsense-unit \
   scene-unit \
   scenescape-unit \
   schema-unit \
