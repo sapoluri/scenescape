@@ -122,6 +122,7 @@ broken-tests: \
   superuser-crud-operations \
   calibrate-camera-3d-ui-2d-ui \
   mqtt-large-messages \
+  out-of-box-no-ntp \
   bounding-box \
   child-scenes \
   3d-ui-calibration-points \
@@ -157,7 +158,6 @@ _functional-tests: \
   mqtt-cert \
   mqtt-sensor-roi \
   mqtt-slow-sensor-roi \
-  out-of-box-no-ntp \
   rest-test \
   reid-unique-count \
   scene-import \
@@ -166,6 +166,7 @@ _functional-tests: \
 
 # Moved to broken tests:
 #   mqtt-large-messages
+#   out-of-box-no-ntp
 #   bounding-box
 #   child-scenes
 

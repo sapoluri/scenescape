@@ -19,12 +19,9 @@ services:
     networks:
       scenescape-test:
     depends_on:
-      web:
-        condition: service_healthy
-      broker:
-        condition: service_started
-      ntpserv:
-        condition: service_started
+      - broker
+      - web
+      - ntpserv
     command: controller --broker broker.scenescape.intel.com --ntp ntpserv
     volumes:
       - vol-media:/home/scenescape/SceneScape/media
