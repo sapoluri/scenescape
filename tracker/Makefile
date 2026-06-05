@@ -233,7 +233,8 @@ flamegraph:
 
 test-unit: build-debug
 	@echo "Running unit tests..."
-	. build-debug/conanrun.sh && cd build-debug && ctest --output-on-failure
+# --output-junit records per-test durations so unit test performance is tracked.
+	. build-debug/conanrun.sh && cd build-debug && ctest --output-on-failure --output-junit test-results.xml
 
 test-unit-coverage: build-debug
 	@echo "Running unit tests with coverage..."
@@ -242,7 +243,8 @@ test-unit-coverage: build-debug
 	@echo "Cleaning previous coverage data..."
 	@find build-debug -name "*.gcda" -delete
 	@echo "Running tests..."
-	. build-debug/conanrun.sh && cd build-debug && ctest --output-on-failure
+# --output-junit records per-test durations so unit test performance is tracked.
+	. build-debug/conanrun.sh && cd build-debug && ctest --output-on-failure --output-junit test-results.xml
 	@echo "Generating coverage reports..."
 	$(MAKE) coverage-html
 	$(MAKE) coverage-xml
