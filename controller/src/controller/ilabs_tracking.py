@@ -20,6 +20,33 @@ from scene_common import log
 from scene_common.geometry import Point
 from scene_common.timestamp import get_epoch_time
 
+DEFAULT_ASSOCIATION_CONFIG = {
+  "method": "euclidean",
+  "gate_probability": 0.99,
+  "max_radius_m": DEFAULT_TRACKING_RADIUS,
+}
+
+
+def association_match_params(association_config=None):
+  """Map association config to robot_vision match() parameters."""
+  config = association_config or DEFAULT_ASSOCIATION_CONFIG
+  method = config.get("method", "euclidean")
+  gate_probability = config.get("gate_probability", 0.99)
+  max_radius_m = config.get("max_radius_m", DEFAULT_TRACKING_RADIUS)
+
+  if method == "position_mahalanobis":
+    return (
+      rv.tracking.DistanceType.PositionMahalanobis,
+      rv.tracking.chi2_threshold(gate_probability),
+      max_radius_m,
+    )
+
+  return (
+    rv.tracking.DistanceType.Euclidean,
+    max_radius_m,
+    max_radius_m,
+  )
+
 
 def _quaternion_to_yaw(rotation):
   """Return Z-axis yaw in radians from an ``[x, y, z, w]`` quaternion.
@@ -54,10 +81,11 @@ def _yaw_to_quaternion(yaw):
 
 class IntelLabsTracking(Tracking):
 
-  def __init__(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, effective_object_update_rate, suspended_track_timeout_secs=DEFAULT_SUSPENDED_TRACK_TIMEOUT_SECS, reid_config_data=None, name=None):
+  def __init__(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, effective_object_update_rate, suspended_track_timeout_secs=DEFAULT_SUSPENDED_TRACK_TIMEOUT_SECS, reid_config_data=None, name=None, association_config=None):
     """Initialize the tracker with tracker configuration parameters"""
     super().__init__(reid_config_data=reid_config_data)
     self.name = name if name is not None else "IntelLabsTracking"
+    self.association_config = association_config or DEFAULT_ASSOCIATION_CONFIG.copy()
     # ref_camera_frame_rate is used to determine the frame-based param values
     self.ref_camera_frame_rate = effective_object_update_rate
     tracker_config = rv.tracking.TrackManagerConfig()
@@ -85,6 +113,7 @@ class IntelLabsTracking(Tracking):
     self.tracker = rv.tracking.MultipleObjectTracker(tracker_config)
     log.info(f"Multiple Object Tracker {self.__str__()} initialized")
     log.info("Tracker config: {}".format(tracker_config))
+    log.info("Association config: {}".format(self.association_config))
     self.tracker.update_tracker_params(self.ref_camera_frame_rate)
     return
 
@@ -153,14 +182,31 @@ class IntelLabsTracking(Tracking):
     rv_object.attributes = attributes
     return rv_object
 
+  def _warn_deprecated_tracking_radius(self, objects):
+    if self.association_config.get("method", "euclidean") == "euclidean":
+      return
+    for obj in objects:
+      radius = getattr(obj, 'tracking_radius', DEFAULT_TRACKING_RADIUS)
+      if abs(radius - DEFAULT_TRACKING_RADIUS) > 1e-6:
+        log.warning(
+          "Object tracking_radius is ignored when association.method is %s (object radius=%s)",
+          self.association_config.get("method"),
+          radius,
+        )
+        return
+
   def update_tracks(self, objects, timestamp):
     rv_objects = [self.to_rv_object(sscape_object) for sscape_object in objects]
-    tracking_radius = DEFAULT_TRACKING_RADIUS
-    if len(objects):
-      tracking_radius = sum([x.tracking_radius for x in objects]) / len(objects)
+    self._warn_deprecated_tracking_radius(objects)
 
-    self.tracker.track(rv_objects, timestamp, distance_type=rv.tracking.DistanceType.Euclidean,
-                       distance_threshold=tracking_radius)
+    distance_type, distance_threshold, max_radius_m = association_match_params(self.association_config)
+    self.tracker.track(
+      rv_objects,
+      timestamp,
+      distance_type=distance_type,
+      distance_threshold=distance_threshold,
+      max_radius_m=max_radius_m,
+    )
     return
 
   def from_tracked_object(self, tracked_object, objects):
@@ -277,25 +323,21 @@ class IntelLabsTracking(Tracking):
   def update_tracks_batched(self, objects_per_camera, timestamp):
     """Update tracks using batched per-camera object data"""
     rv_objects_per_camera = []
-    tracking_radius = DEFAULT_TRACKING_RADIUS
-
-    # Calculate average tracking radius across all objects from all cameras
-    total_tracking_radius = 0
-    total_object_count = 0
+    flat_objects = []
 
     for camera_objects in objects_per_camera:
       rv_camera_objects = [self.to_rv_object(sscape_object) for sscape_object in camera_objects]
       rv_objects_per_camera.append(rv_camera_objects)
+      flat_objects.extend(camera_objects)
 
-      # Accumulate tracking radius sum and object count
-      if len(camera_objects):
-        total_tracking_radius += sum([x.tracking_radius for x in camera_objects])
-        total_object_count += len(camera_objects)
+    self._warn_deprecated_tracking_radius(flat_objects)
 
-    # Calculate overall average tracking radius
-    if total_object_count > 0:
-      tracking_radius = total_tracking_radius / total_object_count
-
-    self.tracker.track(rv_objects_per_camera, timestamp,
-                       distance_type=rv.tracking.DistanceType.Euclidean, distance_threshold=tracking_radius)
+    distance_type, distance_threshold, max_radius_m = association_match_params(self.association_config)
+    self.tracker.track(
+      rv_objects_per_camera,
+      timestamp,
+      distance_type=distance_type,
+      distance_threshold=distance_threshold,
+      max_radius_m=max_radius_m,
+    )
     return

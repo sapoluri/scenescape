@@ -4,9 +4,12 @@
 #include <gtest/gtest.h>
 #include <chrono>
 #include <iostream>
+#include <rv/Utils.hpp>
 #include <rv/tracking/MultipleObjectTracker.hpp>
 #include <rv/tracking/Classification.hpp>
+#include <rv/tracking/ObjectMatching.hpp>
 #include <rv/tracking/TrackedObject.hpp>
+#include <rv/tracking/TrackManager.hpp>
 
 TEST(MultipleObjectTrackerTest, SingleDetectionTracking)
 {
@@ -699,4 +702,68 @@ TEST(MultipleObjectTrackerTest, SingleJumpingDetectionTracking)
       ASSERT_EQ(trackedObjects.size(), 1);
     }
   }
+}
+
+TEST(ObjectMatchingTest, Chi2ThresholdMatchesExpectedQuantile)
+{
+  EXPECT_NEAR(rv::chi2Threshold(0.99, 2), 9.21034, 1e-3);
+}
+
+TEST(ObjectMatchingTest, PositionMahalanobisPrefersAlongTrackAxis)
+{
+  rv::tracking::TrackManagerConfig trackerConfig;
+  trackerConfig.mMotionModels = {rv::tracking::MotionModel::CV};
+  trackerConfig.mDefaultProcessNoise = 1e-3;
+  trackerConfig.mDefaultMeasurementNoise = 0.1;
+  rv::tracking::TrackManager trackManager(trackerConfig);
+
+  rv::tracking::TrackedObject seed;
+  seed.x = 0.0;
+  seed.y = 0.0;
+  seed.vx = 5.0;
+  seed.vy = 0.0;
+
+  auto timestamp = std::chrono::system_clock::now();
+  auto trackId = trackManager.createTrack(seed, timestamp);
+
+  for (int i = 0; i < 5; ++i)
+  {
+    timestamp += std::chrono::milliseconds(100);
+    seed.x += 0.5;
+    trackManager.setMeasurement(trackId, seed);
+    trackManager.predict(timestamp);
+    trackManager.correct();
+    seed = trackManager.getTrack(trackId);
+  }
+
+  timestamp += std::chrono::milliseconds(200);
+  trackManager.predict(timestamp);
+  auto track = trackManager.getTrack(trackId);
+
+  rv::tracking::TrackedObject ahead = seed;
+  ahead.x = track.predictedMeasurementMean.at<double>(0, 0) + 0.5;
+  ahead.y = track.predictedMeasurementMean.at<double>(1, 0);
+
+  rv::tracking::TrackedObject lateral = seed;
+  lateral.x = track.predictedMeasurementMean.at<double>(0, 0);
+  lateral.y = track.predictedMeasurementMean.at<double>(1, 0) + 0.5;
+
+  const double chi2_gate = rv::chi2Threshold(0.99, 2);
+  const double max_radius = 10.0;
+
+  std::vector<rv::tracking::TrackedObject> tracks = {track};
+  std::vector<std::pair<size_t, size_t>> assignments;
+  std::vector<size_t> unassignedTracks;
+  std::vector<size_t> unassignedAhead;
+  std::vector<size_t> unassignedLateral;
+
+  rv::tracking::match(tracks, {ahead}, assignments, unassignedTracks, unassignedAhead,
+                      rv::tracking::DistanceType::PositionMahalanobis, chi2_gate, max_radius);
+  EXPECT_EQ(assignments.size(), 1U);
+
+  assignments.clear();
+  unassignedTracks.clear();
+  rv::tracking::match(tracks, {lateral}, assignments, unassignedTracks, unassignedLateral,
+                      rv::tracking::DistanceType::PositionMahalanobis, chi2_gate, max_radius);
+  EXPECT_TRUE(assignments.empty());
 }

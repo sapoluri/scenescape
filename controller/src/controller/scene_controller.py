@@ -163,6 +163,13 @@ class SceneController:
         else:
           log.error("Invalid persist_attributes format in tracker config file")
           self.tracker_config_data["persist_attributes"] = {}
+
+      association = tracker_config.get("association", {})
+      self.tracker_config_data["association"] = {
+        "method": association.get("method", "euclidean"),
+        "gate_probability": association.get("gate_probability", 0.99),
+        "max_radius_m": association.get("max_radius_m", 2.0),
+      }
     return
 
   def extractReidConfigData(self, reid_config_file):

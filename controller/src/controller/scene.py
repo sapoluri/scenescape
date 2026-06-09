@@ -89,6 +89,11 @@ class Scene(SceneModel):
     self.tracker = None
     self.trackerType = None
     self.persist_attributes = {}
+    self.association_config = {
+      "method": "euclidean",
+      "gate_probability": 0.99,
+      "max_radius_m": 2.0,
+    }
     self.time_chunking_rate_fps = time_chunking_rate_fps
 
     self._setTracker("time_chunked_intel_labs" if time_chunking_enabled else self.DEFAULT_TRACKER)
@@ -125,6 +130,8 @@ class Scene(SceneModel):
     elif trackerType == "time_chunked_intel_labs":
       args += (self.time_chunking_rate_fps, self.suspended_track_timeout_secs, self.reid_config_data)
     self.tracker = self.available_trackers[self.trackerType](*args)
+    if hasattr(self.tracker, 'association_config'):
+      self.tracker.association_config = self.association_config
     self.tracker.uuid_manager.scene_id = self.name
     return
 
@@ -152,6 +159,8 @@ class Scene(SceneModel):
     self.map_corners_lla = scene_data.get('map_corners_lla', None)
     self.retrack = scene_data.get('retrack', True)
     self.persist_attributes = scene_data.get('persist_attributes', {})
+    if 'association_config' in scene_data:
+      self.association_config = scene_data['association_config']
     self._updateChildren(scene_data.get('children', []))
     self.updateCameras(scene_data.get('cameras', []))
     # Regions, tripwires, and sensors are owned by the Analytics service;

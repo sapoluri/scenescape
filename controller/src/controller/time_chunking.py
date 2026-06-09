@@ -205,7 +205,15 @@ class TimeChunkedIntelLabsTracking(IntelLabsTracking):
     # delegate tracking to IntelLabsTracking
     for category in categories:
       if category not in self.trackers:
-        tracker = IntelLabsTracking(max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, self.time_chunking_rate_fps, self.suspended_track_timeout_secs, self.reid_config_data)
+        tracker = IntelLabsTracking(
+          max_unreliable_time,
+          non_measurement_time_dynamic,
+          non_measurement_time_static,
+          self.time_chunking_rate_fps,
+          self.suspended_track_timeout_secs,
+          self.reid_config_data,
+          association_config=self.association_config,
+        )
         tracker.uuid_manager.scene_id = self.uuid_manager.scene_id
         self.trackers[category] = tracker
         tracker.start()

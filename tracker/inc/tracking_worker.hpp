@@ -166,6 +166,8 @@ private:
     // RobotVision tracker instance (Hungarian matching + Kalman filter)
     rv::tracking::MultipleObjectTracker tracker_;
 
+    AssociationConfig association_config_;
+
     // Camera coordinate transformers (camera_id -> transformer with intrinsics + extrinsics)
     std::unordered_map<std::string, CoordinateTransformer> transformers_;
 

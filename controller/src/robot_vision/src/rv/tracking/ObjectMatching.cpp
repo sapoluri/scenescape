@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <functional>
+#include <limits>
 #include <numeric>
 #include <opencv2/core.hpp>
 #include <omp.h>
 
+#include "rv/Utils.hpp"
 #include "rv/tracking/ObjectMatching.hpp"
 #include "rv/apollo/multi_hm_bipartite_graph_matcher.hpp"
 #include "rv/apollo/secure_matrix.hpp"
@@ -42,6 +44,30 @@ double calculateMahalanobisDistance(const TrackedObject &measurement, const Trac
   return 0.5 * std::sqrt(mahalanobisDistance.at<double>(0, 0));
 }
 
+double calculatePositionMahalanobisSquaredDistance(const TrackedObject &measurement, const TrackedObject &track)
+{
+  const double pred_x = track.predictedMeasurementMean.at<double>(0, 0);
+  const double pred_y = track.predictedMeasurementMean.at<double>(1, 0);
+  const double dx = measurement.x - pred_x;
+  const double dy = measurement.y - pred_y;
+
+  const double s00 = track.predictedMeasurementCov.at<double>(0, 0);
+  const double s01 = track.predictedMeasurementCov.at<double>(0, 1);
+  const double s11 = track.predictedMeasurementCov.at<double>(1, 1);
+
+  const double det = s00 * s11 - s01 * s01;
+  if (std::abs(det) < 1e-12)
+  {
+    return kDefaultClassBoundValue;
+  }
+
+  const double inv00 = s11 / det;
+  const double inv01 = -s01 / det;
+  const double inv11 = s00 / det;
+
+  return dx * (inv00 * dx + inv01 * dy) + dy * (inv01 * dx + inv11 * dy);
+}
+
 double calculateCompundDistance(const TrackedObject &measurement, const TrackedObject &track)
 {
   double euclideanDist = calculateMulticlassScaledDistance(measurement, track);
@@ -55,7 +81,7 @@ void match(const std::vector<TrackedObject> &tracks,
                           std::vector<std::pair<size_t, size_t>> &assignments,
                           std::vector<size_t> &unassignedTracks,
                           std::vector<size_t> &unassignedMeasurements,
-                          const DistanceType &distanceType, double threshold)
+                          const DistanceType &distanceType, double threshold, double max_radius_m)
 {
   apollo::perception::lidar::MultiHmBipartiteGraphMatcher matcher;
 
@@ -88,6 +114,21 @@ void match(const std::vector<TrackedObject> &tracks,
       matcherOptions.cost_thresh = threshold;
       matcherOptions.bound_value = kDefaultClassBoundValue;
       break;
+    case DistanceType::PositionMahalanobis:
+      distanceFunction = [max_radius_m](const TrackedObject &measurement, const TrackedObject &track) {
+        const double pred_x = track.predictedMeasurementMean.at<double>(0, 0);
+        const double pred_y = track.predictedMeasurementMean.at<double>(1, 0);
+        const double dx = measurement.x - pred_x;
+        const double dy = measurement.y - pred_y;
+        if (std::hypot(dx, dy) > max_radius_m)
+        {
+          return kDefaultClassBoundValue;
+        }
+        return calculatePositionMahalanobisSquaredDistance(measurement, track);
+      };
+      matcherOptions.cost_thresh = threshold;
+      matcherOptions.bound_value = kDefaultClassBoundValue;
+      break;
     case DistanceType::MultiClassEuclidean:
       distanceFunction = std::bind(&calculateMulticlassScaledDistance, std::placeholders::_1, std::placeholders::_2);
       matcherOptions.cost_thresh = threshold;
@@ -95,7 +136,14 @@ void match(const std::vector<TrackedObject> &tracks,
       break;
     case DistanceType::Euclidean:
     default:
-      distanceFunction = std::bind(&calculateEuclideanDistance, std::placeholders::_1, std::placeholders::_2);
+      distanceFunction = [max_radius_m](const TrackedObject &measurement, const TrackedObject &track) {
+        const double distance = calculateEuclideanDistance(measurement, track);
+        if (distance > max_radius_m)
+        {
+          return kDefaultClassBoundValue;
+        }
+        return distance;
+      };
       matcherOptions.cost_thresh = threshold;
       matcherOptions.bound_value = kDefaultClassBoundValue;
       break;
