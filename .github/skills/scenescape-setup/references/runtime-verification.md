@@ -66,7 +66,8 @@ docker compose config | grep -A 8 "video-analytics:"
 sed -n '1,120p' <deploy_dir>/dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf
 ```
 
-Use listener mode for port `1883`:
+Use listener mode for port `1883`. The setup skill normalizes the generated broker config so
+`1883` is plaintext and `1884` is TLS websockets:
 
 - plaintext listener: no TLS flags
 - TLS listener: use `--cafile` (and `--insecure` when host is `localhost`)

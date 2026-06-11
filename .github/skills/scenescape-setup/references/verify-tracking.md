@@ -3,49 +3,18 @@
 Subscribe to `scenescape/regulated/scene/<scene_uid>` and confirm that tracked objects
 appear within 2 minutes of containers being live.
 
-## Python Verification Script
+## MQTT Verification
 
-```python
-import json, ssl, threading
-import paho.mqtt.client as mqtt
+Use MQTT flags that match the broker listener mode. For the default generated broker config,
+listener `1883` is plaintext.
 
-DEPLOY_DIR = "<deploy_dir>"
-CA_CERT    = f"{DEPLOY_DIR}/secrets/certs/scenescape-ca.pem"
-AUTH_FILE  = f"{DEPLOY_DIR}/secrets/browser.auth"
-
-with open(AUTH_FILE) as f:
-    auth = json.load(f)
-
-TOPIC   = f"scenescape/regulated/scene/{scene_uid}"
-result  = {}
-done    = threading.Event()
-
-def on_message(client, userdata, msg):
-    data = json.loads(msg.payload)
-    objects = data.get("objects") or data.get("tracked_objects") or []
-    if len(objects) > 0:
-        result["count"]   = len(objects)
-        result["payload"] = data
-        done.set()
-
-client = mqtt.Client()
-client.tls_set(ca_certs=CA_CERT)
-client.username_pw_set(auth["user"], auth["password"])
-client.on_message = on_message
-client.connect("broker.scenescape.intel.com", 1883, 60)
-client.subscribe(TOPIC, qos=1)
-client.loop_start()
-
-TIMEOUT_S = 120
-if done.wait(timeout=TIMEOUT_S):
-    print(f"Tracking confirmed — {result['count']} object(s) seen on {TOPIC}")
-else:
-    print("WARNING: No tracked objects seen within 2 minutes.")
-    print("See troubleshooting section below for diagnostic steps.")
-
-client.loop_stop()
-client.disconnect()
+```bash
+docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
+  mosquitto_sub -h broker.scenescape.intel.com -p 1883 \
+  -t 'scenescape/regulated/scene/<scene_uid>' -C 1 -W 120
 ```
+
+Pass criteria: the message contains an `objects` array with at least one tracked object.
 
 ## Troubleshooting Checklist
 
@@ -95,10 +64,9 @@ A zero scale prevents regulated topic output. Fix: set a real-world scale via th
 ### 5. Verify raw detections are arriving from video-analytics
 
 ```bash
-docker compose exec broker mosquitto_sub \
-  --cafile /mosquitto/secrets/certs/scenescape-ca.pem \
-  -u webuser -P "<browser.auth password>" \
-  -t "scenescape/data/camera/+" -C 3
+docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
+    mosquitto_sub -h broker.scenescape.intel.com -p 1883 \
+    -t 'scenescape/data/camera/+' -C 3 -W 120
 ```
 
 If no messages appear, video-analytics pipelines are not detecting anything. Check:

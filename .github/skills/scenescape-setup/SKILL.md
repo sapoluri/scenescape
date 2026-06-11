@@ -21,7 +21,8 @@ required on the host — no SceneScape source checkout needed.
 Before starting, ensure you have:
 
 - **Docker** and **docker-compose** installed
-- **Python 3.7+** with modules: `paho-mqtt`, `requests`, `json`, `re`, `base64`
+- **Python 3.10+** with `requests` installed. Calibration-frame helper scripts use the
+  `eclipse-mosquitto:2` container for MQTT and do not require `paho-mqtt` on the host.
 - **Network access** to GitHub (for sparse checkout of dlstreamer-pipeline-server)
 - **Proxy configuration** (if behind corporate proxy):
   - Set environment variables: `http_proxy`, `https_proxy`, `no_proxy`
@@ -41,16 +42,18 @@ to generate or commands to run.
 | 1   | Gather inputs from user                                     | (below)                                                                                          |
 | 2   | Create deployment directory                                 | (below)                                                                                          |
 | 2a  | Download `dlstreamer-pipeline-server/` from scenescape repo | (below)                                                                                          |
+| 2b  | Copy setup helper scripts into deployment directory         | (below)                                                                                          |
 | 3   | Generate `docker-compose.yml`                               | [docker-compose-template.md](./references/docker-compose-template.md)                            |
 | 4   | Adapt pipeline-server config from canonical template        | [pipeline-config.md](./references/pipeline-config.md)                                            |
-| 5   | Verify user-provided RTSP sources and pipeline integration  | [runtime-verification.md](./references/runtime-verification.md)                                  |
-| 6   | Generate tracker and ReID config                            | (below — two JSON blocks)                                                                        |
-| 7   | Generate broker config, secrets, and bring up containers    | [generate_secrets.sh](./references/generate_secrets.sh), [openssl.cnf](./references/openssl.cnf) |
-| 8   | Verify camera MQTT data flow                                | [runtime-verification.md](./references/runtime-verification.md)                                  |
-| 9   | Check mapping service health                                | (below)                                                                                          |
-| 10  | Capture frames, reconstruct, then align mesh/camera poses   | [reconstruction.md](./references/reconstruction.md)                                              |
-| 11  | Create scene and cameras via REST API                       | [scene-and-cameras.md](./references/scene-and-cameras.md)                                        |
-| 12  | Verify object tracking                                      | [verify-tracking.md](./references/verify-tracking.md)                                            |
+| 5   | Generate tracker and ReID config                            | (below — two JSON blocks)                                                                        |
+| 6   | Generate broker config, secrets, and `.env`                 | [generate_secrets.sh](./references/generate_secrets.sh), [openssl.cnf](./references/openssl.cnf) |
+| 7   | Verify user-provided RTSP sources and pipeline integration  | [runtime-verification.md](./references/runtime-verification.md)                                  |
+| 8   | Bring up containers and download AI models                  | (below)                                                                                          |
+| 9   | Verify camera MQTT data flow                                | [runtime-verification.md](./references/runtime-verification.md)                                  |
+| 10  | Check mapping service health                                | (below)                                                                                          |
+| 11  | Capture frames, reconstruct, then align mesh/camera poses   | [reconstruction.md](./references/reconstruction.md)                                              |
+| 12  | Create scene and cameras via REST API                       | [scene-and-cameras.md](./references/scene-and-cameras.md)                                        |
+| 13  | Verify object tracking                                      | [verify-tracking.md](./references/verify-tracking.md)                                            |
 
 Load a reference file only when you reach that step.
 
@@ -103,6 +106,33 @@ cp -r dlstreamer-pipeline-server ../
 cd .. && rm -rf _scenescape-tmp
 ```
 
+Normalize the broker config so MQTT port `1883` is plaintext for DLStreamer and controller MQTT
+clients, while websocket port `1884` keeps TLS:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf")
+lines = path.read_text().splitlines()
+out = []
+listener = None
+for line in lines:
+  stripped = line.strip()
+  if stripped.startswith("listener "):
+    parts = stripped.split()
+    listener = parts[1] if len(parts) > 1 else None
+  if listener == "1883" and stripped in {
+    "keyfile /mosquitto/secrets/certs/scenescape-broker.key",
+    "certfile /mosquitto/secrets/certs/scenescape-broker.crt",
+    "tls_version tlsv1.3",
+  }:
+    continue
+  out.append(line)
+path.write_text("\n".join(out) + "\n")
+PY
+```
+
 Alternatively, if `git` sparse checkout is unavailable, use `curl` to download individual files:
 
 ```bash
@@ -113,6 +143,10 @@ curl -fsSL https://raw.githubusercontent.com/open-edge-platform/scenescape/main/
   -o dlstreamer-pipeline-server/queuing-config.json
 ```
 
+If using the fallback download, also download
+`dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf` and run the same broker config
+normalization command above.
+
 After this step, `<deploy_dir>/dlstreamer-pipeline-server/` contains:
 
 - `queuing-config.json` — canonical pipeline config template (used in Step 4)
@@ -122,18 +156,33 @@ After this step, `<deploy_dir>/dlstreamer-pipeline-server/` contains:
 
 ---
 
+## Step 2b — Copy Setup Helper Scripts
+
+Copy the helper scripts from this skill into the deployment directory so later steps can run with
+`python scripts/...`:
+
+```bash
+cd <deploy_dir>
+mkdir -p scripts
+cp <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/*.py scripts/
+```
+
+---
+
 ## Step 3 — Generate `docker-compose.yml`
 
 Read [docker-compose-template.md](./references/docker-compose-template.md) now.
 
 Copy the template and generate your docker-compose file:
 
-```bash
-# Copy template to your deployment directory
-cat > <deploy_dir>/docker-compose.yml << 'EOF'
-[Content from docker-compose-template.md — replace ${SECRETSDIR} with the absolute path to secrets directory]
-EOF
-```
+````bash
+DEPLOY_DIR=<deploy_dir>
+SKILL_DIR=<path-to-scenescape-repo>/.github/skills/scenescape-setup
+awk '/^```yaml$/ {flag=1; next} /^```$/ && flag {exit} flag {print}' \
+  "$SKILL_DIR/references/docker-compose-template.md" \
+  | sed "s|\${SECRETSDIR}|$DEPLOY_DIR/secrets|g" \
+  > "$DEPLOY_DIR/docker-compose.yml"
+````
 
 Or, if you prefer to edit manually:
 
@@ -175,7 +224,69 @@ This model is downloaded automatically by the `model_downloader` service.
 
 ---
 
-## Step 5 — Verify User-Provided RTSP Sources and Pipeline-Server Integration
+## Step 5 — Tracker and ReID Config
+
+Write `<deploy_dir>/tracker-config.json`:
+
+```json
+{
+  "max_unreliable_time_s": 1.0,
+  "non_measurement_time_dynamic_s": 0.8,
+  "non_measurement_time_static_s": 1.6,
+  "time_chunking_enabled": true,
+  "time_chunking_rate_fps": 30,
+  "suspended_track_timeout_secs": 60.0
+}
+```
+
+Write `<deploy_dir>/reid-config.json`:
+
+```json
+{
+  "similarity_metric": "COSINE",
+  "stale_feature_timeout_secs": 5.0,
+  "stale_feature_check_interval_secs": 1.0,
+  "feature_accumulation_threshold": 12,
+  "minimum_bbox_area": 5000,
+  "feature_slice_size": 10,
+  "similarity_threshold": 0.5
+}
+```
+
+---
+
+## Step 6 — Generate Secrets and `.env`
+
+Read and execute [generate_secrets.sh](./references/generate_secrets.sh) using the
+[openssl.cnf](./references/openssl.cnf) template. Then create `.env`:
+
+```bash
+cd <deploy_dir>
+bash generate_secrets.sh
+
+# Build .env — read DATABASE_PASSWORD from generated secrets.py
+SECRETSDIR=$(pwd)/secrets
+DATABASE_PASSWORD=$(python3 -c "
+import re
+txt = open('secrets/django/secrets.py').read()
+print(re.search(r\"DATABASE_PASSWORD='([^']+)'\", txt).group(1))
+")
+SUPASS=$(cat secrets/supass)
+# If any user-provided RTSP URL uses an internal hostname, append that hostname to no_proxy.
+# Example: no_proxy="${no_proxy},mediaserver"
+cat > .env <<EOF
+SECRETSDIR=${SECRETSDIR}
+DATABASE_PASSWORD=${DATABASE_PASSWORD}
+SUPASS=${SUPASS}
+http_proxy=${http_proxy}
+https_proxy=${https_proxy}
+no_proxy=${no_proxy}
+EOF
+```
+
+---
+
+## Step 7 — Verify User-Provided RTSP Sources and Pipeline-Server Integration
 
 This step is a gate, not full troubleshooting. Run the quick checks below and only load the
 runtime reference if a gate fails.
@@ -211,81 +322,28 @@ Pass criteria:
 - No persistent RTSP connection failures
 
 If any gate fails, load [runtime-verification.md](./references/runtime-verification.md)
-and follow the Step 5 troubleshooting flow.
+and follow the Step 7 troubleshooting flow.
 
-**Do not proceed to Step 6 until Step 5 passes.**
-
----
-
-## Step 6 — Tracker and ReID Config
-
-Write `<deploy_dir>/tracker-config.json`:
-
-```json
-{
-  "max_unreliable_time_s": 1.0,
-  "non_measurement_time_dynamic_s": 0.8,
-  "non_measurement_time_static_s": 1.6,
-  "time_chunking_enabled": true,
-  "time_chunking_rate_fps": 30,
-  "suspended_track_timeout_secs": 60.0
-}
-```
-
-Write `<deploy_dir>/reid-config.json`:
-
-```json
-{
-  "similarity_metric": "COSINE",
-  "stale_feature_timeout_secs": 5.0,
-  "stale_feature_check_interval_secs": 1.0,
-  "feature_accumulation_threshold": 12,
-  "minimum_bbox_area": 5000,
-  "feature_slice_size": 10,
-  "similarity_threshold": 0.5
-}
-```
+**Do not proceed to Step 8 until Step 7 passes.**
 
 ---
 
-## Step 7 — Generate Secrets and Bring Up Containers
+## Step 8 — Bring Up Containers
 
-Read and execute [generate_secrets.sh](./references/generate_secrets.sh) using the
-[openssl.cnf](./references/openssl.cnf) template. Then create `.env` and start all services:
+After Step 7 passes, start all services:
 
 ```bash
 cd <deploy_dir>
-bash generate_secrets.sh
-
-# Build .env — read DATABASE_PASSWORD from generated secrets.py
-SECRETSDIR=$(pwd)/secrets
-DATABASE_PASSWORD=$(python3 -c "
-import re
-txt = open('secrets/django/secrets.py').read()
-print(re.search(r\"DATABASE_PASSWORD='([^']+)'\", txt).group(1))
-")
-SUPASS=$(cat secrets/supass)
-# If any user-provided RTSP URL uses an internal hostname, append that hostname to no_proxy.
-# Example: no_proxy="${no_proxy},mediaserver"
-cat > .env <<EOF
-SECRETSDIR=${SECRETSDIR}
-DATABASE_PASSWORD=${DATABASE_PASSWORD}
-SUPASS=${SUPASS}
-http_proxy=${http_proxy}
-https_proxy=${https_proxy}
-no_proxy=${no_proxy}
-EOF
-
-docker compose up -d
+docker compose --profile mapping up -d
 ```
 
 Wait for all containers to be healthy:
 
 ```bash
-docker compose ps
+docker compose --profile mapping ps
 ```
 
-Expected healthy: `broker`, `ntpserv`, `pgserver`, `web`, `scene`.
+Expected healthy: `broker`, `ntpserv`, `pgserver`, `web`, `scene`, `mapping`.
 
 ### Download AI models
 
@@ -315,7 +373,7 @@ docker compose restart video-analytics
 
 ---
 
-## Step 8 — Verify Calibration Frame Gate (Before Reconstruction)
+## Step 9 — Verify Calibration Frame Gate (Before Reconstruction)
 
 This is the required gate before mapping reconstruction. Do not block on object detections here.
 
@@ -338,11 +396,11 @@ Pass criteria:
 - Base64-decoded `image` is a valid JPEG (`FFD8FF ... FFD9`).
 
 If this step fails or times out, load [runtime-verification.md](./references/runtime-verification.md)
-and follow the Step 8 troubleshooting flow.
+and follow the Step 9 troubleshooting flow.
 
 ---
 
-## Step 9 — Check Mapping Service Health
+## Step 10 — Check Mapping Service Health
 
 Poll `GET https://mapping.scenescape.intel.com:8444/v1/health` every 10 s for up to 3 minutes.
 

@@ -100,7 +100,7 @@ printf 'POSTGRES_PASSWORD="%s"\n' "$DBPASS" > "$SECRETSDIR/pgserver/pgserver.env
 
 # ── Superuser password ────────────────────────────────────────────────────────
 echo -n "$SUPASS" > "$SECRETSDIR/supass"
-chmod 0600 "$SECRETSDIR/supass"
+chmod 0644 "$SECRETSDIR/supass"
 
 echo ""
 echo "Secrets written to: $SECRETSDIR"

@@ -1,8 +1,9 @@
 # Create Scene and Register Cameras via REST API
 
-Scene creation and camera registration happen automatically when
+Scene creation and placeholder camera registration happen automatically when
 [`reconstruct_and_finalize.py`](../scripts/reconstruct_and_finalize.py) finalizes the
-reconstruction through the manager. Use the notes below if you need to inspect or
+reconstruction through the manager. The manager then updates those cameras with mapping-service
+poses/intrinsics and applies mesh/camera alignment. Use the notes below if you need to inspect or
 manually register additional cameras.
 
 ## Manually Creating a Scene
@@ -22,8 +23,8 @@ Once reconstruction is done, finalize the mesh with
 
 ## Camera Registration
 
-After `reconstruct_and_finalize.py` completes, cameras are already registered and
-pose-aligned by the manager. To manually register a camera:
+`reconstruct_and_finalize.py` creates placeholder cameras before finalization. Manager finalization
+requires those cameras to exist so it can update them by `camera_id`. To manually register a camera:
 
 ```bash
 curl -sk -X POST https://web.scenescape.intel.com/api/v1/camera \

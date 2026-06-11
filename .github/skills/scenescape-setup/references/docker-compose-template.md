@@ -24,11 +24,11 @@ secrets:
   vdms-client-key:
     file: ${SECRETSDIR}/certs/scenescape-vdms-c.key
   vdms-server-cert:
-    file: ${SECRETSDIR}/certs/scenescape-vdms-s.crt
+    file: ${SECRETSDIR}/certs/scenescape-vdms.crt
   vdms-server-key:
-    file: ${SECRETSDIR}/certs/scenescape-vdms-s.key
+    file: ${SECRETSDIR}/certs/scenescape-vdms.key
   django:
-    file: ${SECRETSDIR}/django
+    file: ${SECRETSDIR}/django/secrets.py
   controller.auth:
     file: ${SECRETSDIR}/controller.auth
   browser.auth:
@@ -162,7 +162,8 @@ services:
         target: certs/scenescape-web.crt
       - source: web-key
         target: certs/scenescape-web.key
-      - django
+      - source: django
+        target: django/secrets.py
       - browser.auth
       - calibration.auth
       - controller.auth
@@ -206,7 +207,8 @@ services:
     secrets:
       - source: root-cert
         target: certs/scenescape-ca.pem
-      - django
+      - source: django
+        target: django/secrets.py
       - controller.auth
       - source: vdms-client-key
         target: certs/scenescape-vdms-c.key
@@ -294,7 +296,7 @@ services:
           "CMD",
           "curl",
           "-sk",
-          "https://mapping.scenescape.intel.com:8444/health",
+          "https://mapping.scenescape.intel.com:8444/v1/health",
         ]
       interval: 15s
       timeout: 10s
@@ -329,7 +331,7 @@ Create `<deploy_dir>/.env` (or export before `docker compose up`):
 ```bash
 SECRETSDIR=$(pwd)/secrets
 DATABASE_PASSWORD=$(python3 -c "
-import re, open as o
+import re
 txt = open('secrets/django/secrets.py').read()
 print(re.search(r\"DATABASE_PASSWORD='([^']+)'\", txt).group(1))
 ")
