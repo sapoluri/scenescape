@@ -69,7 +69,7 @@ services:
       - source: mosquitto-secure
         target: /mosquitto/config/mosquitto.conf
     volumes:
-      - ${SECRETSDIR}:/mosquitto/secrets
+      - ${SECRETSDIR}:/mosquitto/secrets:ro
     networks:
       scenescape:
         aliases:

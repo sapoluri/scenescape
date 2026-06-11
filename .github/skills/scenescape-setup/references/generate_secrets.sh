@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,6 +8,8 @@
 # If SUPASS is not supplied, a random one is generated and written to secrets/supass.
 # Run this script from <deploy_dir>/.
 
+set -euo pipefail
+
 EXEC_PATH="$(cd "$(dirname "$0")" && pwd)"
 SECRETSDIR="$EXEC_PATH/secrets"
 CERTDOMAIN="scenescape.intel.com"
@@ -15,6 +17,9 @@ CERTPASS=$(openssl rand -base64 33)
 DBPASS=$(openssl rand -base64 12)
 SUPASS="${1:-$(openssl rand -base64 16)}"
 MQTTUSERS="controller.auth=scenectrl browser.auth=webuser calibration.auth=calibration"
+
+OWNER_UID="$(stat -c '%u' "$EXEC_PATH")"
+OWNER_GID="$(stat -c '%g' "$EXEC_PATH")"
 
 mkdir -p "$SECRETSDIR/ca" "$SECRETSDIR/certs"
 
@@ -101,6 +106,12 @@ printf 'POSTGRES_PASSWORD="%s"\n' "$DBPASS" > "$SECRETSDIR/pgserver/pgserver.env
 # ── Superuser password ────────────────────────────────────────────────────────
 echo -n "$SUPASS" > "$SECRETSDIR/supass"
 chmod 0644 "$SECRETSDIR/supass"
+
+# Keep generated secrets owned by the deployment directory owner. This prevents
+# root-owned files when the script is run with sudo and keeps the tree easy to delete.
+chown -R "$OWNER_UID:$OWNER_GID" "$SECRETSDIR"
+find "$SECRETSDIR" -type d -exec chmod 0755 {} +
+find "$SECRETSDIR" -type f -exec chmod 0644 {} +
 
 echo ""
 echo "Secrets written to: $SECRETSDIR"
