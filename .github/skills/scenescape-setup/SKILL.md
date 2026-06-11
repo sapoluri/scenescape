@@ -61,14 +61,12 @@ Load a reference file only when you reach that step.
 
 ## Step 1 — Gather Inputs from the User
 
-Prompt for:
+Prompt for required inputs:
 
-| Field        | Description                       | Example                          |
-| ------------ | --------------------------------- | -------------------------------- |
-| `streams`    | RTSP URL per camera               | `rtsp://192.168.1.10:554/stream` |
-| `camera_ids` | Unique ID per stream (same order) | `cam1`, `cam2`                   |
-| `scene_name` | Human-readable scene name         | `Warehouse Floor A`              |
-| `deploy_dir` | Directory for generated files     | `./scenescape-deploy`            |
+- `streams`: RTSP URL per camera
+- `camera_ids`: unique camera IDs in the same order as `streams`
+- `scene_name`: human-readable scene name
+- `deploy_dir`: output directory for generated deployment files
 
 Validate: `len(streams) == len(camera_ids)`, IDs are unique and contain no `/`, at least 1 camera.
 The skill does **not** start or manage MediaMTX, `queuing-cams`, or any other RTSP simulator. If
@@ -110,27 +108,7 @@ Normalize the broker config so MQTT port `1883` is plaintext for DLStreamer and 
 clients, while websocket port `1884` keeps TLS:
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-
-path = Path("dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf")
-lines = path.read_text().splitlines()
-out = []
-listener = None
-for line in lines:
-  stripped = line.strip()
-  if stripped.startswith("listener "):
-    parts = stripped.split()
-    listener = parts[1] if len(parts) > 1 else None
-  if listener == "1883" and stripped in {
-    "keyfile /mosquitto/secrets/certs/scenescape-broker.key",
-    "certfile /mosquitto/secrets/certs/scenescape-broker.crt",
-    "tls_version tlsv1.3",
-  }:
-    continue
-  out.append(line)
-path.write_text("\n".join(out) + "\n")
-PY
+python3 <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/normalize_broker_config.py
 ```
 
 Alternatively, if `git` sparse checkout is unavailable, use `curl` to download individual files:
@@ -257,42 +235,33 @@ Write `<deploy_dir>/reid-config.json`:
 
 ## Step 6 — Generate Secrets and `.env`
 
-Read and execute [generate_secrets.sh](./references/generate_secrets.sh) using the
-[openssl.cnf](./references/openssl.cnf) template. Then create `.env`:
+Objective: generate secrets and deployment environment file.
+
+Command:
 
 ```bash
 cd <deploy_dir>
 bash generate_secrets.sh
-
-# Build .env — read DATABASE_PASSWORD from generated secrets.py
-SECRETSDIR=$(pwd)/secrets
-DATABASE_PASSWORD=$(python3 -c "
-import re
-txt = open('secrets/django/secrets.py').read()
-print(re.search(r\"DATABASE_PASSWORD='([^']+)'\", txt).group(1))
-")
-SUPASS=$(cat secrets/supass)
-# If any user-provided RTSP URL uses an internal hostname, append that hostname to no_proxy.
-# Example: no_proxy="${no_proxy},mediaserver"
-cat > .env <<EOF
-SECRETSDIR=${SECRETSDIR}
-DATABASE_PASSWORD=${DATABASE_PASSWORD}
-SUPASS=${SUPASS}
-http_proxy=${http_proxy}
-https_proxy=${https_proxy}
-no_proxy=${no_proxy}
-EOF
+python3 <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/write_deployment_env.py \
+  --deploy-dir <deploy_dir>
 ```
+
+If any user-provided RTSP URL uses an internal hostname, append that hostname to `no_proxy`
+in `<deploy_dir>/.env` (example: `no_proxy=${no_proxy},mediaserver`).
+
+Pass: `<deploy_dir>/secrets/` and `<deploy_dir>/.env` exist; `.env` contains
+`SECRETSDIR`, `DATABASE_PASSWORD`, and `SUPASS`.
+
+On fail: reload [generate_secrets.sh](./references/generate_secrets.sh) and
+[openssl.cnf](./references/openssl.cnf), then rerun.
 
 ---
 
 ## Step 7 — Verify User-Provided RTSP Sources and Pipeline-Server Integration
 
-This step is a gate, not full troubleshooting. Run the quick checks below and only load the
-runtime reference if a gate fails.
+Objective: confirm RTSP reachability and initial pipeline startup before full bring-up.
 
-The user must already have each RTSP stream source running. For simulated streams, this means the
-user starts MediaMTX and `queuing-cams` outside this skill and gives the skill the RTSP URLs to use.
+Command:
 
 Start only the SceneScape services needed for initial validation:
 
@@ -305,24 +274,16 @@ docker compose logs video-analytics --tail 100
 
 Validate each user-provided RTSP URL first with ffmpeg from the SceneScape Docker network:
 
-```bash
-NET_NAME=$(docker network ls --format '{{.Name}}' | grep '_scenescape$' | head -1)
-docker run --rm --network "$NET_NAME" \
-  linuxserver/ffmpeg:version-8.1-cli \
-  -nostdin -v error -rtsp_transport tcp \
-  -i '<rtsp_url>' \
-  -t 5 -f null -
-echo "EXIT:$?"
-```
+Use the RTSP gate template in [command-templates.md](./references/command-templates.md).
 
-Pass criteria:
+Pass:
 
 - ffmpeg exits with `EXIT:0`
 - `video-analytics` logs show pipelines initialized/started
 - No persistent RTSP connection failures
 
-If any gate fails, load [runtime-verification.md](./references/runtime-verification.md)
-and follow the Step 7 troubleshooting flow.
+On fail: load [runtime-verification.md](./references/runtime-verification.md) and follow
+Step 7 troubleshooting.
 
 **Do not proceed to Step 8 until Step 7 passes.**
 
@@ -330,7 +291,9 @@ and follow the Step 7 troubleshooting flow.
 
 ## Step 8 — Bring Up Containers
 
-After Step 7 passes, start all services:
+Objective: bring up full stack and ensure model availability.
+
+Command:
 
 ```bash
 cd <deploy_dir>
@@ -343,7 +306,7 @@ Wait for all containers to be healthy:
 docker compose --profile mapping ps
 ```
 
-Expected healthy: `broker`, `ntpserv`, `pgserver`, `web`, `scene`, `mapping`.
+Pass: `broker`, `ntpserv`, `pgserver`, `web`, `scene`, and `mapping` are healthy.
 
 ### Download AI models
 
@@ -371,49 +334,55 @@ After models download, restart `video-analytics` so it picks them up:
 docker compose restart video-analytics
 ```
 
+On fail: inspect `docker compose logs --tail 100 <service>` for the failing service and
+resolve before continuing.
+
 ---
 
 ## Step 9 — Verify Calibration Frame Gate (Before Reconstruction)
 
-This is the required gate before mapping reconstruction. Do not block on object detections here.
+Objective: verify calibration command/response flow before reconstruction.
 
-After all containers are healthy, wait up to **2 minutes** for video-analytics to initialize pipelines.
-Then verify command/response flow for calibration images:
+Command:
+
+After all containers are healthy, wait up to **2 minutes** for pipeline initialization, then:
 
 - publish `getcalibrationimage` to `scenescape/cmd/camera/<camera_id>`
 - receive one message on `scenescape/image/calibration/camera/<camera_id>`
 - confirm payload has `image` and decodes to a valid JPEG frame
 
-Use MQTT flags that match your broker listener mode:
+Use the MQTT publish/subscribe templates in
+[command-templates.md](./references/command-templates.md), selecting plaintext or TLS mode to
+match listener `1883`.
 
-- If listener `1883` is plaintext: no TLS flags
-- If listener `1883` is TLS: use `--cafile` (and `--insecure` when connecting via `localhost`)
-
-Pass criteria:
+Pass:
 
 - Response topic is `scenescape/image/calibration/camera/<camera_id>`.
 - JSON payload contains keys `id`, `timestamp`, and `image`.
 - Base64-decoded `image` is a valid JPEG (`FFD8FF ... FFD9`).
 
-If this step fails or times out, load [runtime-verification.md](./references/runtime-verification.md)
-and follow the Step 9 troubleshooting flow.
+On fail: load [runtime-verification.md](./references/runtime-verification.md) and follow
+Step 9 troubleshooting.
 
 ---
 
 ## Step 10 — Check Mapping Service Health
 
-Poll `GET https://mapping.scenescape.intel.com:8444/v1/health` every 10 s for up to 3 minutes.
+Objective: confirm mapping service readiness.
+
+Command: poll `GET https://mapping.scenescape.intel.com:8444/v1/health` every 10 s for up to
+3 minutes.
 
 ```bash
 curl -sk https://mapping.scenescape.intel.com:8444/v1/health
 ```
 
-Expected response: `{"status": "healthy"}` or `{"model_loaded": true}`.
+Pass: response contains `{"status": "healthy"}` or `{"model_loaded": true}`.
 
 **Note**: The model installer downloads `person-detection-retail-0013` on first run — allow extra
 time on a fresh deployment. The service may take 2–3 minutes to load the model.
 
-If health check fails:
+On fail:
 
 ```bash
 docker compose logs mapping --tail 50

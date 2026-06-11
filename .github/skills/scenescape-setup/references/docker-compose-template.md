@@ -44,6 +44,14 @@ secrets:
   mapping-key:
     file: ${SECRETSDIR}/certs/scenescape-mapping.key
 
+x-proxy-env: &proxy_env
+  http_proxy: ${http_proxy}
+  https_proxy: ${https_proxy}
+  no_proxy: ${no_proxy},.scenescape.intel.com
+  HTTP_PROXY: ${http_proxy}
+  HTTPS_PROXY: ${https_proxy}
+  NO_PROXY: ${no_proxy},.scenescape.intel.com
+
 services:
   ntpserv:
     image: dockurr/chrony:4.8
@@ -75,12 +83,7 @@ services:
         aliases:
           - broker.scenescape.intel.com
     environment:
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     restart: always
 
   pgserver:
@@ -89,12 +92,7 @@ services:
       POSTGRES_USER: scenescape
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: scenescape
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     networks:
       - scenescape
     volumes:
@@ -147,12 +145,7 @@ services:
       BROKER: broker.scenescape.intel.com
       BROKERAUTH: /run/secrets/browser.auth
       BROKERROOTCERT: /run/secrets/certs/scenescape-ca.pem
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     volumes:
       - vol-media:/workspace/media
     secrets:
@@ -186,12 +179,7 @@ services:
       ntpserv:
         condition: service_started
     environment:
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     command: >
       --restauth /run/secrets/controller.auth
       --brokerauth /run/secrets/controller.auth
@@ -226,11 +214,8 @@ services:
     environment:
       MQTT_HOST: broker.scenescape.intel.com
       # If the user-provided RTSP host is a Docker hostname, add it to no_proxy in .env.
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
+      <<: *proxy_env
       no_proxy: ${no_proxy},broker.scenescape.intel.com,.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
       NO_PROXY: ${no_proxy},broker.scenescape.intel.com,.scenescape.intel.com
     volumes:
       - ./pipeline-config.json:/home/pipeline-server/config.json:ro
@@ -254,12 +239,7 @@ services:
     volumes:
       - vol-models:/home/scenescape/SceneScape/models
     environment:
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     restart: "no"
 
   mapping:
@@ -273,12 +253,7 @@ services:
     ports:
       - "8444:8444"
     environment:
-      http_proxy: ${http_proxy}
-      https_proxy: ${https_proxy}
-      no_proxy: ${no_proxy},.scenescape.intel.com
-      HTTP_PROXY: ${http_proxy}
-      HTTPS_PROXY: ${https_proxy}
-      NO_PROXY: ${no_proxy},.scenescape.intel.com
+      <<: *proxy_env
     volumes:
       - vol-mapping-model-weights:/workspace/model_weights
       - vol-mapping-torch-cache:/workspace/.cache/torch

@@ -5,9 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Runtime Verification and Troubleshooting
 
-Load this file only when Step 5 or Step 8 in SKILL.md fails.
+Load this file only when Step 7 or Step 9 in SKILL.md fails.
 
 ## Step 5 — Pipeline and User-Provided RTSP Verification
+
+Shared runtime commands are in [command-templates.md](./command-templates.md).
 
 ### 1) Ensure services are running
 
@@ -23,15 +25,7 @@ Docker network before this verification step.
 
 ### 2) Verify RTSP first using separate ffmpeg container
 
-```bash
-NET_NAME=$(docker network ls --format '{{.Name}}' | grep '_scenescape$' | head -1)
-docker run --rm --network "$NET_NAME" \
-  linuxserver/ffmpeg:version-8.1-cli \
-  -nostdin -v error -rtsp_transport tcp \
-  -i '<rtsp_url>' \
-  -t 5 -f null -
-echo "EXIT:$?"
-```
+Use the RTSP gate command template from [command-templates.md](./command-templates.md).
 
 - `EXIT:0` means cross-container RTSP is working.
 - Decoder warnings at stream start can be acceptable when exit code is 0.
@@ -74,16 +68,10 @@ Use listener mode for port `1883`. The setup skill normalizes the generated brok
 
 ### 2) Subscribe to calibration image topic, then send command
 
-```bash
-# plaintext 1883 example
-docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
-  mosquitto_sub -h broker.scenescape.intel.com -p 1883 \
-  -t 'scenescape/image/calibration/camera/<camera_id>' -C 1
+Use the MQTT subscribe/publish templates from [command-templates.md](./command-templates.md):
 
-docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
-  mosquitto_pub -h broker.scenescape.intel.com -p 1883 \
-  -t 'scenescape/cmd/camera/<camera_id>' -m 'getcalibrationimage'
-```
+- subscribe topic: `scenescape/image/calibration/camera/<camera_id>`
+- publish topic: `scenescape/cmd/camera/<camera_id>` with payload `getcalibrationimage`
 
 Verify message contains:
 

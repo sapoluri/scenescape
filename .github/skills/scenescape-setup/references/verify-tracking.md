@@ -8,11 +8,8 @@ appear within 2 minutes of containers being live.
 Use MQTT flags that match the broker listener mode. For the default generated broker config,
 listener `1883` is plaintext.
 
-```bash
-docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
-  mosquitto_sub -h broker.scenescape.intel.com -p 1883 \
-  -t 'scenescape/regulated/scene/<scene_uid>' -C 1 -W 120
-```
+Use the MQTT subscribe template from [command-templates.md](./command-templates.md) with topic:
+`scenescape/regulated/scene/<scene_uid>`.
 
 Pass criteria: the message contains an `objects` array with at least one tracked object.
 
@@ -63,11 +60,8 @@ A zero scale prevents regulated topic output. Fix: set a real-world scale via th
 
 ### 5. Verify raw detections are arriving from video-analytics
 
-```bash
-docker run --rm --network <project>_scenescape eclipse-mosquitto:2 \
-    mosquitto_sub -h broker.scenescape.intel.com -p 1883 \
-    -t 'scenescape/data/camera/+' -C 3 -W 120
-```
+Use the MQTT subscribe template from [command-templates.md](./command-templates.md) with topic
+`scenescape/data/camera/+`.
 
 If no messages appear, video-analytics pipelines are not detecting anything. Check:
 
