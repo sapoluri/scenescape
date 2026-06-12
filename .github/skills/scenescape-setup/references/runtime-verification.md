@@ -43,28 +43,27 @@ Verify:
 - pipelines initialize and enter running state
 - no persistent RTSP connection failures
 - no fatal model-load errors
+- MQTT connects over TLS (look for `Connected to MQTT Broker` without connection errors)
 
 ### 4) Additional checks when startup still fails
 
 ```bash
 docker compose exec video-analytics ls /home/pipeline-server/models/person-detection-retail-0013/
+docker compose exec video-analytics ls /run/secrets/certs/scenescape-ca.pem
 docker compose exec ntpserv chronyc tracking
-docker compose config | grep -A 8 "video-analytics:"
+docker compose config | grep -A 12 "video-analytics:"
 ```
 
 ## Step 8 — Calibration Image Gate Before Reconstruction
 
-### 1) Determine listener mode on broker
+### 1) Confirm broker TLS listener
 
 ```bash
 sed -n '1,120p' <deploy_dir>/dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf
 ```
 
-Use listener mode for port `1883`. The setup skill normalizes the generated broker config so
-`1883` is plaintext and `1884` is TLS websockets:
-
-- plaintext listener: no TLS flags
-- TLS listener: use `--cafile` (and `--insecure` when host is `localhost`)
+Listener `1883` must include `keyfile`, `certfile`, and `tls_version`. All MQTT clients use
+TLS with the SceneScape CA (see [command-templates.md](./command-templates.md)).
 
 ### 2) Subscribe to calibration image topic, then send command
 
@@ -83,11 +82,11 @@ Verify message contains:
 
 ```bash
 docker compose logs --tail 120 broker
-docker compose logs --tail 200 video-analytics
+docker compose logs --tail 120 video-analytics
 ```
 
 Look for:
 
-- DLSPS connected/subscribed to `scenescape/cmd/camera/<camera_id>`
 - command traffic arriving at broker
-- publish activity on `scenescape/image/calibration/camera/<camera_id>`
+- TLS handshake or certificate errors
+- video-analytics publishing calibration images after `getcalibrationimage`

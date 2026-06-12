@@ -5,10 +5,7 @@ appear within 2 minutes of containers being live.
 
 ## MQTT Verification
 
-Use MQTT flags that match the broker listener mode. For the default generated broker config,
-listener `1883` is plaintext.
-
-Use the MQTT subscribe template from [command-templates.md](./command-templates.md) with topic:
+Use the TLS MQTT subscribe template from [command-templates.md](./command-templates.md) with topic:
 `scenescape/regulated/scene/<scene_uid>`.
 
 Pass criteria: the message contains an `objects` array with at least one tracked object.

@@ -47,8 +47,8 @@ to generate or commands to run.
 | 4   | Adapt pipeline-server config from canonical template        | [pipeline-config.md](./references/pipeline-config.md)                                            |
 | 5   | Generate tracker and ReID config                            | (below — two JSON blocks)                                                                        |
 | 6   | Generate broker config, secrets, and `.env`                 | [generate_secrets.sh](./references/generate_secrets.sh), [openssl.cnf](./references/openssl.cnf) |
-| 7   | Verify user-provided RTSP sources and pipeline integration  | [runtime-verification.md](./references/runtime-verification.md)                                  |
-| 8   | Bring up containers and download AI models                  | (below)                                                                                          |
+| 7   | Verify user-provided RTSP sources and pipeline integration  | [runtime-verification.md](./references/runtime-verification.md), `scripts/parallel_warmup.sh`    |
+| 8   | Bring up containers and download AI models                  | `scripts/download_detection_models.sh`                                                           |
 | 9   | Verify camera MQTT data flow                                | [runtime-verification.md](./references/runtime-verification.md)                                  |
 | 10  | Check mapping service health                                | (below)                                                                                          |
 | 11  | Capture frames, reconstruct, then align mesh/camera poses   | [reconstruction.md](./references/reconstruction.md)                                              |
@@ -104,12 +104,8 @@ cp -r dlstreamer-pipeline-server ../
 cd .. && rm -rf _scenescape-tmp
 ```
 
-Normalize the broker config so MQTT port `1883` is plaintext for DLStreamer and controller MQTT
-clients, while websocket port `1884` keeps TLS:
-
-```bash
-python3 <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/normalize_broker_config.py
-```
+The broker uses `mosquitto/mosquitto-secure.conf` with **TLS on listener 1883** (and TLS
+websockets on 1884). Do not strip TLS directives from that file.
 
 Alternatively, if `git` sparse checkout is unavailable, use `curl` to download individual files:
 
@@ -122,14 +118,13 @@ curl -fsSL https://raw.githubusercontent.com/open-edge-platform/scenescape/main/
 ```
 
 If using the fallback download, also download
-`dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf` and run the same broker config
-normalization command above.
+`dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf`.
 
 After this step, `<deploy_dir>/dlstreamer-pipeline-server/` contains:
 
 - `queuing-config.json` — canonical pipeline config template (used in Step 4)
 - `user_scripts/gvapython/sscape/sscape_adapter.py` — SceneScape MQTT bridge (mounted into video-analytics)
-- `mosquitto/mosquitto-secure.conf` — broker config (mounted into broker service)
+- `mosquitto/mosquitto-secure.conf` — TLS broker config (mounted into broker service)
 - `model-proc-files/` — model processing descriptors
 
 ---
@@ -143,6 +138,8 @@ Copy the helper scripts from this skill into the deployment directory so later s
 cd <deploy_dir>
 mkdir -p scripts
 cp <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/*.py scripts/
+cp <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/*.sh scripts/
+chmod +x scripts/*.sh
 ```
 
 ---
@@ -173,7 +170,10 @@ Or, if you prefer to edit manually:
 - All services have `no_proxy` set to include `.scenescape.intel.com` for proper service alias resolution
 - RTSP streams are user-provided inputs. The compose file does not define MediaMTX or `queuing-cams`.
 - All inter-service communication uses DNS aliases within the `scenescape` Docker network
-- External healthchecks use `localhost` (within containers); external API calls use service aliases
+- External healthchecks use `localhost` (within containers); host API calls to mapping use `localhost:8444`
+- Mapping image: `scenescape-mapping-mapanything:${VERSION}` (override with `MAPPING_MODEL` in `.env`)
+- `mapping-init` sets mapping volume ownership to UID 1001 before the mapping service starts
+- Broker listener 1883 uses TLS; `video-analytics` mounts the SceneScape CA for MQTT
 
 **Do not modify the docker-compose file further** — it is template-driven and includes all required services.
 
@@ -243,11 +243,13 @@ Command:
 cd <deploy_dir>
 bash generate_secrets.sh
 python3 <path-to-scenescape-repo>/.github/skills/scenescape-setup/scripts/write_deployment_env.py \
-  --deploy-dir <deploy_dir>
+  --deploy-dir <deploy_dir> \
+  --append-no-proxy mediaserver
 ```
 
-If any user-provided RTSP URL uses an internal hostname, append that hostname to `no_proxy`
-in `<deploy_dir>/.env` (example: `no_proxy=${no_proxy},mediaserver`).
+If any user-provided RTSP URL uses another internal Docker hostname, repeat
+`--append-no-proxy <hostname>`. The script joins hosts without leading commas when
+corporate proxy settings are empty.
 
 Pass: `<deploy_dir>/secrets/` and `<deploy_dir>/.env` exist; `.env` contains
 `SECRETSDIR`, `DATABASE_PASSWORD`, and `SUPASS`.
@@ -260,19 +262,38 @@ On fail: reload [generate_secrets.sh](./references/generate_secrets.sh) and
 ## Step 7 — Verify User-Provided RTSP Sources and Pipeline-Server Integration
 
 Objective: confirm RTSP reachability and initial pipeline startup before full bring-up.
+Start **mapping** and **detection-model download** in parallel so slow work overlaps RTSP
+validation.
 
 Command:
 
-Start only the SceneScape services needed for initial validation:
-
 ```bash
 cd <deploy_dir>
-docker compose up -d broker ntpserv init-models video-analytics
+bash scripts/parallel_warmup.sh
+```
+
+This script (in one shot):
+
+1. Pulls `video-analytics` and `mapping` images in the background
+2. Runs `mapping-init` (volume permissions for UID 1001), then starts `mapping` so
+   MapAnything/DINOv2 weights download while you validate RTSP
+3. Brings up `broker`, `ntpserv`, `init-models`, and `video-analytics`
+
+Start detection-model download in the background while you run RTSP checks:
+
+```bash
+bash scripts/download_detection_models.sh &
+DETECTION_MODELS_PID=$!
+```
+
+Then inspect pipeline startup:
+
+```bash
 sleep 10
 docker compose logs video-analytics --tail 100
 ```
 
-Validate each user-provided RTSP URL first with ffmpeg from the SceneScape Docker network:
+Validate each user-provided RTSP URL with ffmpeg from the SceneScape Docker network:
 
 Use the RTSP gate template in [command-templates.md](./references/command-templates.md).
 
@@ -285,19 +306,38 @@ Pass:
 On fail: load [runtime-verification.md](./references/runtime-verification.md) and follow
 Step 7 troubleshooting.
 
-**Do not proceed to Step 8 until Step 7 passes.**
+**Do not proceed to Step 8 until Step 7 passes.** Leave `mapping` running and keep
+`DETECTION_MODELS_PID` for Step 8.
 
 ---
 
 ## Step 8 — Bring Up Containers
 
-Objective: bring up full stack and ensure model availability.
+Objective: bring up the remaining stack and ensure model availability. `mapping` should
+already be running from Step 7.
 
 Command:
 
+Wait for the background detection-model download from Step 7 (if still running):
+
 ```bash
 cd <deploy_dir>
+if [[ -n "${DETECTION_MODELS_PID:-}" ]]; then
+  wait "$DETECTION_MODELS_PID"
+fi
+```
+
+If Step 7 did not start model download, run it now:
+
+```bash
+bash scripts/download_detection_models.sh
+```
+
+Bring up the full stack (`mapping` is already up; this starts `pgserver`, `web`, `scene`, etc.):
+
+```bash
 docker compose --profile mapping up -d
+docker compose restart video-analytics
 ```
 
 Wait for all containers to be healthy:
@@ -307,32 +347,6 @@ docker compose --profile mapping ps
 ```
 
 Pass: `broker`, `ntpserv`, `pgserver`, `web`, `scene`, and `mapping` are healthy.
-
-### Download AI models
-
-The `model_downloader` service (`scenescape-model-installer:latest`) exits immediately without
-downloading models by itself. Run the download manually using the openvino omz_downloader:
-
-```bash
-docker run --rm --user root \
-  -e http_proxy="${http_proxy}" \
-  -e https_proxy="${https_proxy}" \
-  -v <project_name>_vol-models:/models \
-  scenescape-model-installer:latest bash -c "
-pip3 install --break-system-packages openvino-dev 2>&1 | grep Successfully
-/usr/local/bin/omz_downloader --name person-detection-retail-0013 -o /models/
-chmod -R a+rX /models/
-"
-```
-
-Replace `<project_name>` with the Docker Compose project name (default: `scenescape` from the
-`name:` field in `docker-compose.yml`, so the volume is `scenescape_vol-models`).
-
-After models download, restart `video-analytics` so it picks them up:
-
-```bash
-docker compose restart video-analytics
-```
 
 On fail: inspect `docker compose logs --tail 100 <service>` for the failing service and
 resolve before continuing.
@@ -352,8 +366,7 @@ After all containers are healthy, wait up to **2 minutes** for pipeline initiali
 - confirm payload has `image` and decodes to a valid JPEG frame
 
 Use the MQTT publish/subscribe templates in
-[command-templates.md](./references/command-templates.md), selecting plaintext or TLS mode to
-match listener `1883`.
+[command-templates.md](./references/command-templates.md) (TLS on port 1883).
 
 Pass:
 
@@ -368,19 +381,19 @@ Step 9 troubleshooting.
 
 ## Step 10 — Check Mapping Service Health
 
-Objective: confirm mapping service readiness.
+Objective: confirm mapping service readiness. If Step 7 started `mapping` early, this step
+is often a quick confirmation; first-time deployments may still need several minutes for
+weight download (~4 GB on CPU).
 
-Command: poll `GET https://mapping.scenescape.intel.com:8444/v1/health` every 10 s for up to
-3 minutes.
+Command: poll from the **host** (service DNS aliases are not resolved outside Docker):
 
 ```bash
-curl -sk https://mapping.scenescape.intel.com:8444/v1/health
+curl -sk https://localhost:8444/v1/health
 ```
 
-Pass: response contains `{"status": "healthy"}` or `{"model_loaded": true}`.
+Repeat every 10 s for up to 5 minutes if not yet healthy.
 
-**Note**: The model installer downloads `person-detection-retail-0013` on first run — allow extra
-time on a fresh deployment. The service may take 2–3 minutes to load the model.
+Pass: response contains `{"status": "healthy"}` or `{"model_loaded": true}`.
 
 On fail:
 
@@ -388,4 +401,10 @@ On fail:
 docker compose logs mapping --tail 50
 ```
 
-Look for model download errors or GPU/memory issues.
+Look for permission errors on `/workspace/.cache/huggingface`, model download failures, or
+GPU/memory issues. If volumes were created before `mapping-init` was added, run:
+
+```bash
+docker compose --profile mapping run --rm mapping-init
+docker compose --profile mapping restart mapping
+```

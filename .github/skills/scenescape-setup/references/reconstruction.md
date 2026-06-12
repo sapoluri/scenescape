@@ -13,8 +13,9 @@ python scripts/capture_calibration_frames.py \
 
 Subscribes to `scenescape/image/calibration/camera/+`, triggers `getcalibrationimage`
 on each camera's command topic, and writes one JPEG per camera to `--out-dir`.
-Uses the `eclipse-mosquitto:2` container on the `<project>_scenescape` Docker network. The default
-project name is `scenescape`; pass `--project` if your Compose project name differs.
+Uses TLS MQTT via the `eclipse-mosquitto:2` container on the `<project>_scenescape` Docker network.
+Requires `--deploy-dir` with `secrets/certs/scenescape-ca.pem`. The default project name is
+`scenescape`; pass `--project` if your Compose project name differs.
 
 ## 2. Reconstruct and Finalize
 
