@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+DLSTREAMER_FOLDERS = ("model-proc-files", "mosquitto", "user_scripts")
+
 
 def skill_dir_from_arg(value: Path) -> Path:
   path = value.resolve()
@@ -18,9 +20,10 @@ def skill_dir_from_arg(value: Path) -> Path:
   return path
 
 
-def download_dlstreamer_pipeline_server(deploy_dir: Path) -> None:
-  target = deploy_dir / "dlstreamer-pipeline-server" / "queuing-config.json"
-  if target.is_file():
+def fetch_dlstreamer_assets(deploy_dir: Path) -> None:
+  """Sparse-checkout pipeline support folders from the upstream repo."""
+  dl_dir = deploy_dir / "dlstreamer-pipeline-server"
+  if (dl_dir / "model-proc-files" / "person-detection-retail-0013.json").is_file():
     return
 
   tmp = deploy_dir / "_scenescape-tmp"
@@ -35,12 +38,26 @@ def download_dlstreamer_pipeline_server(deploy_dir: Path) -> None:
     ],
     check=True,
   )
+  subprocess.run(["git", "sparse-checkout", "init", "--no-cone"], cwd=tmp, check=True)
   subprocess.run(
-    ["git", "sparse-checkout", "set", "dlstreamer-pipeline-server"],
+    [
+      "git", "sparse-checkout", "set",
+      "/dlstreamer-pipeline-server/model-proc-files",
+      "/dlstreamer-pipeline-server/mosquitto",
+      "/dlstreamer-pipeline-server/user_scripts",
+    ],
     cwd=tmp,
     check=True,
   )
-  shutil.copytree(tmp / "dlstreamer-pipeline-server", deploy_dir / "dlstreamer-pipeline-server")
+
+  dl_dir.mkdir(parents=True, exist_ok=True)
+  repo_dl = tmp / "dlstreamer-pipeline-server"
+  for folder in DLSTREAMER_FOLDERS:
+    src = repo_dl / folder
+    dst = dl_dir / folder
+    if dst.exists():
+      shutil.rmtree(dst)
+    shutil.copytree(src, dst)
   shutil.rmtree(tmp)
 
 
@@ -52,10 +69,22 @@ def copy_skill_assets(skill_dir: Path, deploy_dir: Path) -> None:
     for src in (skill_dir / "scripts").glob(pattern):
       shutil.copy2(src, scripts_dst / src.name)
 
-  for name in ("generate_secrets.sh", "openssl.cnf"):
-    shutil.copy2(skill_dir / "references" / name, deploy_dir / name)
-
   subprocess.run(["chmod", "+x", *map(str, scripts_dst.glob("*.sh"))], check=False)
+
+
+def copy_secrets_scripts(skill_dir: Path, deploy_dir: Path) -> None:
+  secrets_dir = deploy_dir / "secrets"
+  secrets_dir.mkdir(parents=True, exist_ok=True)
+  for name in ("generate_secrets.sh", "openssl.cnf"):
+    shutil.copy2(skill_dir / "references" / name, secrets_dir / name)
+  subprocess.run(["chmod", "+x", str(secrets_dir / "generate_secrets.sh")], check=False)
+
+
+def copy_controller_configs(skill_dir: Path, deploy_dir: Path) -> None:
+  controller_dir = deploy_dir / "controller"
+  controller_dir.mkdir(parents=True, exist_ok=True)
+  for name in ("tracker-config.json", "reid-config.json"):
+    shutil.copy2(skill_dir / "references" / name, controller_dir / name)
 
 
 def generate_docker_compose(skill_dir: Path, deploy_dir: Path) -> None:
@@ -74,17 +103,16 @@ def generate_docker_compose(skill_dir: Path, deploy_dir: Path) -> None:
   (deploy_dir / "docker-compose.yml").write_text(compose.stdout, encoding="utf-8")
 
 
-def copy_static_configs(skill_dir: Path, deploy_dir: Path) -> None:
-  for name in ("tracker-config.json", "reid-config.json"):
-    shutil.copy2(skill_dir / "references" / name, deploy_dir / name)
-
-
 def generate_secrets_and_env(
   deploy_dir: Path,
   skill_dir: Path,
   no_proxy_hosts: list[str],
 ) -> None:
-  subprocess.run(["bash", "generate_secrets.sh"], cwd=deploy_dir, check=True)
+  subprocess.run(
+    ["bash", "generate_secrets.sh"],
+    cwd=deploy_dir / "secrets",
+    check=True,
+  )
 
   cmd = [
     sys.executable,
@@ -101,35 +129,50 @@ def main() -> None:
   parser = argparse.ArgumentParser(description="Bootstrap SceneScape deployment files (steps 2–6)")
   parser.add_argument("--deploy-dir", required=True, type=Path)
   parser.add_argument("--skill-dir", required=True, type=Path)
-  parser.add_argument("--camera-ids", required=True, nargs="+", metavar="CAMERA_ID")
-  parser.add_argument("--streams", required=True, nargs="+", metavar="RTSP_URL")
+  parser.add_argument("--inputs-file", type=Path, help="deploy-inputs.json from Step 1")
+  parser.add_argument("--from-deploy-inputs", action="store_true", help="Read deploy-inputs.json in deploy-dir")
+  parser.add_argument("--camera-ids", nargs="+", metavar="CAMERA_ID")
+  parser.add_argument("--streams", nargs="+", metavar="RTSP_URL")
   args = parser.parse_args()
 
   deploy_dir = args.deploy_dir.resolve()
   skill_dir = skill_dir_from_arg(args.skill_dir)
   deploy_dir.mkdir(parents=True, exist_ok=True)
 
-  download_dlstreamer_pipeline_server(deploy_dir)
+  if not args.inputs_file and not args.from_deploy_inputs and not (args.camera_ids and args.streams):
+    raise SystemExit("provide --inputs-file, --from-deploy-inputs, or both --camera-ids and --streams")
+
+  fetch_dlstreamer_assets(deploy_dir)
   copy_skill_assets(skill_dir, deploy_dir)
+  copy_secrets_scripts(skill_dir, deploy_dir)
+  copy_controller_configs(skill_dir, deploy_dir)
   generate_docker_compose(skill_dir, deploy_dir)
 
   adapt_script = Path(__file__).resolve().parent / "adapt_pipeline_config.py"
-  adapt = subprocess.run(
-    [
+  adapt_cmd = [
+    sys.executable, str(adapt_script),
+    "--deploy-dir", str(deploy_dir),
+    "--from-deploy-inputs",
+  ]
+  if args.inputs_file:
+    adapt_cmd = [
+      sys.executable, str(adapt_script),
+      "--deploy-dir", str(deploy_dir),
+      "--inputs-file", str(args.inputs_file),
+    ]
+  elif args.camera_ids and args.streams:
+    adapt_cmd = [
       sys.executable, str(adapt_script),
       "--deploy-dir", str(deploy_dir),
       "--camera-ids", *args.camera_ids,
       "--streams", *args.streams,
-    ],
-    check=True,
-    capture_output=True,
-    text=True,
-  )
+    ]
+
+  adapt = subprocess.run(adapt_cmd, check=True, capture_output=True, text=True)
   no_proxy_hosts = []
   for line in adapt.stdout.splitlines():
     if line.startswith("no_proxy_hosts="):
       no_proxy_hosts = [h for h in line.split("=", 1)[1].split(",") if h]
-  copy_static_configs(skill_dir, deploy_dir)
   generate_secrets_and_env(deploy_dir, skill_dir, no_proxy_hosts)
 
   print(f"Bootstrap complete: {deploy_dir}")

@@ -18,12 +18,12 @@ pull_pid=$!
 echo "Starting mapping (init volumes, then download/load MapAnything weights)..."
 docker compose --profile mapping up -d mapping
 
-echo "Starting pipeline validation stack..."
-docker compose up -d broker ntpserv init-models video-analytics
+echo "Starting pipeline validation stack (video-analytics deferred until models ready)..."
+docker compose up -d broker ntpserv init-models
 
 echo "Waiting for image pull..."
-wait "$pull_pid"
+wait "$pull_pid" || true
 
 echo "Parallel warmup complete."
 docker compose --profile mapping ps mapping
-docker compose ps broker ntpserv video-analytics
+docker compose ps broker ntpserv

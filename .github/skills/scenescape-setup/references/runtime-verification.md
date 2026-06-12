@@ -22,7 +22,7 @@ docker network connect "$NET" <mediaserver-container> 2>/dev/null || true
 
 | Symptom | Fix |
 | ------- | --- |
-| `model file ... does not exist` | `bash scripts/download_detection_models.sh` then restart `video-analytics` |
+| `model file ... does not exist` | `bash scripts/download_detection_models.sh`, `bash scripts/check_detection_models.sh`, then `docker compose up -d video-analytics` |
 | RTSP connection errors | Fix URL or network; re-run `verify_rtsp.sh` |
 | Segfault with dual pipelines | See repo `queuing-config-gpu.json` / sample compose (GPU/WSL2) — template issue only |
 

@@ -24,7 +24,7 @@ over TLS on port 1883 using the SceneScape CA certificate.
 ## Optional Mosquitto Password File
 
 If you need a password file for a stricter broker configuration, generate it after running
-`generate_secrets.sh` by extracting credentials from the auth JSON files:
+`<deploy_dir>/secrets/generate_secrets.sh` by extracting credentials from the auth JSON files:
 
 ```bash
 SECRETSDIR=<deploy_dir>/secrets

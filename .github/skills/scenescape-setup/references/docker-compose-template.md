@@ -220,7 +220,7 @@ services:
       no_proxy: ${no_proxy:+${no_proxy},}broker.scenescape.intel.com,.scenescape.intel.com
       NO_PROXY: ${no_proxy:+${no_proxy},}broker.scenescape.intel.com,.scenescape.intel.com
     volumes:
-      - ./pipeline-config.json:/home/pipeline-server/config.json:ro
+      - ./dlstreamer-pipeline-server/pipeline-config.json:/home/pipeline-server/config.json:ro
       - vol-models:/home/pipeline-server/models:ro
       - ./dlstreamer-pipeline-server/user_scripts:/home/pipeline-server/user_scripts:ro
       - ./dlstreamer-pipeline-server/model-proc-files:/home/pipeline-server/model-proc-files:ro
@@ -304,9 +304,9 @@ configs:
   mosquitto-secure:
     file: ./dlstreamer-pipeline-server/mosquitto/mosquitto-secure.conf
   tracker-config:
-    file: ./tracker-config.json
+    file: ./controller/tracker-config.json
   reid-config:
-    file: ./reid-config.json
+    file: ./controller/reid-config.json
 
 volumes:
   vol-db:

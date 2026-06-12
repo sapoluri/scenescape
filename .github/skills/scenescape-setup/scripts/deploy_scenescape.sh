@@ -137,8 +137,7 @@ step_bootstrap() {
   python3 "$SKILL_DIR/scripts/bootstrap_deploy.py" \
     --deploy-dir "$DEPLOY_DIR" \
     --skill-dir "$SKILL_DIR" \
-    --camera-ids "${CAMERA_IDS[@]}" \
-    --streams "${STREAMS[@]}" >>"$LOG_FILE" 2>&1
+    --from-deploy-inputs >>"$LOG_FILE" 2>&1
   state_write 6
   log "STEP 6: PASS"
 }
@@ -152,22 +151,31 @@ step_warmup_rtsp() {
   DETECTION_MODELS_PID=$!
 
   connect_rtsp_hosts_to_network
-  sleep 15
-  bash scripts/check_video_analytics.sh "$DEPLOY_DIR" >>"$LOG_FILE" 2>&1
 
   if ! bash scripts/verify_rtsp.sh "$DEPLOY_DIR" "${STREAMS[@]}" >>"$LOG_FILE" 2>&1; then
-  log "STEP 7: FAIL (RTSP)"
+    log "STEP 7: FAIL (RTSP)"
     exit 1
   fi
 
-  if [[ -n "$DETECTION_MODELS_PID" ]] && kill -0 "$DETECTION_MODELS_PID" 2>/dev/null; then
-    wait "$DETECTION_MODELS_PID" >>"$LOG_FILE" 2>&1 || true
+  if [[ -n "$DETECTION_MODELS_PID" ]]; then
+    wait "$DETECTION_MODELS_PID" >>"$LOG_FILE" 2>&1 || {
+      log "STEP 7: FAIL (detection models download)"
+      exit 1
+    }
   fi
   DETECTION_MODELS_PID=""
 
-  docker compose restart video-analytics >>"$LOG_FILE" 2>&1
+  bash scripts/check_detection_models.sh >>"$LOG_FILE" 2>&1 || {
+    log "STEP 7: FAIL (detection models not ready)"
+    exit 1
+  }
+
+  docker compose up -d video-analytics >>"$LOG_FILE" 2>&1
   sleep 20
-  bash scripts/check_video_analytics.sh "$DEPLOY_DIR" >>"$LOG_FILE" 2>&1
+  bash scripts/check_video_analytics.sh "$DEPLOY_DIR" >>"$LOG_FILE" 2>&1 || {
+    log "STEP 7: FAIL (video-analytics)"
+    exit 1
+  }
 
   state_write 7
   log "STEP 7: PASS"
@@ -283,27 +291,67 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$DEPLOY_DIR" && -n "$SKILL_DIR" && -n "$SCENE_NAME" ]] || { usage; exit 2; }
-[[ ${#STREAMS[@]} -gt 0 && ${#CAMERA_IDS[@]} -gt 0 ]] || { echo "streams and camera-ids required" >&2; exit 2; }
-[[ ${#STREAMS[@]} -eq ${#CAMERA_IDS[@]} ]] || { echo "streams and camera-ids length mismatch" >&2; exit 2; }
+[[ -n "$DEPLOY_DIR" ]] || { usage; exit 2; }
 
 STATE_FILE="$DEPLOY_DIR/.deploy-state.json"
 LOG_FILE="$DEPLOY_DIR/deploy.log"
 mkdir -p "$DEPLOY_DIR"
 touch "$LOG_FILE"
 
-if [[ "$RESUME_MODE" == "fresh" && -f "$STATE_FILE" ]]; then
-  rm -f "$STATE_FILE"
+if [[ "$RESUME_MODE" == "fresh" ]]; then
+  rm -f "$STATE_FILE" "$DEPLOY_DIR/deploy-inputs.json"
 fi
+
+# Load user inputs from deploy-inputs.json when CLI omits them (resume).
+if [[ ${#STREAMS[@]} -eq 0 || ${#CAMERA_IDS[@]} -eq 0 || -z "$SCENE_NAME" ]]; then
+  if [[ -f "$DEPLOY_DIR/deploy-inputs.json" ]]; then
+    loaded=$(cat "$DEPLOY_DIR/deploy-inputs.json")
+    if [[ ${#STREAMS[@]} -eq 0 ]]; then
+      mapfile -t STREAMS < <(LOADED_JSON="$loaded" python3 -c 'import json,os; [print(s) for s in json.loads(os.environ["LOADED_JSON"])["streams"]]')
+    fi
+    if [[ ${#CAMERA_IDS[@]} -eq 0 ]]; then
+      mapfile -t CAMERA_IDS < <(LOADED_JSON="$loaded" python3 -c 'import json,os; [print(c) for c in json.loads(os.environ["LOADED_JSON"])["camera_ids"]]')
+    fi
+    if [[ -z "$SCENE_NAME" ]]; then
+      SCENE_NAME=$(LOADED_JSON="$loaded" python3 -c 'import json,os; print(json.loads(os.environ["LOADED_JSON"])["scene_name"])')
+    fi
+    if [[ -z "$SKILL_DIR" ]]; then
+      saved_skill=$(LOADED_JSON="$loaded" python3 -c 'import json,os; print(json.loads(os.environ["LOADED_JSON"]).get("skill_dir") or "")')
+      [[ -n "$saved_skill" ]] && SKILL_DIR=$(realpath "$saved_skill")
+    fi
+  fi
+fi
+
+[[ -n "$SKILL_DIR" ]] || { echo "skill-dir required (or present in deploy-inputs.json)" >&2; usage; exit 2; }
+[[ -n "$SCENE_NAME" && ${#STREAMS[@]} -gt 0 && ${#CAMERA_IDS[@]} -gt 0 ]] || {
+  echo "Step 1 inputs required: scene-name, streams, and camera-ids (or deploy-inputs.json)" >&2
+  usage
+  exit 2
+}
+[[ ${#STREAMS[@]} -eq ${#CAMERA_IDS[@]} ]] || { echo "streams and camera-ids length mismatch" >&2; exit 2; }
+
+if [[ "$RESUME_MODE" == "auto" && -f "$DEPLOY_DIR/deploy-inputs.json" && -f "$STATE_FILE" ]]; then
+  python3 "$SKILL_DIR/scripts/deploy_inputs.py" check \
+    --deploy-dir "$DEPLOY_DIR" \
+    --scene-name "$SCENE_NAME" \
+    --camera-ids "${CAMERA_IDS[@]}" \
+    --streams "${STREAMS[@]}" 2>/dev/null || {
+    echo "ERROR: inputs differ from deploy-inputs.json; use --fresh to redeploy with new cameras" >&2
+    exit 2
+  }
+fi
+
+python3 "$SKILL_DIR/scripts/deploy_inputs.py" write \
+  --deploy-dir "$DEPLOY_DIR" \
+  --scene-name "$SCENE_NAME" \
+  --camera-ids "${CAMERA_IDS[@]}" \
+  --streams "${STREAMS[@]}" \
+  --skill-dir "$SKILL_DIR" >/dev/null
 
 LAST_STEP=0
 if [[ "$RESUME_MODE" == "auto" && -f "$STATE_FILE" ]]; then
   LAST_STEP=$(state_read last_completed_step)
   LAST_STEP=${LAST_STEP:-0}
-  saved_scene=$(state_read scene_name)
-  if [[ -n "$saved_scene" && "$saved_scene" != "$SCENE_NAME" ]]; then
-    echo "WARN: scene_name differs from checkpoint; use --fresh to restart" >&2
-  fi
 fi
 
 START_STEP=$(phase_start_step "$PHASE")
@@ -319,6 +367,7 @@ if [[ "$PHASE" == "scene" ]]; then
 fi
 
 log "=== deploy_scenescape phase=$PHASE steps=${START_STEP}-${END_STEP} (checkpoint=${LAST_STEP}) ==="
+log "inputs: scene=$SCENE_NAME cameras=${CAMERA_IDS[*]} streams=${STREAMS[*]}"
 
 run_step() {
   case "$1" in

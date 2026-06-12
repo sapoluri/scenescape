@@ -12,9 +12,19 @@ set -euo pipefail
 deploy_dir=${1:-.}
 cd "$deploy_dir"
 
+MODEL_XML="intel/person-detection-retail-0013/FP32/person-detection-retail-0013.xml"
+
 project_name=$(docker compose config --format json \
   | python3 -c "import json,sys; print(json.load(sys.stdin).get('name', 'scenescape'))")
 models_volume="${project_name}_vol-models"
+
+if docker run --rm \
+  -v "${models_volume}:/models" \
+  scenescape-model-installer:latest \
+  test -f "/models/${MODEL_XML}" 2>/dev/null; then
+  echo "Detection models already present in ${models_volume}."
+  exit 0
+fi
 
 echo "Downloading person-detection-retail-0013 into ${models_volume}..."
 docker run --rm --user root \

@@ -1,48 +1,59 @@
 ---
 name: scenescape-setup
 description: >
-  Deploy a working Intel® SceneScape installation from scratch (outside the repo). Runs
-  bootstrap, RTSP/pipeline validation, full stack bring-up, calibration, 3D mapping,
-  scene creation, and tracking verification via scripts/deploy_scenescape.sh.
-argument-hint: "<deploy_dir> — optional; gather streams, camera_ids, scene_name if not in checkpoint"
+  Deploy a working Intel® SceneScape installation from scratch (outside the repo). Gathers
+  user-provided streams, camera IDs, and scene name, then runs bootstrap through tracking
+  verification via scripts/deploy_scenescape.sh.
+argument-hint: "<deploy_dir> — always gather streams, camera_ids, scene_name from the user first"
 ---
 
 # SceneScape End-to-End Setup
 
-Deploy from a clean directory. Host needs **Docker**, **docker-compose**, and **Python 3.10+**
-with `requests`. Calibration helpers use `eclipse-mosquitto:2` on the deployment network.
+Host needs **Docker**, **docker-compose**, and **Python 3.10+** with `requests`.
 
-## Agent guardrails (token efficiency)
+## Agent guardrails
 
-- **Prefer the orchestrator** — run `scripts/deploy_scenescape.sh` once; read stdout and
-  `<deploy_dir>/deploy.log` only on failure.
-- **Do not read** `references/docker-compose-template.md`, `queuing-config.json`, or repo
-  `sample_data/` unless troubleshooting a template bug.
-- **Do not** dump raw `docker compose logs`; use `scripts/check_video_analytics.sh` and
-  `docker compose logs <svc> --tail 30` with grep.
-- **Do not modify** generated `docker-compose.yml` in the deploy dir — fix the skill template
-  upstream instead.
-- **Resume by default** — if `<deploy_dir>/.deploy-state.json` exists, use `--resume` (default);
-  use `--fresh` only when inputs change or the user requests a clean redeploy.
-- Load `references/runtime-verification.md` only when a step fails.
+- **Step 1 is mandatory on a new deploy** — ask the user for `streams`, `camera_ids`, and
+  `scene_name`. Do not assume values from prior sessions, sample data, or running containers.
+- **Prefer the orchestrator** after inputs are confirmed; read `deploy.log` only on failure.
+- **Do not read** `docker-compose-template.md` or `sample_data/` unless troubleshooting a
+  template bug. Pipeline generation is defined in `pipeline-config.md`.
+- **Do not** dump raw `docker compose logs`; use `check_video_analytics.sh` with grep.
+- **Resume** with `--deploy-dir` only when `deploy-inputs.json` exists; use `--fresh` when
+  cameras or streams change.
+- Load troubleshooting references only when a step fails.
 
-## Step 1 — Gather inputs
+## Step 1 — Gather inputs (required)
 
-| Input | Description |
-|-------|-------------|
-| `deploy_dir` | Writable output directory (e.g. `~/deployment`) |
-| `streams` | RTSP URL per camera, in order |
-| `camera_ids` | Unique IDs (no `/`), same order as streams |
-| `scene_name` | Human-readable scene name |
+Ask the user for every new deployment:
 
-Validate: `len(streams) == len(camera_ids)`, ≥1 camera. The skill does **not** start MediaMTX
-or `queuing-cams`; simulators must already be reachable on the SceneScape Docker network.
+| Input | Rules |
+|-------|-------|
+| `deploy_dir` | Writable directory for generated files |
+| `streams` | One RTSP/RTSPS URL per camera, user-provided, in order |
+| `camera_ids` | Unique IDs (no `/`), same order as `streams` |
+| `scene_name` | Human-readable scene name chosen by the user |
 
-Superuser password: auto-generated to `<deploy_dir>/secrets/supass` during bootstrap.
+Validate: `len(streams) == len(camera_ids)`, ≥1 camera, valid RTSP URLs.
+
+Persist before automation:
+
+```bash
+python3 <skill-dir>/scripts/deploy_inputs.py write \
+  --deploy-dir <deploy_dir> \
+  --scene-name <scene_name> \
+  --camera-ids <id> [<id> ...] \
+  --streams <rtsp_url> [<rtsp_url> ...] \
+  --skill-dir <skill-dir>
+```
+
+Writes `<deploy_dir>/deploy-inputs.json` — the source of truth for all later steps.
+Pipeline adaptation reads RTSP URLs from the downloaded template entry per camera; it does not
+hardcode simulator hostnames or camera names.
 
 ## Orchestrator (steps 2–13)
 
-From the scenescape repo (or copied skill tree), run:
+After Step 1, run:
 
 ```bash
 SKILL_DIR=<path-to-scenescape>/.github/skills/scenescape-setup
@@ -50,49 +61,51 @@ SKILL_DIR=<path-to-scenescape>/.github/skills/scenescape-setup
 bash "$SKILL_DIR/scripts/deploy_scenescape.sh" \
   --deploy-dir <deploy_dir> \
   --skill-dir "$SKILL_DIR" \
-  --streams <rtsp_url> [<rtsp_url> ...] \
-  --camera-ids <id> [<id> ...] \
+  --streams <rtsp_url> [...] \
+  --camera-ids <id> [...] \
   --scene-name <scene_name>
 ```
 
-Options:
+**Resume** (inputs loaded from `deploy-inputs.json` when omitted):
+
+```bash
+bash "$SKILL_DIR/scripts/deploy_scenescape.sh" \
+  --deploy-dir <deploy_dir> \
+  --skill-dir "$SKILL_DIR"
+```
 
 | Flag | Purpose |
 |------|---------|
-| `--phase all` | Full deploy (default) |
-| `--phase bootstrap` | Steps 6–8 only |
-| `--phase calibrate` | Steps 9–10 |
-| `--phase scene` | Steps 11–13 |
-| `--resume` | Continue from `<deploy_dir>/.deploy-state.json` (default) |
-| `--fresh` | Ignore checkpoint and restart |
+| `--phase all\|bootstrap\|calibrate\|scene` | Limit steps (default `all`) |
+| `--resume` | Continue from `.deploy-state.json` (default) |
+| `--fresh` | Clear checkpoint and `deploy-inputs.json`; requires new Step 1 inputs |
 
-**Pass:** final line includes `DEPLOY COMPLETE` with `scene_uid`. **Fail:** inspect
-`<deploy_dir>/deploy.log` and load the troubleshooting reference for the failed step.
+**Pass:** `DEPLOY COMPLETE` with `scene_uid`. **Fail:** `deploy.log` + step reference below.
 
 ### Step map
 
-| Step | Script / action | Pass |
-|------|-----------------|------|
-| 6 | `bootstrap_deploy.py` | `secrets/`, `.env`, `docker-compose.yml` exist |
-| 7 | `parallel_warmup.sh`, `download_detection_models.sh`, `verify_rtsp.sh`, `check_video_analytics.sh` | RTSP `PASS`, pipelines started |
-| 8 | `docker compose --profile mapping up -d` | `broker`, `ntpserv`, `pgserver`, `web`, `scene`, `mapping` up |
-| 9 | `capture_calibration_frames.py` | Valid JPEG per camera |
-| 10 | `check_mapping_health.sh` | `model_loaded` or `status: healthy` |
-| 11–12 | `reconstruct_and_finalize.py` | `Done. Scene UID: …` |
-| 13 | `verify_tracking.sh` | ≥1 object on regulated topic |
+| Step | Action | Pass |
+|------|--------|------|
+| 1 | `deploy_inputs.py write` | `deploy-inputs.json` valid |
+| 6 | `bootstrap_deploy.py --from-deploy-inputs` | secrets, compose, pipeline config |
+| 7 | warmup, `verify_rtsp.sh`, `check_video_analytics.sh` | RTSP + pipelines |
+| 8 | full stack `up` | core services running |
+| 9 | `capture_calibration_frames.py` | JPEG per **user** camera ID |
+| 10 | `check_mapping_health.sh` | mapping healthy |
+| 11–12 | `reconstruct_and_finalize.py --scene-name` | scene UID |
+| 13 | `verify_tracking.sh` | objects on regulated topic |
 
-Checkpoint file: `<deploy_dir>/.deploy-state.json` (`last_completed_step`, `scene_uid`,
-`frames_dir`).
+Checkpoints: `.deploy-state.json` (progress), `deploy-inputs.json` (user inputs).
 
 ## Phased sub-skills
 
-For partial runs, use the focused skills (same inputs, narrower `--phase`):
+| Skill | Phase |
+|-------|-------|
+| [scenescape-setup-bootstrap](../scenescape-setup-bootstrap/SKILL.md) | steps 6–8 |
+| [scenescape-setup-calibrate](../scenescape-setup-calibrate/SKILL.md) | steps 9–10 |
+| [scenescape-setup-scene](../scenescape-setup-scene/SKILL.md) | steps 11–13 |
 
-| Skill | Phase | Steps |
-|-------|-------|-------|
-| [scenescape-setup-bootstrap](../scenescape-setup-bootstrap/SKILL.md) | `bootstrap` | 6–8 |
-| [scenescape-setup-calibrate](../scenescape-setup-calibrate/SKILL.md) | `calibrate` | 9–10 |
-| [scenescape-setup-scene](../scenescape-setup-scene/SKILL.md) | `scene` | 11–13 |
+Each sub-skill still requires user inputs (or `deploy-inputs.json` on resume).
 
 ## On failure
 
@@ -102,12 +115,10 @@ For partial runs, use the focused skills (same inputs, narrower `--phase`):
 | 11–12 | [reconstruction.md](./references/reconstruction.md) |
 | 13 | [verify-tracking.md](./references/verify-tracking.md) |
 
-Manual API details: [scene-and-cameras.md](./references/scene-and-cameras.md),
-[pipeline-config.md](./references/pipeline-config.md).
+[pipeline-config.md](./references/pipeline-config.md) — how template adaptation works.
 
 ## Prerequisites
 
-- Network access to GitHub (sparse checkout of `dlstreamer-pipeline-server`)
-- Corporate proxy: set `http_proxy` / `https_proxy` / `no_proxy`; RTSP Docker hostnames are
-  appended via `write_deployment_env.py --append-no-proxy`
-- TLS certs auto-generated in step 6
+- GitHub access (sparse checkout of `dlstreamer-pipeline-server`)
+- Proxy: `http_proxy` / `https_proxy` / `no_proxy`; RTSP Docker hostnames appended automatically
+- TLS certs generated in step 6; superuser password in `secrets/supass`
