@@ -4,13 +4,14 @@
     {
       "id": 1,
       "prompt": "Add a functional pytest that verifies an MQTT detection publish produces a tracking message on the live Scenescape stack. Put it under tests/functional/. Include a happy path and a failure/negative case. Use Zephyr ID NEX-T20999.",
-      "expected_output": "Agent treats this as functional test authoring: reads testing skill references for functional tests, places the file under tests/functional/, declares SCENESCAPE_SPEC with FuncTestSpec and a ServiceProfile (e.g. FULL_STACK) plus AUTH_CONTROLLER, sets TEST_NAME/NEX-T20999, uses scenescape_env/params (not mocks for MQTT/REST), includes positive and negative cases, and plans narrow pytest verification via the test-verification-gate (not lint-only). Note: if the harness forbids starting containers, assertions grade the proposed test module and verification command rather than requiring a live pass.",
+      "expected_output": "Agent treats this as functional test authoring: reads testing skill references for functional tests, places the file under tests/functional/, declares SCENESCAPE_SPEC with FuncTestSpec and a ServiceProfile (e.g. FULL_STACK) plus AUTH_CONTROLLER, sets TEST_NAME via @pytest.mark.test_name, uses scenescape_env/params (not mocks for MQTT/REST), Uses the result_recorder fixture for Zephyr result reporting, includes positive and negative cases, and plans narrow pytest verification via the test-verification-gate (not lint-only). Note: if the harness forbids starting containers, assertions grade the proposed test module and verification command rather than requiring a live pass.",
       "should_trigger": true,
       "files": [],
       "assertions": [
         "Places the new test under tests/functional/ with a test_*.py filename",
         "Declares module-level SCENESCAPE_SPEC = FuncTestSpec(...) with a ServiceProfile from tests/utils/profiles.py and auth=AUTH_CONTROLLER (or equivalent controller auth)",
-        "Sets Zephyr tracking via TEST_NAME and/or record_xml_attribute using NEX-T20999",
+        "Sets Zephyr tracking via @pytest.mark.test_name("NEX-T#####")",
+        "Calls result_recorder.success() on the successful execution path",
         "Uses scenescape_env (and typically params) so Docker Compose lifecycle is fixture-managed rather than hand-started compose",
         "Does not mock MQTT/REST/DB for this functional test; exercises the live stack",
         "Includes both a positive (happy path) case and at least one negative or failure case",
@@ -70,7 +71,7 @@
         "Declares SCENESCAPE_SPEC with auth=AUTH_BROWSER (not AUTH_CONTROLLER)",
         "Uses Browser / common_ui_test_utils (or equivalent existing UI helpers) rather than inventing a new browser stack",
         "Marks the test with @pytest.mark.basic_acceptance",
-        "Sets Zephyr ID NEX-T21000 via TEST_NAME and/or record_xml_attribute",
+        "Sets Zephyr ID NEX-T21000 via @pytest.mark.test_name",
         "Plans verification with a narrow pytest path under tests/ui/ rather than only make run_ui_tests as the first choice"
       ]
     },

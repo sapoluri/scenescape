@@ -34,13 +34,13 @@ SCENESCAPE_ENV_MATRIX = {
   "full_stack": "NEX-T10404",
 }
 
-TEST_NAME = "NEX-T10404"
 
 @pytest.mark.basic_acceptance
-def test_roi_create(scenescape_env, demo_scene, request, record_xml_attribute):
+@pytest.mark.test_name("NEX-T10404")
+def test_roi_create(scenescape_env, demo_scene, request, result_recorder):
   test_name = getattr(request.node, '_scenescape_test_name', TEST_NAME)
   # ... exercise MQTT/REST against live stack ...
-  assert True
+  result_recorder.success()
 ```
 
 ## FuncTestSpec fields
@@ -52,7 +52,6 @@ Defined in `tests/utils/spec.py`:
 | `profile` | `ServiceProfile` from `tests/utils/profiles.py` |
 | `auth` | `AUTH_CONTROLLER` or `AUTH_BROWSER` |
 | `require_password` | Default `True` |
-| `test_name` | Optional NEX ID for XML reporting |
 | `extra_args` | Extra `--key value` pairs for params |
 | `exampledb` | Override baseline DB (e.g. `calibrationdb.tar.bz2`) |
 
