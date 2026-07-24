@@ -40,7 +40,6 @@ def _parseTrustedSources(value):
     return frozenset()
   return frozenset(item.strip() for item in value.split(',') if item.strip())
 
-
 def _parseExternalSourceBindings(value):
   """Parse manual publisher→scene bindings.
 
@@ -962,6 +961,13 @@ class SceneController:
         for camera in scene.cameras:
           need_subscribe.add((PubSub.formatTopic(PubSub.DATA_CAMERA, camera_id=camera),
                               self.handleMovingObjectMessage))
+        # Subscribe on behalf of this scene so external sources (physical
+        # agents, positioning services) can publish observations directly
+        # into it via 'scenescape/external/{scene.uid}/{thing_type}',
+        # identifying themselves with 'source_id' in the payload.
+        need_subscribe.add((PubSub.formatTopic(PubSub.DATA_EXTERNAL,
+                                              scene_id=scene.uid, thing_type="+"),
+                            self.handleMovingObjectMessage))
       else:
         need_subscribe.add((PubSub.formatTopic(PubSub.DATA_SCENE, scene_id=scene.uid, thing_type="+"),
                             self.handleSceneDataMessage))
