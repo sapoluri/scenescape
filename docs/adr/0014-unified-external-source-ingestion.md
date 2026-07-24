@@ -104,11 +104,11 @@ publisher’s geopose (and policy), which scene(s) should be bound?
 
 Critical split of responsibility:
 
-| Component | Does | Does not |
-| --------- | ---- | -------- |
-| **Agent / publisher** | Discovers the fabric (broker and/or registry by logical name); authenticates (same-CA base case); publishes only under `external/{its_id}/…` | Choose a scene topic path; encode scene membership in MQTT destination |
-| **Registry** | Holds scene catalog + spatial index; resolves publisher pose → candidate scene set (overlap, handoff, priority policy) | Require the agent to republish to a different topic |
-| **Binder** (controller today, or dedicated component) | Applies registry (or static/manual) results: upsert/drop bindings; update MQTT subscription / ingest routing | Invent scene topology independently of registry once registry is present |
+| Component                                             | Does                                                                                                                                         | Does not                                                                 |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Agent / publisher**                                 | Discovers the fabric (broker and/or registry by logical name); authenticates (same-CA base case); publishes only under `external/{its_id}/…` | Choose a scene topic path; encode scene membership in MQTT destination   |
+| **Registry**                                          | Holds scene catalog + spatial index; resolves publisher pose → candidate scene set (overlap, handoff, priority policy)                       | Require the agent to republish to a different topic                      |
+| **Binder** (controller today, or dedicated component) | Applies registry (or static/manual) results: upsert/drop bindings; update MQTT subscription / ingest routing                                 | Invent scene topology independently of registry once registry is present |
 
 The registry therefore determines **which scenes the binder should interact with** to keep its
 subscription list correct. It does **not** tell the agent “publish to scene X’s inbox.”

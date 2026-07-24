@@ -72,8 +72,8 @@ fields and examples; do not invent alternate shapes.
      scene is geo-referenced.
    - `scene` — pose already in scene-local coordinates; privileged and rejected
      unless the `source_id` is trusted for positioning.
-   Details:
-   [External Source Pose Fields](../microservices/controller/data_formats.md#external-source-pose-fields-pose).
+     Details:
+     [External Source Pose Fields](../microservices/controller/data_formats.md#external-source-pose-fields-pose).
 
 4. **Map each native observation** to an `objects[*]` entry with a required
    string `id`, `category`, and `translation` in the **source's local frame**
