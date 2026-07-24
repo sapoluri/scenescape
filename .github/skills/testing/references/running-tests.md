@@ -27,11 +27,10 @@ pytest tests/functional/test_roi_mqtt.py
 pytest tests/ui/test_out_of_box.py
 pytest tests/ -m basic_acceptance
 
-# Backends / profiles / logs
+# Backends / logs
 pytest tests/functional --backend=docker          # default
 pytest tests/functional --backend=kubernetes
 pytest tests/functional --backend=all
-pytest tests/functional/test_roi_mqtt.py --env-profiles=full_stack,full_stack_with_mapping
 pytest tests/functional --collect-container-logs=failed   # default
 pytest tests/functional --collect-container-logs=all
 pytest tests/functional --collect-container-logs=none

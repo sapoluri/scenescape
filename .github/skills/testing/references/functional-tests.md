@@ -29,12 +29,6 @@ SCENESCAPE_SPEC = FuncTestSpec(
   auth=AUTH_CONTROLLER,
 )
 
-# Optional: Zephyr IDs when using --env-profiles
-SCENESCAPE_ENV_MATRIX = {
-  "full_stack": "NEX-T10404",
-}
-
-
 @pytest.mark.basic_acceptance
 @pytest.mark.test_name("NEX-T10404")
 def test_roi_create(scenescape_env, demo_scene, request, result_recorder):
@@ -54,12 +48,6 @@ Defined in `tests/utils/spec.py`:
 | `require_password` | Default `True` |
 | `extra_args` | Extra `--key value` pairs for params |
 | `exampledb` | Override baseline DB (e.g. `calibrationdb.tar.bz2`) |
-
-## Multi-profile runs
-
-```bash
-pytest tests/functional/test_roi_mqtt.py --env-profiles=full_stack,full_stack_with_mapping
-```
 
 ## Integration-style tests
 

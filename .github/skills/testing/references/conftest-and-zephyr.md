@@ -19,7 +19,7 @@ Owns session lifecycle:
 
 ## Functional `tests/functional/conftest.py`
 
-Adds functional helpers (`rest`, `scene_uid`, etc.), `--env-profiles` matrix via `pytest_generate_tests`, and related setup fixtures.
+Adds functional helpers (`rest`, `scene_uid`, etc.) and related setup fixtures.
 
 ## Unit-test Zephyr hooks (when using a local conftest)
 
