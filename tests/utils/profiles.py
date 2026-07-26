@@ -151,6 +151,31 @@ REID = ServiceProfile(
   },
 )
 
+REID_QDRANT = ServiceProfile(
+  name="reid_qdrant",
+  compose_files=(
+    f"{DLS}/compose-broker.yml",
+    f"{COMPOSE}/compose-ntp.yml",
+    f"{COMPOSE}/compose-pgserver.yml",
+    f"{COMPOSE}/compose-qdrant.yml",
+    f"{DLS}/compose-retail_video_reid.yml",
+    f"{DLS}/compose-queuing_video_reid.yml",
+    f"{COMPOSE}/compose-scene_reid_qdrant.yml",
+    f"{COMPOSE}/compose-web_default.yml",
+    f"{COMPOSE}/compose-cams.yml",
+  ),
+  wait_for={
+    "broker": _BROKER,
+    "ntpserv": WaitConfig(),
+    "pgserver": _PGSERVER,
+    "qdrant": WaitConfig(),
+    "web": _WEB,
+    "queuing-video": WaitConfig(),
+    "retail-video": WaitConfig(),
+    "scene": _SCENE,
+  },
+)
+
 REID_SEMANTIC = ServiceProfile(
   name="reid_semantic",
   compose_files=(
@@ -265,6 +290,7 @@ PROFILE_REGISTRY: dict = {
     FULL_STACK_WITH_MAPPING_AND_VIDEO,
     FULL_STACK_WITH_VIDEO_AND_RETAIL,
     REID,
+    REID_QDRANT,
     REID_SEMANTIC,
     FULL_STACK_AUTOCALIBRATION,
     FULL_STACK_AUTOCALIBRATION_NO_APRILTAGS,

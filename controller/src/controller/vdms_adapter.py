@@ -10,6 +10,13 @@ import numpy as np
 import vdms
 
 from controller.reid import ReIDDatabase
+from controller.reid_constants import (
+  COSINE_SIMILARITY_TOLERANCE,
+  K_NEIGHBORS,
+  SCHEMA_NAME,
+  SIMILARITY_METRIC,
+)
+from controller.reid_constraints import build_query_constraints
 from scene_common import log
 
 DEFAULT_HOSTNAME = os.getenv("VDMS_HOSTNAME", "vdms.scenescape.intel.com")
@@ -18,12 +25,6 @@ DEFAULT_CA_CERT = os.getenv("VDMS_CA_CERT", "/run/secrets/certs/scenescape-ca.pe
 DEFAULT_CLIENT_CERT = os.getenv("VDMS_CLIENT_CERT", "/run/secrets/certs/scenescape-vdms-c.crt")
 DEFAULT_CLIENT_KEY = os.getenv("VDMS_CLIENT_KEY", "/run/secrets/certs/scenescape-vdms-c.key")
 DIMENSIONS = 256
-K_NEIGHBORS = 1
-SCHEMA_NAME = "reid_vector"
-SIMILARITY_METRIC = "L2"
-# Tolerance applied to the theoretical [-1, 1] IP score bounds to absorb
-# float32 rounding errors from VDMS normalization and inner-product computation.
-COSINE_SIMILARITY_TOLERANCE = 1e-6
 SCHEMA_MARKER_CLASS = "ReidSchemaMarker"
 
 class VDMSDatabase(ReIDDatabase):
@@ -502,82 +503,11 @@ class VDMSDatabase(ReIDDatabase):
     return None
 
   def _buildQueryConstraints(self, object_type, **constraints):
-    """
-    Build query constraints for TIER 1 metadata filtering.
-
-    VDMS constraint model: Only supports AND operations between property constraints.
-    Constraint format for each property: [operator, value] for single constraint,
-    or [op1, val1, op2, val2] for range constraint (e.g. ">=5" AND "<=10").
-
-    Constraint routing logic:
-    - Object type is always AND constraint (required field)
-    - If value is dict with 'confidence' key (new metadata format):
-      - confidence >= threshold (0.8): AND constraints (strict filtering in TIER 1)
-      - confidence < threshold (0.8): IGNORED (relies on TIER 2 vector similarity for flexible matching)
-      - Extract 'label' field for VDMS query value
-    - If value is non-dict or dict without confidence (legacy format):
-      - IGNORED (relies on TIER 2 vector similarity for matching)
-    - Non-numeric values: IGNORED (relies on TIER 2 vector similarity)
-
-    Note: Low-confidence and unspecified constraints are intentionally omitted from TIER 1
-    filtering, allowing TIER 2 vector similarity search to provide flexible,
-    confidence-aware matching. This simplification avoids VDMS limitations with complex
-    OR constraint expressions across multiple properties.
-
-    @param   object_type  Class of the object (Person, Vehicle, etc.)
-    @param   constraints  Optional metadata filters (key-value pairs, may be dicts with label/confidence)
-    @return  query_constraints  Dictionary with "type" and optional high-confidence AND fields
-    """
-    # TIER 1: Build dynamic constraints for metadata filtering
-    # Object type is always filtered (AND constraint - required)
-    query_constraints = {
-      "type": ["==", f"{object_type}"]
-    }
-
-    log.debug(f"[VDMS] Building constraints for object_type={object_type}, threshold={self.confidence_threshold}")
-    log.debug(f"[VDMS] Input constraints: {constraints}")
-
-    # Apply only high-confidence constraints
-    if constraints:
-      for key, value in constraints.items():
-        if value is None:
-          log.debug(f"[VDMS] Skipping {key}: value is None")
-          continue
-
-        # Extract actual value and confidence from metadata dict
-        actual_value = value
-        confidence = None
-
-        # Handle new metadata format: {label: <data>, model_name: <model>, confidence: <score>}
-        if isinstance(value, dict) and 'label' in value:
-          actual_value = value['label']
-          confidence = value.get('confidence', None)
-          log.debug(f"[VDMS] {key}: dict format - label={actual_value}, confidence={confidence}")
-        else:
-          log.debug(f"[VDMS] {key}: non-dict or no label - value={value}, type={type(value)}")
-
-        # Only apply high-confidence constraints (>= 0.8)
-        try:
-          # If confidence is available, check if it meets threshold
-          if confidence is not None:
-            conf_value = float(confidence)
-            # If confidence >= threshold, treat as AND constraint (strict matching)
-            if conf_value >= self.confidence_threshold:
-              query_constraints[key] = ["==", str(actual_value)]
-              log.debug(f"[VDMS] ✓ ADDED: {key}={actual_value} (confidence={conf_value} >= {self.confidence_threshold})")
-            else:
-              # If confidence < threshold, ignore (rely on TIER 2 vector similarity)
-              log.debug(f"[VDMS] ✗ IGNORED: {key} (confidence={conf_value} < {self.confidence_threshold}, will use TIER 2)")
-          else:
-            # No confidence available - skip this constraint, rely on TIER 2
-            log.debug(f"[VDMS] ✗ IGNORED: {key} (no confidence available, will use TIER 2)")
-        except (ValueError, TypeError):
-          # Confidence value not convertible to float, ignore
-          log.debug(f"[VDMS] ✗ IGNORED: {key} (confidence not convertible to float)")
-          pass
-
-    log.debug(f"[VDMS] Final TIER 1 query_constraints: {query_constraints}")
-    return query_constraints
+    """Build query constraints for TIER 1 metadata filtering."""
+    return build_query_constraints(
+      object_type,
+      confidence_threshold=self.confidence_threshold,
+      **constraints)
 
   def findMatches(self, object_type, reid_vectors, set_name=SCHEMA_NAME,
                    k_neighbors=K_NEIGHBORS, **constraints):

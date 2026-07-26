@@ -21,14 +21,14 @@ except ImportError:
   from importlib import reload
   reload(site)
   import psutil
+from tests.functional.reid_backend import get_reid_profile_module
 from tests.utils.spec import FuncTestSpec
-from tests.utils.profiles import REID
 import pytest
 
 log = get_logger(__name__)
 
 SCENESCAPE_SPEC = FuncTestSpec(
-  profile=REID,
+  profile=get_reid_profile_module(),
 )
 
 TEST_NAME = "NEX-T10541"
@@ -37,7 +37,7 @@ TEST_WAIT_TIME = 2 * 60 * 60  # 2 hours in seconds
 class REIDPerformanceDegradation(BackendFunctionalTest):
   def __init__(self, testName, request, recordXMLAttribute):
     super().__init__(testName, request, recordXMLAttribute)
-    self.vdms_connect()
+    self.reid_connect()
 
     self.connected = False
     self.scenes_updates = {

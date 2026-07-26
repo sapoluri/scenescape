@@ -23,13 +23,17 @@ from scene_common.mqtt import PubSub
 from scene_common.timestamp import get_iso_time
 from tests.utils.log import get_logger
 
-from controller.vdms_adapter import VDMSDatabase, vdms
+from tests.functional.reid_backend import (
+  ensure_reid_schema,
+  get_reid_profile_module,
+  query_reid_count,
+  wait_for_reid_backend_ready,
+)
 from tests.utils.spec import FuncTestSpec
-from tests.utils.profiles import REID
 log = get_logger(__name__)
 
 SCENESCAPE_SPEC = FuncTestSpec(
-  profile=REID,
+  profile=get_reid_profile_module(),
 )
 
 
@@ -109,102 +113,16 @@ def create_mock_mqtt_message(topic_str, payload_dict):
 
 
 def wait_for_vdms_ready(use_tls=False, max_attempts=30, retry_interval=1):
-  """
-  Wait for VDMS to be ready by attempting to connect and query.
-
-  @param use_tls  Whether to use TLS connection
-  @param max_attempts  Maximum number of retry attempts
-  @param retry_interval  Seconds to wait between retries
-  @return True if VDMS is ready, False if timed out
-  """
-  for attempt in range(max_attempts):
-    try:
-      vdb = VDMSDatabase()
-      if not use_tls:
-        vdb.db = vdms.vdms(use_tls=False)
-      vdb.connect()
-
-      # Verify VDMS can handle queries
-      query = [{
-        "FindDescriptor": {
-          "set": "reid_vector",
-          "constraints": {
-            "type": ["==", "person"]
-          },
-          "results": {
-            "list": ["uuid"],
-            "blob": False
-          }
-        }
-      }]
-
-      result = vdb.db.query(query)
-      log.info(f"VDMS is ready (attempt {attempt + 1})")
-      return True
-
-    except Exception as e:
-      log.debug(f"VDMS health check attempt {attempt + 1}/{max_attempts}: {e}")
-
-    if attempt < max_attempts - 1:
-      time.sleep(retry_interval)
-
-  log.warning(f"VDMS not ready after {max_attempts} attempts")
-  return False
+  """Backward-compatible alias for wait_for_reid_backend_ready()."""
+  return wait_for_reid_backend_ready(
+    use_tls=use_tls,
+    max_attempts=max_attempts,
+    retry_interval=retry_interval)
 
 
 def query_vdms_reid_count(camera_id, scene_uid, use_tls=True):
-  """
-  Query VDMS to count reid vectors stored for a specific camera/scene.
-  The scene controller stores descriptors with properties: uuid, rvid, type.
-
-  @param camera_id  Camera UUID (unused but kept for API compatibility)
-  @param scene_uid  Scene UUID (unused but kept for API compatibility)
-  @param use_tls    Whether to use TLS connection
-  @return Number of reid vectors found
-  """
-  try:
-    vdb = VDMSDatabase()
-    if not use_tls:
-      vdb.db = vdms.vdms(use_tls=False)
-    vdb.connect()
-
-    # Query for reid vectors by type constraint
-    # The scene controller stores: uuid, rvid, type (not camera_id)
-    query = [{
-      "FindDescriptor": {
-        "set": "reid_vector",
-        "constraints": {
-          "type": ["==", "person"]
-        },
-        "results": {
-          "list": ["uuid", "rvid", "type"],
-          "blob": False
-        }
-      }
-    }]
-
-    result = vdb.db.query(query)
-    # VDMS query() returns (response, blob_array) tuple
-    if isinstance(result, tuple) and len(result) == 2:
-      response, _ = result
-    else:
-      log.error(f"VDMS query returned unexpected result type: "
-                f"{type(result)}, value: {result}")
-      return 0
-
-    if response and len(response) > 0:
-      find_result = response[0].get("FindDescriptor", {})
-      entities = find_result.get("entities", [])
-      log.info(f"VDMS query found {len(entities)} reid vectors "
-               f"for camera {camera_id}")
-      return len(entities)
-
-    log.info(f"VDMS query found 0 reid vectors for camera {camera_id}")
-    return 0
-
-  except Exception as e:
-    log.error(f"VDMS query failed: {e}")
-    return 0
+  """Backward-compatible alias for query_reid_count()."""
+  return query_reid_count("person")
 
 
 def setup_test_environment(params):
@@ -268,22 +186,15 @@ def setup_test_environment(params):
   assert connected, "Failed to connect to MQTT broker"
   log.info("Successfully connected to MQTT broker")
 
-  # Wait for VDMS to be ready using connection check
-  log.info("Waiting for VDMS to be ready...")
-  vdms_ready = wait_for_vdms_ready(use_tls=False, max_attempts=30, retry_interval=1)
-  assert vdms_ready, "VDMS failed to become ready within timeout"
-  log.info("VDMS is ready")
+  # Wait for the configured ReID backend to be ready
+  log.info("Waiting for ReID backend to be ready...")
+  backend_ready = wait_for_reid_backend_ready(use_tls=False, max_attempts=30, retry_interval=1)
+  assert backend_ready, "ReID backend failed to become ready within timeout"
+  log.info("ReID backend is ready")
 
-  # Ensure VDMS descriptor set exists
-  log.info("Ensuring VDMS descriptor set exists...")
-  vdb = VDMSDatabase()
-  vdb.db.connect("vdms.scenescape.intel.com")
-  if not vdb.findSchema("reid_vector"):
-    log.info("Creating reid_vector descriptor set...")
-    vdb.addSchema("reid_vector", "L2", 256)
-    log.info("Descriptor set created successfully")
-  else:
-    log.info("Descriptor set already exists")
+  # Ensure the ReID schema exists
+  log.info("Ensuring ReID schema exists...")
+  ensure_reid_schema()
 
   topic_str = f"scenescape/data/camera/{camera_id}"
   return rest, scene_uid, scene_name, camera_id, pubsub, topic_str

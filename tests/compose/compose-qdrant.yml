@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+networks:
+  scenescape-test:
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    init: true
+    ports:
+      - "6333:6333"
+    networks:
+      scenescape-test:
+        aliases:
+          - qdrant.scenescape.intel.com
+    restart: always
