@@ -84,14 +84,14 @@ class QdrantDatabase(ReIDDatabase):
 
   def _toSimilarityScore(self, qdrant_score):
     """
-    Convert Qdrant search score to VDMS-compatible _distance semantics.
+    Convert Qdrant query score to VDMS-compatible _distance semantics.
 
-    Qdrant returns negative distance for Euclidean metrics and the raw dot
-    product for DOT metrics.
+    query_points returns positive Euclidean distance and the raw dot product
+    for DOT metrics. Older search() returned negative Euclidean distance.
     """
     if self._usesInnerProductMetric():
       return float(qdrant_score)
-    return float(-qdrant_score)
+    return float(abs(qdrant_score))
 
   def _createClient(self):
     return QdrantClient(
@@ -100,6 +100,7 @@ class QdrantDatabase(ReIDDatabase):
       api_key=self.api_key,
       https=self.use_tls,
       prefer_grpc=False,
+      check_compatibility=False,
     )
 
   def connect(self, hostname=None):
@@ -492,13 +493,14 @@ class QdrantDatabase(ReIDDatabase):
     for query_vector in query_vectors:
       try:
         with self.lock:
-          hits = self.client.search(
+          response = self.client.query_points(
             collection_name=set_name,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=query_filter,
             limit=k_neighbors,
             with_payload=True,
           )
+          hits = response.points
       except Exception as e:
         log.warning(f"[Qdrant] findMatches search failed: {e}")
         result.append([])

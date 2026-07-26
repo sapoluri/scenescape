@@ -19,11 +19,11 @@ log = get_logger(__name__)
 REID_DATABASE = os.getenv("REID_DATABASE", "VDMS").strip().upper()
 
 
-def get_reid_profile_module():
+def get_reid_profile_module(semantic=False):
   from tests.utils import profiles
   if REID_DATABASE == "QDRANT":
-    return profiles.REID_QDRANT
-  return profiles.REID
+    return profiles.REID_SEMANTIC_QDRANT if semantic else profiles.REID_QDRANT
+  return profiles.REID_SEMANTIC if semantic else profiles.REID
 
 
 def create_reid_database():

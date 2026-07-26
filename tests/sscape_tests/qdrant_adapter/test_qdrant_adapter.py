@@ -127,9 +127,9 @@ class TestQdrantDataOperations:
     db = QdrantDatabase(dimensions=4, similarity_metric="L2")
     db.client = MagicMock()
     db.connected = True
-    db.client.search.return_value = [
-      MagicMock(score=-0.5, payload={"uuid": "uuid-1", "rvid": "track-1"}),
-    ]
+    db.client.query_points.return_value = MagicMock(points=[
+      MagicMock(score=0.5, payload={"uuid": "uuid-1", "rvid": "track-1"}),
+    ])
 
     vector = np.array([0.1, 0.2, 0.3, 0.4], dtype="float32")
     result = db.findMatches("person", [vector], k_neighbors=1)
@@ -144,14 +144,14 @@ class TestQdrantDataOperations:
     db = QdrantDatabase(dimensions=3, similarity_metric="IP")
     db.client = MagicMock()
     db.connected = True
-    db.client.search.return_value = [
+    db.client.query_points.return_value = MagicMock(points=[
       MagicMock(score=0.99, payload={"uuid": "uuid-1", "rvid": "track-1"}),
-    ]
+    ])
 
     vector = np.array([3.0, 4.0, 0.0], dtype="float32")
     db.findMatches("person", [vector], k_neighbors=1)
 
-    query_vector = db.client.search.call_args.kwargs["query_vector"]
+    query_vector = db.client.query_points.call_args.kwargs["query"]
     norm = np.linalg.norm(query_vector)
     assert np.isclose(norm, 1.0)
 
@@ -164,4 +164,5 @@ class TestQdrantSimilarityScoreValidation:
 
   def test_to_similarity_score_converts_euclidean_score(self):
     db = QdrantDatabase(similarity_metric="L2")
+    assert db._toSimilarityScore(2.5) == 2.5
     assert db._toSimilarityScore(-2.5) == 2.5
