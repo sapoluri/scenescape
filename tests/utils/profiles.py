@@ -32,6 +32,7 @@ class ServiceProfile:
 
 
 # Common wait configs reused across profiles
+_QDRANT = WaitConfig(log_pattern=r"Qdrant HTTP listening on 6333")
 _PGSERVER = WaitConfig(
   log_pattern="database system is ready to accept connections",
   timeout=300,
@@ -168,7 +169,7 @@ REID_QDRANT = ServiceProfile(
     "broker": _BROKER,
     "ntpserv": WaitConfig(),
     "pgserver": _PGSERVER,
-    "qdrant": WaitConfig(),
+    "qdrant": _QDRANT,
     "web": _WEB,
     "queuing-video": WaitConfig(),
     "retail-video": WaitConfig(),
@@ -211,7 +212,7 @@ REID_SEMANTIC_QDRANT = ServiceProfile(
   wait_for={
     "pgserver": _PGSERVER,
     "web": _WEB,
-    "qdrant": WaitConfig(),
+    "qdrant": _QDRANT,
     "queuing-video": WaitConfig(),
     "scene": _SCENE,
   },
