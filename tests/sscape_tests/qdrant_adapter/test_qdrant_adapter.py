@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+"""Unit tests for QdrantDatabase adapter."""
+
+import json
+import pytest
+import numpy as np
+from unittest.mock import MagicMock, patch
+
+from controller.qdrant_adapter import QdrantDatabase
+from controller.reid import ReIDDatabase
+from controller.reid_constants import SCHEMA_NAME
+
+
+class TestQdrantDatabaseInterface:
+  def test_qdrant_database_implements_reid_database(self):
+    assert issubclass(QdrantDatabase, ReIDDatabase)
+
+  def test_required_methods_exist(self):
+    required_methods = [
+      'addSchema', 'addEntry', 'findSchema', 'findMatches', 'getPersistedAttributes']
+    db = QdrantDatabase()
+    for method_name in required_methods:
+      assert hasattr(db, method_name)
+      assert callable(getattr(db, method_name))
+
+
+class TestQdrantDatabaseInitialization:
+  def test_initialization_defaults(self):
+    db = QdrantDatabase()
+    assert db.set_name == SCHEMA_NAME
+    assert db.similarity_metric == "L2"
+    assert db.dimensions is None
+    assert hasattr(db, 'lock')
+
+  def test_initialization_with_custom_parameters(self):
+    db = QdrantDatabase(set_name="custom_reid", similarity_metric="IP", dimensions=512)
+    assert db.set_name == "custom_reid"
+    assert db.similarity_metric == "IP"
+    assert db.dimensions == 512
+
+
+class TestQdrantConstraintBuilding:
+  def test_build_query_constraints_applies_high_confidence_metadata(self):
+    db = QdrantDatabase(confidence_threshold=0.8)
+    constraints = db._buildQueryConstraints(
+      "person",
+      gender={"label": "Female", "confidence": 0.95},
+      eyewear={"label": "glasses", "confidence": 0.4})
+    assert constraints["type"] == ["==", "person"]
+    assert constraints["gender"] == ["==", "Female"]
+    assert "eyewear" not in constraints
+
+  def test_build_qdrant_filter_from_constraints(self):
+    db = QdrantDatabase()
+    query_filter = db._buildQdrantFilter({
+      "type": ["==", "person"],
+      "gender": ["==", "Female"],
+    })
+    assert query_filter is not None
+    assert len(query_filter.must) == 2
+
+
+class TestQdrantSchemaManagement:
+  def test_ensure_schema_creates_collection_and_marker(self):
+    db = QdrantDatabase(dimensions=None)
+    db.client = MagicMock()
+    db.connected = True
+    db._collectionExists = MagicMock(return_value=False)
+    db._createCollection = MagicMock()
+    db._writeSchemaMarker = MagicMock()
+
+    db.ensureSchema(256)
+
+    assert db._schema_ready is True
+    assert db.dimensions == 256
+    db._createCollection.assert_called_once_with(SCHEMA_NAME, 256, "L2")
+    db._writeSchemaMarker.assert_called_once()
+
+  def test_ensure_schema_raises_on_dimension_mismatch(self):
+    db = QdrantDatabase(dimensions=None)
+    db.client = MagicMock()
+    db.connected = True
+    db._collectionExists = MagicMock(return_value=True)
+    db._readSchemaMarker = MagicMock(return_value=(True, 128, "L2"))
+
+    with pytest.raises(RuntimeError, match="has 128 dimensions"):
+      db.ensureSchema(256)
+
+
+class TestQdrantDataOperations:
+  def test_add_entry_upserts_points(self):
+    db = QdrantDatabase(dimensions=4)
+    db.client = MagicMock()
+    db.connected = True
+    vector = np.array([0.1, 0.2, 0.3, 0.4], dtype="float32")
+
+    db.addEntry("uuid-1", "track-1", "person", [vector])
+
+    db.client.upsert.assert_called_once()
+    points = db.client.upsert.call_args.kwargs["points"]
+    assert len(points) == 1
+    assert points[0].payload["uuid"] == "uuid-1"
+    assert points[0].payload["type"] == "person"
+
+  def test_get_persisted_attributes_returns_latest_payload(self):
+    db = QdrantDatabase()
+    db.client = MagicMock()
+    db.connected = True
+    db.client.scroll.return_value = ([
+      MagicMock(payload={
+        "persist": json.dumps({"gender": "Male"}),
+        "persist_timestamp": 10,
+      }),
+      MagicMock(payload={
+        "persist": json.dumps({"gender": "Female"}),
+        "persist_timestamp": 20,
+      }),
+    ], None)
+
+    result = db.getPersistedAttributes("uuid-1")
+    assert result == {"gender": "Female"}
+
+  def test_find_matches_returns_vdms_compatible_entities(self):
+    db = QdrantDatabase(dimensions=4, similarity_metric="L2")
+    db.client = MagicMock()
+    db.connected = True
+    db.client.query_points.return_value = MagicMock(points=[
+      MagicMock(score=0.5, payload={"uuid": "uuid-1", "rvid": "track-1"}),
+    ])
+
+    vector = np.array([0.1, 0.2, 0.3, 0.4], dtype="float32")
+    result = db.findMatches("person", [vector], k_neighbors=1)
+
+    assert result == [[{
+      "uuid": "uuid-1",
+      "rvid": "track-1",
+      "_distance": 0.5,
+    }]]
+
+  def test_find_matches_normalizes_ip_vectors(self):
+    db = QdrantDatabase(dimensions=3, similarity_metric="IP")
+    db.client = MagicMock()
+    db.connected = True
+    db.client.query_points.return_value = MagicMock(points=[
+      MagicMock(score=0.99, payload={"uuid": "uuid-1", "rvid": "track-1"}),
+    ])
+
+    vector = np.array([3.0, 4.0, 0.0], dtype="float32")
+    db.findMatches("person", [vector], k_neighbors=1)
+
+    query_vector = db.client.query_points.call_args.kwargs["query"]
+    norm = np.linalg.norm(query_vector)
+    assert np.isclose(norm, 1.0)
+
+
+class TestQdrantSimilarityScoreValidation:
+  def test_is_valid_similarity_score_rejects_out_of_range_ip(self):
+    db = QdrantDatabase(similarity_metric="IP")
+    assert db._isValidSimilarityScore(0.5) is True
+    assert db._isValidSimilarityScore(1.5) is False
+
+  def test_to_similarity_score_converts_euclidean_score(self):
+    db = QdrantDatabase(similarity_metric="L2")
+    assert db._toSimilarityScore(2.5) == 2.5
+    assert db._toSimilarityScore(-2.5) == 2.5

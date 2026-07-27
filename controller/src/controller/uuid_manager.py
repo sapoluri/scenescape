@@ -3,17 +3,20 @@
 
 import collections
 import concurrent.futures
+import os
 import threading
 import math
 
 import numpy as np
 
-from controller.vdms_adapter import VDMSDatabase, COSINE_SIMILARITY_TOLERANCE
+from controller.qdrant_adapter import QdrantDatabase
+from controller.reid_constants import COSINE_SIMILARITY_TOLERANCE
+from controller.vdms_adapter import VDMSDatabase
 from controller.moving_object import ReidState, MovingObject
 from scene_common import log
 from scene_common.timestamp import get_epoch_time
 
-DEFAULT_DATABASE = "VDMS"
+DEFAULT_DATABASE = os.getenv("REID_DATABASE", "VDMS").strip().upper()
 DEFAULT_SIMILARITY_THRESHOLD_L2 = 40.0
 DEFAULT_SIMILARITY_THRESHOLD_COSINE = 0.5
 DEFAULT_MINIMUM_BBOX_AREA = 5000
@@ -29,6 +32,7 @@ SUPPORTED_SIMILARITY_METRICS = {"COSINE", "L2"}
 # float32 rounding errors from VDMS normalization and inner-product computation.
 available_databases = {
   "VDMS": VDMSDatabase,
+  "QDRANT": QdrantDatabase,
 }
 
 class UUIDManager:
@@ -78,7 +82,7 @@ class UUIDManager:
       raise ValueError("similarity_threshold for L2 must be non-negative")
     return normalized_threshold
 
-  def __init__(self, database=DEFAULT_DATABASE, reid_config_data=None):
+  def __init__(self, database=None, reid_config_data=None):
     self.active_ids = {}
     self.active_ids_lock = threading.Lock()
     self.active_query = {}
@@ -92,6 +96,13 @@ class UUIDManager:
     # ReID embedding dimensions are inferred from the first observed embedding.
     if reid_config_data is None:
       reid_config_data = {}
+    if database is None:
+      database = DEFAULT_DATABASE
+    database = str(database).strip().upper()
+    if database not in available_databases:
+      supported = sorted(available_databases)
+      raise ValueError(
+        f"Unsupported REID database '{database}'. Supported values: {supported}")
     self._inferred_dimensions = None
     self._dimensions_lock = threading.Lock()
     self.reid_database = available_databases[database](dimensions=None)
