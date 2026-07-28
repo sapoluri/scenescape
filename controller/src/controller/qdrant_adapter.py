@@ -54,10 +54,11 @@ class QdrantDatabase(ReIDDatabase):
     self._schema_ready = False
     return
 
-  def _usesInnerProductMetric(self):
+  def _usesInnerProductMetric(self, metric=None):
     """Return True when descriptor metric is Inner Product."""
-    metric = str(self.similarity_metric).strip().upper()
-    return metric == "IP"
+    if metric is None:
+      metric = self.similarity_metric
+    return str(metric).strip().upper() == "IP"
 
   def _isValidSimilarityScore(self, score):
     """Validate similarity score according to active metric semantics."""
@@ -76,11 +77,18 @@ class QdrantDatabase(ReIDDatabase):
 
     return True
 
-  def _qdrantDistance(self):
-    """Map configured descriptor metric to Qdrant distance function."""
-    if self._usesInnerProductMetric():
+  def _qdrantDistance(self, metric=None):
+    """Map descriptor metric to Qdrant distance function."""
+    if self._usesInnerProductMetric(metric):
       return models.Distance.DOT
     return models.Distance.EUCLID
+
+  @staticmethod
+  def _metricFromQdrantDistance(distance):
+    """Map Qdrant distance function back to descriptor metric name."""
+    if distance == models.Distance.DOT:
+      return "IP"
+    return "L2"
 
   def _toSimilarityScore(self, qdrant_score):
     """
@@ -137,10 +145,10 @@ class QdrantDatabase(ReIDDatabase):
 
   def _createCollection(self, collection_name, dimensions, metric):
     self._ensureClient()
-    distance = models.Distance.DOT if str(metric).strip().upper() == "IP" else models.Distance.EUCLID
     self.client.create_collection(
       collection_name=collection_name,
-      vectors_config=models.VectorParams(size=dimensions, distance=distance),
+      vectors_config=models.VectorParams(
+        size=dimensions, distance=self._qdrantDistance(metric)),
     )
 
   def _ensureMarkerCollection(self):
@@ -428,11 +436,8 @@ class QdrantDatabase(ReIDDatabase):
     try:
       collection = self.client.get_collection(set_name)
       schema_dimensions = collection.config.params.vectors.size
-      distance = collection.config.params.vectors.distance
-      if distance == models.Distance.DOT:
-        schema_metric = "IP"
-      else:
-        schema_metric = "L2"
+      schema_metric = self._metricFromQdrantDistance(
+        collection.config.params.vectors.distance)
       return True, int(schema_dimensions), schema_metric
     except Exception as e:
       log.warning(f"findSchemaMetadata: Failed to read collection '{set_name}': {e}")
