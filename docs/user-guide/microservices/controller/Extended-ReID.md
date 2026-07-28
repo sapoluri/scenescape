@@ -130,15 +130,15 @@ Result: "Find strong age-gender matches, refined by vector similarity"
 
 Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` selects which adapter runs.
 
-| Variable | Purpose | Default |
-| -------- | ------- | ------- |
-| `REID_DATABASE` | Backend (`VDMS` or `QDRANT`) | `VDMS` |
-| `REID_HOSTNAME` | Database host | `reid.scenescape.intel.com` |
-| `REID_PORT` | Database port | `55555` |
-| `REID_USE_TLS` | TLS on/off | `true` |
-| `REID_API_KEY` | Optional API key | unset |
-| `REID_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold | `0.8` |
-| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS paths | `scenescape-ca.pem` / `scenescape-reid.crt` / `scenescape-reid.key` |
+| Variable                                                | Purpose                              | Default                                                             |
+| ------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
+| `REID_DATABASE`                                         | Backend (`VDMS` or `QDRANT`)         | `VDMS`                                                              |
+| `REID_HOSTNAME`                                         | Database host                        | `reid.scenescape.intel.com`                                         |
+| `REID_PORT`                                             | Database port                        | `55555`                                                             |
+| `REID_USE_TLS`                                          | TLS on/off                           | `true`                                                              |
+| `REID_API_KEY`                                          | Optional API key                     | unset                                                               |
+| `REID_CONFIDENCE_THRESHOLD`                             | TIER 1 metadata confidence threshold | `0.8`                                                               |
+| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS paths                     | `scenescape-ca.pem` / `scenescape-reid.crt` / `scenescape-reid.key` |
 
 - Values ≥ `REID_CONFIDENCE_THRESHOLD`: Included in AND constraints (strict metadata filtering)
 - Values < threshold: Ignored (rely on TIER 2 vector similarity for flexible matching)

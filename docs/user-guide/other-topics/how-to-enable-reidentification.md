@@ -119,15 +119,15 @@ By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VD
 
 Only `REID_DATABASE` selects the backend. Connection and tuning use shared `REID_*` names (adapters ignore knobs they do not need). Hostname, port, TLS, and certificate paths are the same for every backend.
 
-| Variable | Purpose | Default |
-| -------- | ------- | ------- |
-| `REID_DATABASE` | Backend selector (`VDMS` or `QDRANT`) | `VDMS` |
-| `REID_HOSTNAME` | Database host | `reid.scenescape.intel.com` |
-| `REID_PORT` | Database port | `55555` |
-| `REID_USE_TLS` | Use TLS | `true` |
-| `REID_API_KEY` | Optional API key | unset (Qdrant) |
-| `REID_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold | `0.8` |
-| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS material | `/run/secrets/certs/scenescape-ca.pem`, `scenescape-reid.crt`, `scenescape-reid.key` |
+| Variable                                                | Purpose                               | Default                                                                              |
+| ------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `REID_DATABASE`                                         | Backend selector (`VDMS` or `QDRANT`) | `VDMS`                                                                               |
+| `REID_HOSTNAME`                                         | Database host                         | `reid.scenescape.intel.com`                                                          |
+| `REID_PORT`                                             | Database port                         | `55555`                                                                              |
+| `REID_USE_TLS`                                          | Use TLS                               | `true`                                                                               |
+| `REID_API_KEY`                                          | Optional API key                      | unset (Qdrant)                                                                       |
+| `REID_CONFIDENCE_THRESHOLD`                             | TIER 1 metadata confidence threshold  | `0.8`                                                                                |
+| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS material                   | `/run/secrets/certs/scenescape-ca.pem`, `scenescape-reid.crt`, `scenescape-reid.key` |
 
 Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 

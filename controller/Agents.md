@@ -68,9 +68,10 @@ The **Scene Controller** is the central runtime state management service for Sce
 9. **`reid_constraints.py` / `reid_env.py`**: Shared TIER 1 constraint builder and `REID_*` environment resolution
 
 10. **`data_source.py`**: Data source abstraction
-   - Camera feed management
-   - RTSP stream handling
-   - Frame synchronization
+
+- Camera feed management
+- RTSP stream handling
+- Frame synchronization
 
 11. **`detections_builder.py`**: Detection message processing
     - Parse incoming detector messages
