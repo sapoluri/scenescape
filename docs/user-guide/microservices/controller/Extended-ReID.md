@@ -128,13 +128,19 @@ Result: "Find strong age-gender matches, refined by vector similarity"
 
 **Environment variables**:
 
+- `REID_DATABASE`: Vector database backend: `VDMS` (default) or `QDRANT`
+  - To switch backends in a deployment, see [Switching the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#switching-the-reid-vector-database-backend-vdms--qdrant)
 - `VDMS_HOSTNAME`: VDMS server hostname (default: `vdms.scenescape.intel.com`)
-- `REID_DATABASE`: Vector database backend (default: `VDMS`)
 - `VDMS_CONFIDENCE_THRESHOLD`: Minimum confidence for applying constraints in TIER 1 (default: `0.8`)
   - Values ≥ threshold: Included in AND constraints (strict metadata filtering)
   - Values < threshold: Ignored (rely on TIER 2 vector similarity for flexible matching)
   - Valid range: 0.0 to 1.0
   - Example: Set to `0.7` to include more metadata filters, `0.9` for stricter filtering
+- `QDRANT_HOSTNAME`: Qdrant hostname (default: `qdrant.scenescape.intel.com`)
+- `QDRANT_PORT`: Qdrant HTTP port (default: `6333`)
+- `QDRANT_USE_TLS`: Use HTTPS for Qdrant (`true`/`false`, default: `false`)
+- `QDRANT_API_KEY`: Optional Qdrant API key
+- `QDRANT_CONFIDENCE_THRESHOLD`: Same role as `VDMS_CONFIDENCE_THRESHOLD` for the Qdrant adapter (falls back to `VDMS_CONFIDENCE_THRESHOLD` if unset)
 
 ## Configuring Confidence Threshold
 

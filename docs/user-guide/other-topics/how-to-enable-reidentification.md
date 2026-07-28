@@ -81,6 +81,67 @@ This reidentification-specific configuration uses a vision pipeline that include
 
 ---
 
+## Switching the ReID Vector Database Backend (VDMS → Qdrant)
+
+By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VDMS`). You can switch the Scene Controller to **Qdrant** without changing the camera ReID pipeline.
+
+### Prerequisites
+
+- ReID is already enabled (feature extraction pipeline and `reid-config.json` as in the steps above).
+- You can edit Compose files or pass an override file when starting services.
+
+### Steps
+
+1. **Stop the stack** if it is running (include `--profile vdms` if VDMS was enabled):
+
+   ```bash
+   docker compose --profile controller --profile vdms down
+   ```
+
+2. **Start with the Qdrant override** instead of the VDMS profile. From the directory that contains your Compose files (for the out-of-box DL Streamer example, use `sample_data/`):
+
+   ```bash
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.qdrant-override.yml \
+     --profile controller up
+   ```
+
+   The override ([docker-compose.qdrant-override.yml](/sample_data/docker-compose.qdrant-override.yml)):
+
+   - Starts a `qdrant` service (`qdrant.scenescape.intel.com`)
+   - Sets `REID_DATABASE=QDRANT` on the `scene` service
+   - Configures `QDRANT_HOSTNAME`, `QDRANT_PORT`, and `QDRANT_USE_TLS`
+
+3. **Do not pass `--profile vdms`** unless you intentionally want VDMS running in parallel. The controller uses only the backend named by `REID_DATABASE`.
+
+### Environment variables (Qdrant)
+
+| Variable | Purpose | Default |
+| -------- | ------- | ------- |
+| `REID_DATABASE` | Backend selector (`VDMS` or `QDRANT`) | `VDMS` |
+| `QDRANT_HOSTNAME` | Qdrant host | `qdrant.scenescape.intel.com` |
+| `QDRANT_PORT` | Qdrant HTTP port | `6333` |
+| `QDRANT_USE_TLS` | Use HTTPS to Qdrant | `false` |
+| `QDRANT_API_KEY` | Optional API key | unset |
+| `QDRANT_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold (falls back to `VDMS_CONFIDENCE_THRESHOLD`) | `0.8` |
+
+### Switching back to VDMS
+
+1. Stop the Qdrant-backed stack.
+2. Start with the VDMS profile (and VDMS override if you use it), and omit `REID_DATABASE=QDRANT` (or set `REID_DATABASE=VDMS`):
+
+   ```bash
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.vdms-override.yml \
+     --profile controller --profile vdms up
+   ```
+
+> **Note:** Vector data is not migrated between VDMS and Qdrant. After a backend switch, identities are matched only against embeddings stored in the newly selected database.
+
+**Expected Result**: The Scene Controller connects to Qdrant, creates or verifies the ReID collection, and continues UUID assignment via visual similarity.
+
+---
+
 ## Steps to Disable Re-identification
 
 1. **Comment Out the Database Container**
@@ -170,14 +231,24 @@ docker compose --profile controller --profile vdms up --build
 
 1. **Issue: ReID not working**
    - **Cause**: Database container is not running or not linked.
-   - **Resolution**:
+   - **Resolution** (VDMS):
      ```bash
      docker ps | grep vdms
      docker compose logs vdms
      ```
+   - **Resolution** (Qdrant):
+     ```bash
+     docker ps | grep qdrant
+     docker compose logs qdrant
+     ```
+     Confirm `REID_DATABASE=QDRANT` and `QDRANT_HOSTNAME` on the `scene` service.
 
 2. **Issue: Objects not re-identifying across scenes**
    - **Cause**: Insufficient visual features collected or poor lighting.
    - **Resolution**:
      - Lower `DEFAULT_MINIMUM_FEATURE_COUNT`.
      - Increase `DEFAULT_MINIMUM_BBOX_AREA` only if objects are large and visible.
+
+3. **Issue: Backend switch appears to “lose” identities**
+   - **Cause**: VDMS and Qdrant do not share stored embeddings.
+   - **Resolution**: Expected after switching `REID_DATABASE`. Re-accumulate features in the new backend, or restore the previous backend and its data volume.

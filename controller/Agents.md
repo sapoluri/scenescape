@@ -57,26 +57,27 @@ The **Scene Controller** is the central runtime state management service for Sce
    - Object handoff between scenes
 
 7. **`reid.py`**: Re-identification module
-   - Feature vector management
-   - Object matching across cameras
-   - Identity consistency maintenance
+   - `ReIDDatabase` ABC (vector DB adapter contract)
+   - Shared embedding preparation helpers
 
-8. **`vdms_adapter.py`**: VDMS integration (optional)
-   - Vector database storage for ReID features
-   - Historical query support
-   - Metadata persistence
+8. **`vdms_adapter.py` / `qdrant_adapter.py`**: ReID vector database backends
+   - Implement `ReIDDatabase` for VDMS and Qdrant
+   - Schema setup, insert, similarity search, persist-attribute lookup
+   - Selected at runtime via `REID_DATABASE` (`uuid_manager.available_databases`)
 
-9. **`data_source.py`**: Data source abstraction
+9. **`reid_constraints.py`**: Shared TIER 1 metadata constraint builder used by both adapters
+
+10. **`data_source.py`**: Data source abstraction
    - Camera feed management
    - RTSP stream handling
    - Frame synchronization
 
-10. **`detections_builder.py`**: Detection message processing
+11. **`detections_builder.py`**: Detection message processing
     - Parse incoming detector messages
     - Coordinate transformations (image → world)
     - Detection validation and filtering
 
-11. **`observability/`**: Metrics and tracing
+12. **`observability/`**: Metrics and tracing
     - OpenTelemetry instrumentation
     - Performance monitoring
     - Latency tracking for MQTT handlers
@@ -169,6 +170,11 @@ docker compose exec scene bash
 - `TRACKER_CONFIG`: Path to tracker configuration JSON
 - `CONTROLLER_ENABLE_METRICS`: Enable OpenTelemetry metrics (true/false)
 - `CONTROLLER_ENABLE_TRACING`: Enable OpenTelemetry tracing (true/false)
+- `REID_DATABASE`: ReID vector backend (`VDMS` default, or `QDRANT`)
+- `VDMS_HOSTNAME` / `VDMS_CONFIDENCE_THRESHOLD`: VDMS connection and TIER 1 threshold
+- `QDRANT_HOSTNAME` / `QDRANT_PORT` / `QDRANT_USE_TLS` / `QDRANT_API_KEY` / `QDRANT_CONFIDENCE_THRESHOLD`: Qdrant connection and TIER 1 threshold
+
+User-facing switch steps: `docs/user-guide/other-topics/how-to-enable-reidentification.md` (VDMS → Qdrant).
 
 ### Configuration Files
 
@@ -191,6 +197,47 @@ docker compose exec scene bash
   }
 }
 ```
+
+## Extending ReID Vector Database Backends
+
+Use this when adding a third (or replacement) vector store besides VDMS and Qdrant.
+
+### Contract
+
+1. **Subclass `controller.reid.ReIDDatabase`** and implement the abstract methods:
+   - `connect`, `addSchema`, `addEntry`, `getPersistedAttributes`, `findSchema`, `findMatches`
+2. **Also implement `ensureSchema(dimensions)`** — required by `UUIDManager` even though it is not on the ABC today. Mirror VDMS/Qdrant: create-or-verify collection/schema for the configured metric and inferred embedding size.
+3. **Reuse shared helpers**:
+   - `prepareReidDict` / `prepareReidVector` from the base class
+   - `controller.reid_constraints.build_query_constraints` for TIER 1 metadata filters
+   - Constants from `controller.reid_constants` (`SCHEMA_NAME`, metrics, neighbor count)
+4. **Register the backend** in `controller.uuid_manager.available_databases`:
+
+```python
+available_databases = {
+  "VDMS": VDMSDatabase,
+  "QDRANT": QdrantDatabase,
+  "MYDB": MyDatabase,  # REID_DATABASE=MYDB
+}
+```
+
+5. **Wire environment defaults** on the adapter (`MYDB_HOSTNAME`, confidence threshold, TLS/API key as needed). Prefer falling back to `VDMS_CONFIDENCE_THRESHOLD` for TIER 1 threshold compatibility when introducing a new `*_CONFIDENCE_THRESHOLD`.
+
+### Behavioral expectations
+
+- **`findMatches`**: Return a list (one entry per query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (VDMS-compatible score semantics for the active metric).
+- **`getPersistedAttributes`**: Return the latest persist payload for a UUID (by `persist_timestamp`), or `{}` if none.
+- **Metrics**: Controller config uses `L2` / `COSINE`; adapters map to store-native distance (e.g. Qdrant DOT for IP/COSINE path). Keep score validation consistent with `uuid_manager` thresholds.
+- **Schema markers / versioning**: Follow the existing create-first + marker/metadata verification pattern so multi-instance controllers do not silently diverge on dimensions/metric.
+
+### Tests and deployment
+
+- Unit tests under `tests/sscape_tests/<adapter>/` (interface, schema, insert, match, persist).
+- Functional: extend `tests/functional/reid_backend.py` and a Compose profile (see `tests/utils/profiles.py` `REID_QDRANT` / `compose-qdrant.yml` / `compose-scene_reid_qdrant.yml`).
+- Sample deploy override pattern: `sample_data/docker-compose.qdrant-override.yml`.
+- Document user switch steps in `docs/user-guide/other-topics/how-to-enable-reidentification.md` and env vars in `docs/user-guide/microservices/controller/Extended-ReID.md`.
+
+Reference implementations: `vdms_adapter.py`, `qdrant_adapter.py`.
 
 ## Code Patterns
 
@@ -397,12 +444,15 @@ controller/
 │   │   ├── moving_object.py           # Object representation
 │   │   ├── cache_manager.py           # State caching
 │   │   ├── child_scene_controller.py  # Hierarchical scenes
-│   │   ├── reid.py                    # Re-identification
-│   │   ├── vdms_adapter.py            # VDMS integration
+│   │   ├── reid.py                    # ReIDDatabase ABC + embedding helpers
+│   │   ├── reid_constants.py          # Shared ReID constants
+│   │   ├── reid_constraints.py        # Shared TIER 1 constraint builder
+│   │   ├── vdms_adapter.py            # VDMS ReID backend
+│   │   ├── qdrant_adapter.py          # Qdrant ReID backend
 │   │   ├── data_source.py             # Camera feeds
 │   │   ├── detections_builder.py      # Detection parsing
 │   │   ├── time_chunking.py           # Temporal processing
-│   │   ├── uuid_manager.py            # ID generation
+│   │   ├── uuid_manager.py            # ID generation + backend registry
 │   │   └── observability/             # Metrics/tracing
 │   ├── robot_vision/                  # Robot-specific extensions
 │   ├── schema/                        # JSON schemas
