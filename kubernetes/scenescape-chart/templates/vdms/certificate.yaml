@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (C) 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2025-2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 {{- if .Values.vdms.enabled }}
@@ -6,14 +6,18 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ .Release.Name }}-vdms-cert-s
+  name: {{ .Release.Name }}-reid-cert-s
 spec:
-  secretName: {{ .Release.Name }}-vdms-s-tls
+  secretName: {{ .Release.Name }}-reid-s-tls
   issuerRef:
     name: {{ .Release.Name }}-ca-issuer
     kind: Issuer
-  commonName: "vdms.scenescape.intel.com"
+  commonName: "reid.scenescape.intel.com"
   dnsNames:
+  - "reid.scenescape.intel.com"
+  - "reid"
+  - "reid.{{ .Release.Namespace }}"
+  - "reid.{{ .Release.Namespace }}.svc.cluster.local"
   - "vdms.scenescape.intel.com"
   - "vdms"
   - "vdms.{{ .Release.Namespace }}"
@@ -24,18 +28,18 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ .Release.Name }}-vdms-c-cert
+  name: {{ .Release.Name }}-reid-c-cert
 spec:
-  secretName: {{ .Release.Name }}-vdms-c-tls
+  secretName: {{ .Release.Name }}-reid-c-tls
   issuerRef:
     name: {{ .Release.Name }}-ca-issuer
     kind: Issuer
-  commonName: "vdms.scenescape.intel.com"
+  commonName: "reid.scenescape.intel.com"
   dnsNames:
-  - "vdms-c.scenescape.intel.com"
-  - "vdms-c"
-  - "vdms-c.{{ .Release.Namespace }}"
-  - "vdms-c.{{ .Release.Namespace }}.svc.cluster.local"
+  - "reid.scenescape.intel.com"
+  - "reid"
+  - "reid.{{ .Release.Namespace }}"
+  - "reid.{{ .Release.Namespace }}.svc.cluster.local"
   duration: 8760h
   renewBefore: 720h
   {{- end }}

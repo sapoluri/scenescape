@@ -29,9 +29,6 @@ services:
         condition: service_started
     environment:
       REID_DATABASE: QDRANT
-      QDRANT_HOSTNAME: qdrant.scenescape.intel.com
-      QDRANT_PORT: "6333"
-      QDRANT_USE_TLS: "false"
     command: >
       --restauth /run/secrets/controller.auth
       --brokerauth /run/secrets/controller.auth

@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: (C) 2024 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 import json
 import socket
 import threading
@@ -17,32 +16,45 @@ from controller.reid_constants import (
   SIMILARITY_METRIC,
 )
 from controller.reid_constraints import build_query_constraints
+from controller.reid_env import (
+  get_reid_ca_cert,
+  get_reid_client_cert,
+  get_reid_client_key,
+  get_reid_confidence_threshold,
+  get_reid_hostname,
+  get_reid_port,
+  get_reid_use_tls,
+)
 from scene_common import log
 
-DEFAULT_HOSTNAME = os.getenv("VDMS_HOSTNAME", "vdms.scenescape.intel.com")
-DEFAULT_CONFIDENCE_THRESHOLD = float(os.getenv("VDMS_CONFIDENCE_THRESHOLD", "0.8"))
-DEFAULT_CA_CERT = os.getenv("VDMS_CA_CERT", "/run/secrets/certs/scenescape-ca.pem")
-DEFAULT_CLIENT_CERT = os.getenv("VDMS_CLIENT_CERT", "/run/secrets/certs/scenescape-vdms-c.crt")
-DEFAULT_CLIENT_KEY = os.getenv("VDMS_CLIENT_KEY", "/run/secrets/certs/scenescape-vdms-c.key")
 DIMENSIONS = 256
 SCHEMA_MARKER_CLASS = "ReidSchemaMarker"
 
 class VDMSDatabase(ReIDDatabase):
   def __init__(self, set_name=SCHEMA_NAME,
                similarity_metric=SIMILARITY_METRIC, dimensions=DIMENSIONS,
-               confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,
-               ca_cert=DEFAULT_CA_CERT, client_cert=DEFAULT_CLIENT_CERT,
-               client_key=DEFAULT_CLIENT_KEY):
+               confidence_threshold=None,
+               ca_cert=None, client_cert=None,
+               client_key=None, use_tls=None):
+    resolved_ca_cert = get_reid_ca_cert() if ca_cert is None else ca_cert
+    resolved_client_cert = (
+      get_reid_client_cert() if client_cert is None else client_cert)
+    resolved_client_key = get_reid_client_key() if client_key is None else client_key
+    resolved_use_tls = get_reid_use_tls() if use_tls is None else use_tls
     self.db = vdms.vdms(
-      use_tls=True,
-      ca_cert_file=ca_cert,
-      client_cert_file=client_cert,
-      client_key_file=client_key
+      use_tls=resolved_use_tls,
+      ca_cert_file=resolved_ca_cert,
+      client_cert_file=resolved_client_cert,
+      client_key_file=resolved_client_key
     )
     self.set_name = set_name
     self.similarity_metric = similarity_metric
     self.dimensions = dimensions
-    self.confidence_threshold = confidence_threshold
+    self.confidence_threshold = (
+      get_reid_confidence_threshold() if confidence_threshold is None
+      else confidence_threshold)
+    self.hostname = get_reid_hostname()
+    self.port = get_reid_port()
     self.lock = threading.Lock()
     self._schema_lock = threading.Lock()
     self._schema_ready = False
@@ -108,9 +120,11 @@ class VDMSDatabase(ReIDDatabase):
       log.warning(f"Failed to send query to VDMS container: {query}")
     return responses, response_blob
 
-  def connect(self, hostname=DEFAULT_HOSTNAME):
+  def connect(self, hostname=None):
+    if hostname is None:
+      hostname = self.hostname
     try:
-      self.db.connect(hostname)
+      self.db.connect(hostname, port=self.port)
       if self.dimensions is not None:
         with self._schema_lock:
           self.ensureSchemaInner(

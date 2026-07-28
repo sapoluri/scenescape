@@ -128,19 +128,24 @@ Result: "Find strong age-gender matches, refined by vector similarity"
 
 **Environment variables**:
 
-- `REID_DATABASE`: Vector database backend: `VDMS` (default) or `QDRANT`
-  - To switch backends in a deployment, see [Switching the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#switching-the-reid-vector-database-backend-vdms--qdrant)
-- `VDMS_HOSTNAME`: VDMS server hostname (default: `vdms.scenescape.intel.com`)
-- `VDMS_CONFIDENCE_THRESHOLD`: Minimum confidence for applying constraints in TIER 1 (default: `0.8`)
-  - Values ≥ threshold: Included in AND constraints (strict metadata filtering)
-  - Values < threshold: Ignored (rely on TIER 2 vector similarity for flexible matching)
-  - Valid range: 0.0 to 1.0
-  - Example: Set to `0.7` to include more metadata filters, `0.9` for stricter filtering
-- `QDRANT_HOSTNAME`: Qdrant hostname (default: `qdrant.scenescape.intel.com`)
-- `QDRANT_PORT`: Qdrant HTTP port (default: `6333`)
-- `QDRANT_USE_TLS`: Use HTTPS for Qdrant (`true`/`false`, default: `false`)
-- `QDRANT_API_KEY`: Optional Qdrant API key
-- `QDRANT_CONFIDENCE_THRESHOLD`: Same role as `VDMS_CONFIDENCE_THRESHOLD` for the Qdrant adapter (falls back to `VDMS_CONFIDENCE_THRESHOLD` if unset)
+Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` selects which adapter runs.
+
+| Variable | Purpose | Default |
+| -------- | ------- | ------- |
+| `REID_DATABASE` | Backend (`VDMS` or `QDRANT`) | `VDMS` |
+| `REID_HOSTNAME` | Database host | `reid.scenescape.intel.com` |
+| `REID_PORT` | Database port | `55555` |
+| `REID_USE_TLS` | TLS on/off | `true` |
+| `REID_API_KEY` | Optional API key | unset |
+| `REID_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold | `0.8` |
+| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS paths | `scenescape-ca.pem` / `scenescape-reid.crt` / `scenescape-reid.key` |
+
+- Values ≥ `REID_CONFIDENCE_THRESHOLD`: Included in AND constraints (strict metadata filtering)
+- Values < threshold: Ignored (rely on TIER 2 vector similarity for flexible matching)
+- Valid range: 0.0 to 1.0
+- To switch backends in a deployment, see [Switching the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#switching-the-reid-vector-database-backend-vdms--qdrant)
+
+Legacy `VDMS_*` / `QDRANT_*` names remain temporary fallbacks.
 
 ## Configuring Confidence Threshold
 
@@ -148,7 +153,7 @@ The confidence threshold determines which metadata constraints are applied in TI
 
 ```bash
 # In the controller service environment in docker-compose.yml or .env file
-VDMS_CONFIDENCE_THRESHOLD=0.85
+REID_CONFIDENCE_THRESHOLD=0.85
 
 # Launch controller with custom threshold
 docker compose up -d

@@ -47,8 +47,8 @@ spec:
           env:
           - name: CONTROLLER_ENABLE_ANALYTICS_ONLY
             value: {{ .Values.scene.analyticsOnly | quote }}
-          - name: VDMS_HOSTNAME
-            value: vdms.{{ .Release.Namespace }}.svc.cluster.local
+          - name: REID_HOSTNAME
+            value: reid.{{ .Release.Namespace }}.svc.cluster.local
             {{ include "proxy_envs" . | indent 10 }}
           ports:
           - containerPort: 8080
@@ -72,12 +72,12 @@ spec:
             subPath: scenescape-ca.pem
             name: certs
             readOnly: true
-          - mountPath: /run/secrets/certs/scenescape-vdms-c.key
-            subPath: scenescape-vdms-c.key
+          - mountPath: /run/secrets/certs/scenescape-reid.key
+            subPath: scenescape-reid.key
             name: certs
             readOnly: true
-          - mountPath: /run/secrets/certs/scenescape-vdms-c.crt
-            subPath: scenescape-vdms-c.crt
+          - mountPath: /run/secrets/certs/scenescape-reid.crt
+            subPath: scenescape-reid.crt
             name: certs
             readOnly: true
           - mountPath: /run/secrets/django/secrets.py

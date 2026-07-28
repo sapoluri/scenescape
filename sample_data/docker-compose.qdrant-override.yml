@@ -1,12 +1,16 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-networks:
-  scenescape-test:
+# Override file to run ReID against Qdrant instead of VDMS.
+# Usage:
+#   docker compose -f docker-compose-dl-streamer-example.yml \
+#     -f docker-compose.qdrant-override.yml --profile controller up
+#
+# Do not combine with --profile vdms unless you intentionally want both
+# databases running; REID_DATABASE selects which backend the controller uses.
+# Shared REID_* defaults: hostname reid.scenescape.intel.com, port 55555, TLS on.
 
 secrets:
-  root-cert:
-    file: ${SECRETSDIR}/certs/scenescape-ca.pem
   reid-server-cert:
     file: ${SECRETSDIR}/certs/scenescape-reid-s.crt
   reid-server-key:
@@ -16,10 +20,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.13.2
     init: true
-    ports:
-      - "55555:55555"
     networks:
-      scenescape-test:
+      scenescape:
         aliases:
           - reid.scenescape.intel.com
           - qdrant.scenescape.intel.com
@@ -43,3 +45,11 @@ services:
         target: /qdrant/tls/cacert.pem
         read_only: true
     restart: always
+    pids_limit: 1000
+
+  scene:
+    depends_on:
+      qdrant:
+        condition: service_started
+    environment:
+      REID_DATABASE: QDRANT

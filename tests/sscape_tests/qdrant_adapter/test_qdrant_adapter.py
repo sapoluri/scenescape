@@ -33,6 +33,7 @@ class TestQdrantDatabaseInitialization:
     assert db.set_name == SCHEMA_NAME
     assert db.similarity_metric == "L2"
     assert db.dimensions is None
+    assert db.use_tls is True
     assert hasattr(db, 'lock')
 
   def test_initialization_with_custom_parameters(self):

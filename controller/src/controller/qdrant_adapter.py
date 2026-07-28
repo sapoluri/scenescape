@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import os
 import threading
 import uuid
 
@@ -20,33 +19,35 @@ from controller.reid_constants import (
   SIMILARITY_METRIC,
 )
 from controller.reid_constraints import build_query_constraints
+from controller.reid_env import (
+  get_reid_api_key,
+  get_reid_ca_cert,
+  get_reid_confidence_threshold,
+  get_reid_hostname,
+  get_reid_port,
+  get_reid_use_tls,
+)
 from scene_common import log
-
-DEFAULT_HOSTNAME = os.getenv("QDRANT_HOSTNAME", "qdrant.scenescape.intel.com")
-DEFAULT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-DEFAULT_API_KEY = os.getenv("QDRANT_API_KEY")
-DEFAULT_USE_TLS = os.getenv("QDRANT_USE_TLS", "false").strip().lower() in (
-  "1", "true", "yes", "on")
-DEFAULT_CONFIDENCE_THRESHOLD = float(
-  os.getenv(
-    "QDRANT_CONFIDENCE_THRESHOLD",
-    os.getenv("VDMS_CONFIDENCE_THRESHOLD", "0.8")))
 
 
 class QdrantDatabase(ReIDDatabase):
   def __init__(self, set_name=SCHEMA_NAME,
                similarity_metric=SIMILARITY_METRIC, dimensions=None,
-               confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,
-               hostname=DEFAULT_HOSTNAME, port=DEFAULT_PORT,
-               api_key=DEFAULT_API_KEY, use_tls=DEFAULT_USE_TLS):
+               confidence_threshold=None,
+               hostname=None, port=None,
+               api_key=None, use_tls=None, ca_cert=None):
     self.set_name = set_name
     self.similarity_metric = similarity_metric
     self.dimensions = dimensions
-    self.confidence_threshold = confidence_threshold
-    self.hostname = hostname
-    self.port = port
-    self.api_key = api_key
-    self.use_tls = use_tls
+    self.confidence_threshold = (
+      get_reid_confidence_threshold() if confidence_threshold is None
+      else confidence_threshold)
+    self.hostname = get_reid_hostname() if hostname is None else hostname
+    resolved_port = get_reid_port() if port is None else port
+    self.port = int(resolved_port)
+    self.api_key = get_reid_api_key() if api_key is None else api_key
+    self.use_tls = get_reid_use_tls() if use_tls is None else use_tls
+    self.ca_cert = get_reid_ca_cert() if ca_cert is None else ca_cert
     self.client = None
     self.connected = False
     self.lock = threading.Lock()
@@ -102,14 +103,17 @@ class QdrantDatabase(ReIDDatabase):
     return float(abs(qdrant_score))
 
   def _createClient(self):
-    return QdrantClient(
-      host=self.hostname,
-      port=self.port,
-      api_key=self.api_key,
-      https=self.use_tls,
-      prefer_grpc=False,
-      check_compatibility=False,
-    )
+    client_kwargs = {
+      "host": self.hostname,
+      "port": self.port,
+      "api_key": self.api_key,
+      "https": self.use_tls,
+      "prefer_grpc": False,
+      "check_compatibility": False,
+    }
+    if self.use_tls and self.ca_cert:
+      client_kwargs["verify"] = self.ca_cert
+    return QdrantClient(**client_kwargs)
 
   def connect(self, hostname=None):
     if hostname is not None:

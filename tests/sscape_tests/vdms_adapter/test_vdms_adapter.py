@@ -1069,7 +1069,8 @@ class TestConfigurationParameters:
   @patch('controller.vdms_adapter.vdms.vdms')
   def test_default_parameters_initialization(self, mock_vdms_class):
     """Verify VDMSDatabase initializes with expected defaults."""
-    from controller.vdms_adapter import SCHEMA_NAME, DIMENSIONS, K_NEIGHBORS, SIMILARITY_METRIC, DEFAULT_CONFIDENCE_THRESHOLD
+    from controller.vdms_adapter import SCHEMA_NAME, DIMENSIONS, K_NEIGHBORS, SIMILARITY_METRIC
+    from controller.reid_env import DEFAULT_CONFIDENCE_THRESHOLD
 
     mock_vdms_instance = MagicMock()
     mock_vdms_class.return_value = mock_vdms_instance

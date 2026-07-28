@@ -33,6 +33,7 @@ vdms:
   networks:
     scenescape:
       aliases:
+        - reid.scenescape.intel.com
         - vdms.scenescape.intel.com
   restart: always
 ```
@@ -108,22 +109,27 @@ By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VD
 
    The override ([docker-compose.qdrant-override.yml](/sample_data/docker-compose.qdrant-override.yml)):
 
-   - Starts a `qdrant` service (`qdrant.scenescape.intel.com`)
+   - Starts a `qdrant` service with TLS on shared host `reid.scenescape.intel.com` and port `55555` (certs from `make` / `init-secrets`)
    - Sets `REID_DATABASE=QDRANT` on the `scene` service
-   - Configures `QDRANT_HOSTNAME`, `QDRANT_PORT`, and `QDRANT_USE_TLS`
+   - Connection defaults (hostname, port, TLS=`true`, cert paths) are shared via `REID_*` settings
 
 3. **Do not pass `--profile vdms`** unless you intentionally want VDMS running in parallel. The controller uses only the backend named by `REID_DATABASE`.
 
-### Environment variables (Qdrant)
+### Shared ReID environment variables
+
+Only `REID_DATABASE` selects the backend. Connection and tuning use shared `REID_*` names (adapters ignore knobs they do not need). Hostname, port, TLS, and certificate paths are the same for every backend.
 
 | Variable | Purpose | Default |
 | -------- | ------- | ------- |
 | `REID_DATABASE` | Backend selector (`VDMS` or `QDRANT`) | `VDMS` |
-| `QDRANT_HOSTNAME` | Qdrant host | `qdrant.scenescape.intel.com` |
-| `QDRANT_PORT` | Qdrant HTTP port | `6333` |
-| `QDRANT_USE_TLS` | Use HTTPS to Qdrant | `false` |
-| `QDRANT_API_KEY` | Optional API key | unset |
-| `QDRANT_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold (falls back to `VDMS_CONFIDENCE_THRESHOLD`) | `0.8` |
+| `REID_HOSTNAME` | Database host | `reid.scenescape.intel.com` |
+| `REID_PORT` | Database port | `55555` |
+| `REID_USE_TLS` | Use TLS | `true` |
+| `REID_API_KEY` | Optional API key | unset (Qdrant) |
+| `REID_CONFIDENCE_THRESHOLD` | TIER 1 metadata confidence threshold | `0.8` |
+| `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS material | `/run/secrets/certs/scenescape-ca.pem`, `scenescape-reid.crt`, `scenescape-reid.key` |
+
+Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 
 ### Switching back to VDMS
 
@@ -241,7 +247,7 @@ docker compose --profile controller --profile vdms up --build
      docker ps | grep qdrant
      docker compose logs qdrant
      ```
-     Confirm `REID_DATABASE=QDRANT` and `QDRANT_HOSTNAME` on the `scene` service.
+     Confirm `REID_DATABASE=QDRANT` on the `scene` service and that the `qdrant` container is healthy.
 
 2. **Issue: Objects not re-identifying across scenes**
    - **Cause**: Insufficient visual features collected or poor lighting.

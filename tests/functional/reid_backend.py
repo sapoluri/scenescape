@@ -85,7 +85,6 @@ def ensure_reid_schema(dimensions=256, similarity_metric="L2"):
     db.ensureSchema(dimensions)
     return
 
-  db.db.connect("vdms.scenescape.intel.com")
   if not db.findSchema(SCHEMA_NAME):
     log.info("Creating reid_vector descriptor set...")
     db.addSchema(SCHEMA_NAME, similarity_metric, dimensions)

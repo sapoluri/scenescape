@@ -32,9 +32,9 @@ spec:
           - name: OVERRIDE_ca_file
             value: /run/secrets/certs/scenescape-ca.pem
           - name: OVERRIDE_cert_file
-            value: /run/secrets/certs/scenescape-vdms-s.crt
+            value: /run/secrets/certs/scenescape-reid-s.crt
           - name: OVERRIDE_key_file
-            value: /run/secrets/certs/scenescape-vdms-s.key
+            value: /run/secrets/certs/scenescape-reid-s.key
             {{- include "proxy_envs" . | indent 10 }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -47,12 +47,12 @@ spec:
             subPath: scenescape-ca.pem
             name: certs
             readOnly: true
-          - mountPath: /run/secrets/certs/scenescape-vdms-s.crt
-            subPath: scenescape-vdms-s.crt
+          - mountPath: /run/secrets/certs/scenescape-reid-s.crt
+            subPath: scenescape-reid-s.crt
             name: certs
             readOnly: true
-          - mountPath: /run/secrets/certs/scenescape-vdms-s.key
-            subPath: scenescape-vdms-s.key
+          - mountPath: /run/secrets/certs/scenescape-reid-s.key
+            subPath: scenescape-reid-s.key
             name: certs
             readOnly: true
       restartPolicy: Always

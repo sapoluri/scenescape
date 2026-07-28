@@ -3,7 +3,6 @@
 
 import collections
 import concurrent.futures
-import os
 import threading
 import math
 
@@ -11,12 +10,12 @@ import numpy as np
 
 from controller.qdrant_adapter import QdrantDatabase
 from controller.reid_constants import COSINE_SIMILARITY_TOLERANCE
+from controller.reid_env import DEFAULT_DATABASE, get_reid_database
 from controller.vdms_adapter import VDMSDatabase
 from controller.moving_object import ReidState, MovingObject
 from scene_common import log
 from scene_common.timestamp import get_epoch_time
 
-DEFAULT_DATABASE = os.getenv("REID_DATABASE", "VDMS").strip().upper()
 DEFAULT_SIMILARITY_THRESHOLD_L2 = 40.0
 DEFAULT_SIMILARITY_THRESHOLD_COSINE = 0.5
 DEFAULT_MINIMUM_BBOX_AREA = 5000
@@ -97,7 +96,7 @@ class UUIDManager:
     if reid_config_data is None:
       reid_config_data = {}
     if database is None:
-      database = DEFAULT_DATABASE
+      database = get_reid_database()
     database = str(database).strip().upper()
     if database not in available_databases:
       supported = sorted(available_databases)

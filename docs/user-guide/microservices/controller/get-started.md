@@ -31,6 +31,8 @@
   -v $(pwd)/controller/config/reid-config.json:/home/scenescape/Scenescape/reid-config.json \
   -v $(pwd)/controller/config/pose-adjustment-route.json:/home/scenescape/Scenescape/pose-adjustment-route.json \
   -v $(pwd)/manager/secrets/certs/scenescape-ca.pem:/run/secrets/certs/scenescape-ca.pem:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.crt:/run/secrets/certs/scenescape-reid.crt:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.key:/run/secrets/certs/scenescape-reid.key:ro \
   -v $(pwd)/manager/secrets/django:/run/secrets/django:ro \
   -v $(pwd)/manager/secrets/controller.auth:/run/secrets/controller.auth:ro \
   --name scene \
@@ -137,6 +139,8 @@ When using a pose estimation model (e.g. `yolo11n-pose`) in the DL Streamer vide
   -v $(pwd)/controller/config/tracker-config.json:/home/scenescape/Scenescape/tracker-config.json \
   -v $(pwd)/controller/config/reid-config.json:/home/scenescape/Scenescape/reid-config.json \
   -v $(pwd)/manager/secrets/certs/scenescape-ca.pem:/run/secrets/certs/scenescape-ca.pem:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.crt:/run/secrets/certs/scenescape-reid.crt:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.key:/run/secrets/certs/scenescape-reid.key:ro \
   -v $(pwd)/manager/secrets/django:/run/secrets/django:ro \
   -v $(pwd)/manager/secrets/controller.auth:/run/secrets/controller.auth:ro \
   --name scene \
@@ -162,6 +166,8 @@ When using a pose estimation model (e.g. `yolo11n-pose`) in the DL Streamer vide
   -v $(pwd)/controller/config/reid-config.json:/home/scenescape/Scenescape/reid-config.json \
   -v $(pwd)/controller/config/pose-adjustment-route.json:/home/scenescape/Scenescape/pose-adjustment-route.json \
   -v $(pwd)/manager/secrets/certs/scenescape-ca.pem:/run/secrets/certs/scenescape-ca.pem:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.crt:/run/secrets/certs/scenescape-reid.crt:ro \
+  -v $(pwd)/manager/secrets/certs/scenescape-reid.key:/run/secrets/certs/scenescape-reid.key:ro \
   -v $(pwd)/manager/secrets/django:/run/secrets/django:ro \
   -v $(pwd)/manager/secrets/controller.auth:/run/secrets/controller.auth:ro \
   --name scene \

@@ -65,7 +65,7 @@ The **Scene Controller** is the central runtime state management service for Sce
    - Schema setup, insert, similarity search, persist-attribute lookup
    - Selected at runtime via `REID_DATABASE` (`uuid_manager.available_databases`)
 
-9. **`reid_constraints.py`**: Shared TIER 1 metadata constraint builder used by both adapters
+9. **`reid_constraints.py` / `reid_env.py`**: Shared TIER 1 constraint builder and `REID_*` environment resolution
 
 10. **`data_source.py`**: Data source abstraction
    - Camera feed management
@@ -170,9 +170,8 @@ docker compose exec scene bash
 - `TRACKER_CONFIG`: Path to tracker configuration JSON
 - `CONTROLLER_ENABLE_METRICS`: Enable OpenTelemetry metrics (true/false)
 - `CONTROLLER_ENABLE_TRACING`: Enable OpenTelemetry tracing (true/false)
-- `REID_DATABASE`: ReID vector backend (`VDMS` default, or `QDRANT`)
-- `VDMS_HOSTNAME` / `VDMS_CONFIDENCE_THRESHOLD`: VDMS connection and TIER 1 threshold
-- `QDRANT_HOSTNAME` / `QDRANT_PORT` / `QDRANT_USE_TLS` / `QDRANT_API_KEY` / `QDRANT_CONFIDENCE_THRESHOLD`: Qdrant connection and TIER 1 threshold
+- `REID_DATABASE`: ReID vector backend (`VDMS` default, or `QDRANT`) — the only backend selector
+- Shared connection/tuning: `REID_HOSTNAME`, `REID_PORT`, `REID_USE_TLS`, `REID_API_KEY`, `REID_CONFIDENCE_THRESHOLD`, `REID_CA_CERT`, `REID_CLIENT_CERT`, `REID_CLIENT_KEY` (see `controller.reid_env`)
 
 User-facing switch steps: `docs/user-guide/other-topics/how-to-enable-reidentification.md` (VDMS → Qdrant).
 
@@ -211,6 +210,7 @@ Use this when adding a third (or replacement) vector store besides VDMS and Qdra
    - `prepareReidDict` / `prepareReidVector` from the base class
    - `controller.reid_constraints.build_query_constraints` for TIER 1 metadata filters
    - Constants from `controller.reid_constants` (`SCHEMA_NAME`, metrics, neighbor count)
+   - Connection/tuning from `controller.reid_env` (`REID_*` getters) — do **not** invent backend-prefixed env vars (`MYDB_HOSTNAME`, etc.)
 4. **Register the backend** in `controller.uuid_manager.available_databases`:
 
 ```python
@@ -221,7 +221,7 @@ available_databases = {
 }
 ```
 
-5. **Wire environment defaults** on the adapter (`MYDB_HOSTNAME`, confidence threshold, TLS/API key as needed). Prefer falling back to `VDMS_CONFIDENCE_THRESHOLD` for TIER 1 threshold compatibility when introducing a new `*_CONFIDENCE_THRESHOLD`.
+5. **Reuse shared connection defaults** from `controller.reid_env` (`reid.scenescape.intel.com:55555`, TLS on, `scenescape-reid*` cert paths). Do not add per-backend hostname/port/TLS defaults — only `REID_DATABASE` differs by backend.
 
 ### Behavioral expectations
 
@@ -447,6 +447,7 @@ controller/
 │   │   ├── reid.py                    # ReIDDatabase ABC + embedding helpers
 │   │   ├── reid_constants.py          # Shared ReID constants
 │   │   ├── reid_constraints.py        # Shared TIER 1 constraint builder
+│   │   ├── reid_env.py                # Shared REID_* environment resolution
 │   │   ├── vdms_adapter.py            # VDMS ReID backend
 │   │   ├── qdrant_adapter.py          # Qdrant ReID backend
 │   │   ├── data_source.py             # Camera feeds
