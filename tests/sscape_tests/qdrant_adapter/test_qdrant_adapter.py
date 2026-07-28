@@ -85,9 +85,36 @@ class TestQdrantSchemaManagement:
     db.connected = True
     db._collectionExists = MagicMock(return_value=True)
     db._readSchemaMarker = MagicMock(return_value=(True, 128, "L2"))
+    db._ensurePayloadIndexes = MagicMock()
 
     with pytest.raises(RuntimeError, match="has 128 dimensions"):
       db.ensureSchema(256)
+
+  def test_ensure_schema_creates_payload_indexes_for_existing_collection(self):
+    db = QdrantDatabase(dimensions=None)
+    db.client = MagicMock()
+    db.connected = True
+    db._collectionExists = MagicMock(return_value=True)
+    db._readSchemaMarker = MagicMock(return_value=(True, 256, "L2"))
+    db._ensurePayloadIndexes = MagicMock()
+
+    db.ensureSchema(256)
+
+    db._ensurePayloadIndexes.assert_called_once_with(SCHEMA_NAME)
+
+  def test_create_collection_creates_payload_indexes(self):
+    db = QdrantDatabase()
+    db.client = MagicMock()
+    db.connected = True
+    db.client.get_collection.return_value = MagicMock(payload_schema={})
+
+    db._createCollection(SCHEMA_NAME, 256, "L2")
+
+    db.client.create_collection.assert_called_once()
+    assert db.client.create_payload_index.call_count == 2
+    indexed_fields = {
+      call.kwargs["field_name"] for call in db.client.create_payload_index.call_args_list}
+    assert indexed_fields == {"uuid", "persist_timestamp"}
 
 
 class TestQdrantDataOperations:
@@ -105,15 +132,11 @@ class TestQdrantDataOperations:
     assert points[0].payload["uuid"] == "uuid-1"
     assert points[0].payload["type"] == "person"
 
-  def test_get_persisted_attributes_returns_latest_payload(self):
+  def test_get_persisted_attributes_uses_ordered_scroll(self):
     db = QdrantDatabase()
     db.client = MagicMock()
     db.connected = True
     db.client.scroll.return_value = ([
-      MagicMock(payload={
-        "persist": json.dumps({"gender": "Male"}),
-        "persist_timestamp": 10,
-      }),
       MagicMock(payload={
         "persist": json.dumps({"gender": "Female"}),
         "persist_timestamp": 20,
@@ -123,12 +146,19 @@ class TestQdrantDataOperations:
     result = db.getPersistedAttributes("uuid-1")
     assert result == {"gender": "Female"}
 
-  def test_get_persisted_attributes_scrolls_all_pages(self):
-    """Latest persist may live past the first scroll page; pagination is required."""
+    scroll_kwargs = db.client.scroll.call_args.kwargs
+    assert scroll_kwargs["limit"] == 1
+    assert scroll_kwargs["with_payload"] == ["persist", "persist_timestamp"]
+    assert scroll_kwargs["order_by"].key == "persist_timestamp"
+    assert scroll_kwargs["order_by"].direction.name == "DESC"
+
+  def test_get_persisted_attributes_falls_back_to_full_scroll(self):
+    """Legacy collections without payload indexes still find the latest persist."""
     db = QdrantDatabase()
     db.client = MagicMock()
     db.connected = True
     db.client.scroll.side_effect = [
+      RuntimeError("No payload index for persist_timestamp"),
       ([
         MagicMock(payload={
           "persist": json.dumps({"gender": "Male"}),
@@ -145,8 +175,9 @@ class TestQdrantDataOperations:
 
     result = db.getPersistedAttributes("uuid-1")
     assert result == {"gender": "Female"}
-    assert db.client.scroll.call_count == 2
-    assert db.client.scroll.call_args_list[1].kwargs["offset"] == "page-2"
+    assert db.client.scroll.call_count == 3
+    assert "order_by" in db.client.scroll.call_args_list[0].kwargs
+    assert db.client.scroll.call_args_list[2].kwargs["offset"] == "page-2"
 
   def test_find_matches_returns_vdms_compatible_entities(self):
     db = QdrantDatabase(dimensions=4, similarity_metric="L2")

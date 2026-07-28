@@ -150,6 +150,38 @@ class QdrantDatabase(ReIDDatabase):
       vectors_config=models.VectorParams(
         size=dimensions, distance=self._qdrantDistance(metric)),
     )
+    self._ensurePayloadIndexes(collection_name)
+
+  def _ensurePayloadIndexes(self, collection_name):
+    """Ensure payload indexes used for UUID filter and latest-persist lookup."""
+    self._ensureClient()
+    try:
+      collection = self.client.get_collection(collection_name)
+      existing = set((collection.payload_schema or {}).keys())
+    except Exception as e:
+      log.debug(
+        f"_ensurePayloadIndexes: Could not read payload schema for "
+        f"'{collection_name}': {e}")
+      existing = set()
+
+    desired = (
+      ("uuid", models.PayloadSchemaType.KEYWORD),
+      ("persist_timestamp", models.PayloadSchemaType.FLOAT),
+    )
+    for field_name, field_schema in desired:
+      if field_name in existing:
+        continue
+      try:
+        self.client.create_payload_index(
+          collection_name=collection_name,
+          field_name=field_name,
+          field_schema=field_schema,
+          wait=True,
+        )
+      except Exception as e:
+        log.warning(
+          f"_ensurePayloadIndexes: Failed to create index '{field_name}' "
+          f"on '{collection_name}': {e}")
 
   def _ensureMarkerCollection(self):
     if self._collectionExists(SCHEMA_MARKER_COLLECTION):
@@ -270,6 +302,7 @@ class QdrantDatabase(ReIDDatabase):
         f"{caller}: '{self.set_name}' exists but no schema marker found; "
         "writing marker for future instances.")
       self._writeSchemaMarker(requested_dimensions, expected_metric, skip_exists_check=True)
+      self._ensurePayloadIndexes(self.set_name)
       self.dimensions = requested_dimensions
       return
 
@@ -293,6 +326,7 @@ class QdrantDatabase(ReIDDatabase):
     log.info(
       f"{caller}: Verified existing collection '{self.set_name}' "
       f"against schema marker ({marker_dimensions}D, {marker_metric})")
+    self._ensurePayloadIndexes(self.set_name)
     self.dimensions = requested_dimensions
 
   def ensureSchema(self, dimensions):
@@ -376,7 +410,7 @@ class QdrantDatabase(ReIDDatabase):
     return
 
   def _scrollMatchingPoints(self, collection_name, query_filter, page_size=100):
-    """Scroll all points matching filter. Qdrant scroll has no temporal order."""
+    """Scroll all points matching filter. Fallback when ordered scroll is unavailable."""
     self._ensureClient()
     points = []
     offset = None
@@ -386,7 +420,7 @@ class QdrantDatabase(ReIDDatabase):
         scroll_filter=query_filter,
         limit=page_size,
         offset=offset,
-        with_payload=True,
+        with_payload=["persist", "persist_timestamp"],
         with_vectors=False,
       )
       points.extend(batch)
@@ -394,25 +428,7 @@ class QdrantDatabase(ReIDDatabase):
         break
     return points
 
-  def getPersistedAttributes(self, uuid_value, set_name=SCHEMA_NAME):
-    """
-    Retrieve the most recent persist attributes stored for a given object UUID.
-
-    Scrolls every descriptor matching the UUID (Qdrant scroll is unordered and
-    paginated), then returns attributes from the entry with the latest
-    persist_timestamp.
-    """
-    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid_value}"]})
-    try:
-      points = self._scrollMatchingPoints(set_name, query_filter)
-    except Exception as e:
-      log.debug(f"[Qdrant] getPersistedAttributes: Query failed for uuid={uuid_value}: {e}")
-      return {}
-
-    if not points:
-      log.debug(f"[Qdrant] getPersistedAttributes: No entry found for uuid={uuid_value}")
-      return {}
-
+  def _latestPersistFromPoints(self, points, uuid_value):
     points_with_persist = [
       point for point in points
       if isinstance(point.payload, dict) and
@@ -435,6 +451,45 @@ class QdrantDatabase(ReIDDatabase):
         f"[Qdrant] getPersistedAttributes: Failed to deserialize persist for "
         f"uuid={uuid_value}: {e}")
       return {}
+
+  def getPersistedAttributes(self, uuid_value, set_name=SCHEMA_NAME):
+    """
+    Retrieve the most recent persist attributes stored for a given object UUID.
+
+    Prefers ordered scroll by persist_timestamp DESC (O(1) in history length).
+    Falls back to a full filtered scroll when ordered lookup is unavailable
+    (for example collections created before payload indexes existed).
+    """
+    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid_value}"]})
+    try:
+      points, _ = self.client.scroll(
+        collection_name=set_name,
+        scroll_filter=query_filter,
+        limit=1,
+        with_payload=["persist", "persist_timestamp"],
+        with_vectors=False,
+        order_by=models.OrderBy(
+          key="persist_timestamp",
+          direction=models.Direction.DESC,
+        ),
+      )
+    except Exception as e:
+      log.debug(
+        f"[Qdrant] getPersistedAttributes: Ordered scroll failed for "
+        f"uuid={uuid_value}, falling back to full scroll: {e}")
+      try:
+        points = self._scrollMatchingPoints(set_name, query_filter)
+      except Exception as fallback_error:
+        log.debug(
+          f"[Qdrant] getPersistedAttributes: Query failed for uuid={uuid_value}: "
+          f"{fallback_error}")
+        return {}
+
+    if not points:
+      log.debug(f"[Qdrant] getPersistedAttributes: No entry found for uuid={uuid_value}")
+      return {}
+
+    return self._latestPersistFromPoints(points, uuid_value)
 
   def findSchema(self, set_name):
     schema_exists, _ = self.findSchemaDetails(set_name)
