@@ -375,17 +375,36 @@ class QdrantDatabase(ReIDDatabase):
       log.error(f"addEntry: Failed to upsert {len(points)} vectors to Qdrant: {e}")
     return
 
-  def getPersistedAttributes(self, uuid_value, set_name=SCHEMA_NAME):
+  def _scrollMatchingPoints(self, collection_name, query_filter, page_size=100):
+    """Scroll all points matching filter. Qdrant scroll has no temporal order."""
     self._ensureClient()
-    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid_value}"]})
-    try:
-      points, _ = self.client.scroll(
-        collection_name=set_name,
+    points = []
+    offset = None
+    while True:
+      batch, offset = self.client.scroll(
+        collection_name=collection_name,
         scroll_filter=query_filter,
-        limit=1000,
+        limit=page_size,
+        offset=offset,
         with_payload=True,
         with_vectors=False,
       )
+      points.extend(batch)
+      if offset is None:
+        break
+    return points
+
+  def getPersistedAttributes(self, uuid_value, set_name=SCHEMA_NAME):
+    """
+    Retrieve the most recent persist attributes stored for a given object UUID.
+
+    Scrolls every descriptor matching the UUID (Qdrant scroll is unordered and
+    paginated), then returns attributes from the entry with the latest
+    persist_timestamp.
+    """
+    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid_value}"]})
+    try:
+      points = self._scrollMatchingPoints(set_name, query_filter)
     except Exception as e:
       log.debug(f"[Qdrant] getPersistedAttributes: Query failed for uuid={uuid_value}: {e}")
       return {}

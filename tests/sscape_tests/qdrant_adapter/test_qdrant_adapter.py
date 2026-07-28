@@ -123,6 +123,31 @@ class TestQdrantDataOperations:
     result = db.getPersistedAttributes("uuid-1")
     assert result == {"gender": "Female"}
 
+  def test_get_persisted_attributes_scrolls_all_pages(self):
+    """Latest persist may live past the first scroll page; pagination is required."""
+    db = QdrantDatabase()
+    db.client = MagicMock()
+    db.connected = True
+    db.client.scroll.side_effect = [
+      ([
+        MagicMock(payload={
+          "persist": json.dumps({"gender": "Male"}),
+          "persist_timestamp": 10,
+        }),
+      ], "page-2"),
+      ([
+        MagicMock(payload={
+          "persist": json.dumps({"gender": "Female"}),
+          "persist_timestamp": 30,
+        }),
+      ], None),
+    ]
+
+    result = db.getPersistedAttributes("uuid-1")
+    assert result == {"gender": "Female"}
+    assert db.client.scroll.call_count == 2
+    assert db.client.scroll.call_args_list[1].kwargs["offset"] == "page-2"
+
   def test_find_matches_returns_vdms_compatible_entities(self):
     db = QdrantDatabase(dimensions=4, similarity_metric="L2")
     db.client = MagicMock()
