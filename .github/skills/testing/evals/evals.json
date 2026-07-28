@@ -10,7 +10,7 @@
       "assertions": [
         "Places the new test under tests/functional/ with a test_*.py filename",
         "Declares module-level SCENESCAPE_SPEC = FuncTestSpec(...) with a ServiceProfile from tests/utils/profiles.py and auth=AUTH_CONTROLLER (or equivalent controller auth)",
-        "Sets Zephyr tracking via @pytest.mark.test_name("NEX-T#####")",
+        "Sets Zephyr tracking via @pytest.mark.test_name(\"NEX-T#####\")",
         "Calls result_recorder.success() on the successful execution path",
         "Uses scenescape_env (and typically params) so Docker Compose lifecycle is fixture-managed rather than hand-started compose",
         "Does not mock MQTT/REST/DB for this functional test; exercises the live stack",

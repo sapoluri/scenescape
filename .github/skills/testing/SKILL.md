@@ -42,13 +42,13 @@ Before adding imports or path setup in a new or modified test file:
 
 ## Category routing
 
-| Category | Location | When | Infrastructure |
-|----------|----------|------|----------------|
-| Unit | `tests/sscape_tests/` or service `*/tests/` | Isolated functions/classes; no live services | Mocks; host pytest |
-| Functional | `tests/functional/` | Workflows with live REST/MQTT/DB | `SCENESCAPE_SPEC` + `scenescape_env` |
-| Integration | `tests/functional/` or `tests/system/` | Cross-service pipelines | Same as functional |
-| UI | `tests/ui/` | Browser/Selenium flows | `SCENESCAPE_SPEC` + `AUTH_BROWSER` |
-| BAT | functional/UI + `@pytest.mark.basic_acceptance` | Critical-path smoke | Same as parent category |
+| Category    | Location                                        | When                                         | Infrastructure                       |
+| ----------- | ----------------------------------------------- | -------------------------------------------- | ------------------------------------ |
+| Unit        | `tests/sscape_tests/` or service `*/tests/`     | Isolated functions/classes; no live services | Mocks; host pytest                   |
+| Functional  | `tests/functional/`                             | Workflows with live REST/MQTT/DB             | `SCENESCAPE_SPEC` + `scenescape_env` |
+| Integration | `tests/functional/` or `tests/system/`          | Cross-service pipelines                      | Same as functional                   |
+| UI          | `tests/ui/`                                     | Browser/Selenium flows                       | `SCENESCAPE_SPEC` + `AUTH_BROWSER`   |
+| BAT         | functional/UI + `@pytest.mark.basic_acceptance` | Critical-path smoke                          | Same as parent category              |
 
 Read the matching reference under [Additional resources](#additional-resources) before writing a category.
 

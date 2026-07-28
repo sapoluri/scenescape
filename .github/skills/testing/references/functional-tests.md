@@ -41,13 +41,13 @@ def test_roi_create(scenescape_env, demo_scene, request, result_recorder):
 
 Defined in `tests/utils/spec.py`:
 
-| Field | Purpose |
-|-------|---------|
-| `profile` | `ServiceProfile` from `tests/utils/profiles.py` |
-| `auth` | `AUTH_CONTROLLER` or `AUTH_BROWSER` |
-| `require_password` | Default `True` |
-| `extra_args` | Extra `--key value` pairs for params |
-| `exampledb` | Override baseline DB (e.g. `calibrationdb.tar.bz2`) |
+| Field              | Purpose                                             |
+| ------------------ | --------------------------------------------------- |
+| `profile`          | `ServiceProfile` from `tests/utils/profiles.py`     |
+| `auth`             | `AUTH_CONTROLLER` or `AUTH_BROWSER`                 |
+| `require_password` | Default `True`                                      |
+| `extra_args`       | Extra `--key value` pairs for params                |
+| `exampledb`        | Override baseline DB (e.g. `calibrationdb.tar.bz2`) |
 
 ## Integration-style tests
 

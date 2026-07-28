@@ -42,7 +42,7 @@ def test_login_shows_scene_list(scenescape_env, params, result_recorder):
     common.login(browser, params['weburl'], params['user'], params['password'])
     browser.wait_for_element(By.ID, "scene-list", timeout=10)
     assert browser.find_element(By.ID, "scene-list") is not None
-    
+
     result_recorder.success()
   finally:
     browser.quit()
@@ -76,6 +76,6 @@ SCENESCAPE_SPEC = FuncTestSpec(
 def test_rest_api_accessible(scenescape_env, params, result_recorder):
   client = RESTClient(params['resturl'], rootcert=params['rootcert'])
   assert client.authenticate(params['user'], params['password'])
-  
+
   result_recorder.success()
 ```
