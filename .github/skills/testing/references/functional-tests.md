@@ -29,10 +29,11 @@ SCENESCAPE_SPEC = FuncTestSpec(
   auth=AUTH_CONTROLLER,
 )
 
+TEST_NAME = "NEX-T10404"
+
 @pytest.mark.basic_acceptance
-@pytest.mark.test_name("NEX-T10404")
+@pytest.mark.test_name(TEST_NAME)
 def test_roi_create(scenescape_env, demo_scene, request, result_recorder):
-  test_name = getattr(request.node, '_scenescape_test_name', TEST_NAME)
   # ... exercise MQTT/REST against live stack ...
   result_recorder.success()
 ```
