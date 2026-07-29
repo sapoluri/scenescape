@@ -162,11 +162,16 @@ NPU performance metrics can be monitored using [NPU System Monitoring Tool](http
 Following are the step-by-step instructions for enabling person reidentification for the out-of-box **Queuing** scene.
 
 1. **Enable the ReID Database Container**\
-   Launch scenescape using vdms profile
+   Launch Scenescape with exactly one ReID backend override. This example selects VDMS:
 
    ```bash
-   docker compose -f docker-compose.yml -f sample_data/docker-compose.vdms-override.yml --profile vdms up -d
+   docker compose -f docker-compose.yml \
+     -f sample_data/docker-compose.vdms-override.yml \
+     --profile controller up -d
    ```
+
+   To use Qdrant instead, replace `docker-compose.vdms-override.yml` with
+   `docker-compose.qdrant-override.yml`. Do not combine the two overrides.
 
 2. Use the predefined [queuing-config-reid.json](./queuing-config-reid.json) to enable vector embedding metadata from the DL Streamer service:
 
@@ -187,8 +192,12 @@ Following are the step-by-step instructions for enabling person reidentification
    If you have already deployed Scenescape, use:
 
    ```sh
-   docker compose down queuing-video retail-video scene
-   docker compose -f docker-compose.yml -f sample_data/docker-compose.vdms-override.yml --profile vdms up queuing-video retail-video vdms scene -d
+   docker compose -f docker-compose.yml \
+     -f sample_data/docker-compose.vdms-override.yml \
+     --profile controller down
+   docker compose -f docker-compose.yml \
+     -f sample_data/docker-compose.vdms-override.yml \
+     --profile controller up queuing-video retail-video reid scene -d
    ```
 
    Ensure the OMZ model `person-reidentification-retail-0277` is available in `intel/` subfolder of models volume: `docker run --rm -v scenescape_vol-models:/models alpine ls /models/intel`.

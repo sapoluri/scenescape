@@ -16,16 +16,15 @@ SCENESCAPE_SPEC = FuncTestSpec(
 )
 
 TEST_NAME = "NEX-T10516"
-TEST_SET_NAME = "test_similarity_search"
 
-class VDMSSimilaritySearch(BackendFunctionalTest):
+class ReidSimilaritySearch(BackendFunctionalTest):
   def __init__(self, testName, request, recordXMLAttribute):
     super().__init__(testName, request, recordXMLAttribute)
     self.thing_1 = self.generate_random_vector()
     self.thing_2 = self.generate_random_vector()
     self.thing_2_match = self.generate_random_vector()
     # Per-run identifiers keep this test isolated from descriptors left behind
-    # by earlier runs sharing the same VDMS instance.
+    # by earlier runs sharing the same ReID backend instance.
     self.run_id = uuid.uuid4().hex
     self.set_name = f"reid_vector_{self.run_id[:8]}"
 
@@ -117,14 +116,14 @@ class VDMSSimilaritySearch(BackendFunctionalTest):
       "There should be only 2 entities returned!"
     return
 
-def test_vdms_similarity_search(scenescape_env, request, record_xml_attribute):
-  """! Verify similarity search with RE-ID vectors using VDMS.
+def test_reid_similarity_search(scenescape_env, request, record_xml_attribute):
+  """! Verify similarity search with RE-ID vectors on the configured backend.
   @param    request                 Dict of test parameters.
   @param    record_xml_attribute    Pytest fixture recording the test name.
   @return   exit_code               Indicates test success or failure.
   """
 
-  test = VDMSSimilaritySearch(TEST_NAME, request, record_xml_attribute)
+  test = ReidSimilaritySearch(TEST_NAME, request, record_xml_attribute)
   try:
     test.reid_connect()
     test.descriptor_set_reid()

@@ -5,7 +5,6 @@
 
 import json
 import time
-import os
 from tests.functional.backend_functional import BackendFunctionalTest
 from scene_common.mqtt import PubSub
 from tests.utils.log import get_logger
@@ -79,7 +78,7 @@ class REIDPerformanceDegradation(BackendFunctionalTest):
     disk_usage = psutil.disk_usage('/').percent
     return cpu_usage, memory_usage, disk_usage
 
-  def get_vdms_time(self):
+  def get_reid_query_time(self):
     start_time = time.time()
     self.get_similarity_comparison(20)
     end_time = time.time()
@@ -87,9 +86,9 @@ class REIDPerformanceDegradation(BackendFunctionalTest):
 
   def store_performance_results(self, test_time):
     cpu_usage, memory_usage, disk_usage = self.get_sys_info()
-    vdms_time = self.get_vdms_time()
-    self.performance_db.append([test_time, cpu_usage, memory_usage, disk_usage, vdms_time])
-    log.info(f"{test_time}, {cpu_usage}, {memory_usage}, {disk_usage}, {vdms_time}")
+    reid_time = self.get_reid_query_time()
+    self.performance_db.append([test_time, cpu_usage, memory_usage, disk_usage, reid_time])
+    log.info(f"{test_time}, {cpu_usage}, {memory_usage}, {disk_usage}, {reid_time}")
     return
 
   def on_scene_message(self, mqttc, condlock, msg):

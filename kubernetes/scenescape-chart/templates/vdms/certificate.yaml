@@ -18,10 +18,6 @@ spec:
   - "reid"
   - "reid.{{ .Release.Namespace }}"
   - "reid.{{ .Release.Namespace }}.svc.cluster.local"
-  - "vdms.scenescape.intel.com"
-  - "vdms"
-  - "vdms.{{ .Release.Namespace }}"
-  - "vdms.{{ .Release.Namespace }}.svc.cluster.local"
   duration: 8760h
   renewBefore: 720h
 ---

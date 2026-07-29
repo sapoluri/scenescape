@@ -5,7 +5,7 @@
 
 """
 Integration test for Reid data flow through the 2-tier architecture.
-Tests the complete pipeline from detection ingestion through VDMS storage and retrieval.
+Tests the complete pipeline from detection ingestion through ReID backend storage and retrieval.
 """
 
 import base64
@@ -112,19 +112,6 @@ def create_mock_mqtt_message(topic_str, payload_dict):
   return mock_msg
 
 
-def wait_for_vdms_ready(use_tls=False, max_attempts=30, retry_interval=1):
-  """Backward-compatible alias for wait_for_reid_backend_ready()."""
-  return wait_for_reid_backend_ready(
-    use_tls=use_tls,
-    max_attempts=max_attempts,
-    retry_interval=retry_interval)
-
-
-def query_vdms_reid_count(camera_id, scene_uid, use_tls=True):
-  """Backward-compatible alias for query_reid_count()."""
-  return query_reid_count("person")
-
-
 def setup_test_environment(params):
   """
   Setup common test environment: authenticate, get scene/camera, connect to MQTT.
@@ -222,7 +209,7 @@ def publish_detection_frames(pubsub, topic_str, detections_data, num_frames=25):
 
 def trigger_track_pruning(pubsub, topic_str, camera_id):
   """
-  Send empty frames and wait for track pruning and VDMS storage.
+  Send empty frames and wait for track pruning and ReID backend storage.
 
   @param pubsub  MQTT client
   @param topic_str  MQTT topic for publishing
@@ -244,8 +231,8 @@ def trigger_track_pruning(pubsub, topic_str, camera_id):
     pubsub.publish(topic_str, json.dumps(empty_msg))
     time.sleep(0.1)
 
-  # Wait for timeout flush and VDMS insertion
-  log.info("Waiting for stale feature timeout (5s) and VDMS storage (3s)...")
+  # Wait for timeout flush and ReID backend insertion
+  log.info("Waiting for stale feature timeout (5s) and ReID backend storage (3s)...")
   time.sleep(8)
 
 
@@ -254,7 +241,7 @@ def test_reid_no_metadata(params, record_xml_attribute):
   Test Reid data flow with NO metadata (baseline scenario).
 
   Validates that detection messages without metadata are processed correctly
-  and no reid vectors are stored in VDMS.
+  and no reid vectors are stored in the ReID backend.
 
   @param params  Test parameters from pytest fixture
   @param record_xml_attribute  Pytest fixture for recording test metadata
@@ -293,9 +280,9 @@ def test_reid_no_metadata(params, record_xml_attribute):
     time.sleep(1)
 
     # Verify NO reid data stored
-    reid_count = query_vdms_reid_count(camera_id, scene_uid, use_tls=False)
+    reid_count = query_reid_count("person")
     assert reid_count == 0, f"Expected 0 reid vectors, found {reid_count}"
-    log.info("✓ VDMS verification passed: No reid vectors stored")
+    log.info("✓ ReID backend verification passed: No reid vectors stored")
 
     log.info("✓ Test passed: No metadata flow validated")
 
@@ -320,7 +307,7 @@ def test_reid_only_metadata(params, record_xml_attribute):
   Test Reid data flow with REID ONLY metadata (no semantic attributes).
 
   Validates that reid embeddings are correctly extracted, tracked, and stored
-  in VDMS without semantic metadata.
+  in the ReID backend without semantic metadata.
 
   @param params  Test parameters from pytest fixture
   @param record_xml_attribute  Pytest fixture for recording test metadata
@@ -382,13 +369,13 @@ def test_reid_only_metadata(params, record_xml_attribute):
 
     log.info(f"Published {num_frames} reid-only frames")
 
-    # Trigger track pruning and VDMS storage
+    # Trigger track pruning and ReID backend storage
     trigger_track_pruning(pubsub, topic_str, camera_id)
 
     # Verify reid vectors stored
-    reid_count = query_vdms_reid_count(camera_id, scene_uid, use_tls=False)
+    reid_count = query_reid_count("person")
     assert reid_count >= 2, f"Expected >= 2 reid vectors, found {reid_count}"
-    log.info(f"✓ VDMS verification passed: {reid_count} reid vectors stored")
+    log.info(f"✓ ReID backend verification passed: {reid_count} reid vectors stored")
 
     log.info("✓ Test passed: Reid-only flow validated")
 
@@ -434,8 +421,8 @@ def test_reid_semantic_only_metadata(params, record_xml_attribute):
     log.info("=" * 80)
 
     # Capture current reid count before semantic-only test
-    reid_count_before = query_vdms_reid_count(camera_id, scene_uid, use_tls=False)
-    log.info(f"VDMS reid vectors before semantic-only test: {reid_count_before}")
+    reid_count_before = query_reid_count("person")
+    log.info(f"ReID backend vectors before semantic-only test: {reid_count_before}")
 
     # Define semantic metadata
     semantic_attrs = {
@@ -469,12 +456,12 @@ def test_reid_semantic_only_metadata(params, record_xml_attribute):
     time.sleep(2)
 
     # Verify NO NEW reid vectors stored (semantic only, no reid)
-    # VDMS is persistent, so we check that count doesn't increase
-    reid_count_after = query_vdms_reid_count(camera_id, scene_uid, use_tls=False)
-    log.info(f"VDMS reid vectors after semantic-only test: {reid_count_after}")
+    # The ReID backend is persistent, so we check that count doesn't increase
+    reid_count_after = query_reid_count("person")
+    log.info(f"ReID backend vectors after semantic-only test: {reid_count_after}")
     assert reid_count_after == reid_count_before, \
            f"Expected no new reid vectors (before={reid_count_before}, after={reid_count_after})"
-    log.info(f"✓ VDMS verification passed: No new reid vectors stored ({reid_count_before} total)")
+    log.info(f"✓ ReID backend verification passed: No new reid vectors stored ({reid_count_before} total)")
 
     log.info("✓ Test passed: Semantic-only flow validated")
 
@@ -499,7 +486,7 @@ def test_reid_combined_metadata(params, record_xml_attribute):
   Test Reid data flow with REID + SEMANTIC metadata (complete metadata).
 
   Validates that reid embeddings and semantic attributes are correctly
-  processed together and stored in VDMS with full metadata.
+  processed together and stored in the ReID backend with full metadata.
 
   @param params  Test parameters from pytest fixture
   @param record_xml_attribute  Pytest fixture for recording test metadata
@@ -571,13 +558,13 @@ def test_reid_combined_metadata(params, record_xml_attribute):
 
     log.info(f"Published {num_frames} combined reid+semantic frames")
 
-    # Trigger track pruning and VDMS storage
+    # Trigger track pruning and ReID backend storage
     trigger_track_pruning(pubsub, topic_str, camera_id)
 
     # Verify reid vectors stored
-    reid_count = query_vdms_reid_count(camera_id, scene_uid, use_tls=False)
+    reid_count = query_reid_count("person")
     assert reid_count >= 2, f"Expected >= 2 reid vectors, found {reid_count}"
-    log.info(f"✓ VDMS verification passed: {reid_count} reid vectors stored")
+    log.info(f"✓ ReID backend verification passed: {reid_count} reid vectors stored")
 
     log.info("✓ Test passed: Combined reid+semantic flow validated")
 

@@ -22,44 +22,28 @@ Before you begin, ensure the following:
 
 ## Steps to Enable Reidentification (ReID) for Out of Box Experience
 
-> **Note:** The VDMS service is configured under the `vdms` Docker Compose profile. You must include `--profile vdms` (or set `COMPOSE_PROFILES` accordingly) when starting services. See [Docker Compose Profiles](../get-started.md#docker-compose-profiles) for more information.
+1. **Select one ReID database**
 
-1. **Enable VDMS storage by uncomment the following section in [docker-compose-dl-streamer-example.yml](/sample_data/docker-compose-dl-streamer-example.yml)**
+   Use one backend override with the base Compose file. Both overrides create
+   the same logical `reid` service and configure the Scene Controller. Run
+   these commands from the `sample_data/` directory:
 
-```yaml
-vdms:
-  image: intellabs/vdms:v2.12.0
-  init: true
-  networks:
-    scenescape:
-      aliases:
-        - reid.scenescape.intel.com
-        - vdms.scenescape.intel.com
-  restart: always
-```
+   ```bash
+   # VDMS
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.vdms-override.yml \
+     --profile controller up
 
-For information on VDMS, visit the official documentation: https://intellabs.github.io/vdms/.
+   # Or Qdrant
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.qdrant-override.yml \
+     --profile controller up
+   ```
 
-Scenescape leverages VDMS to store object vector embeddings for the purpose of reidentifying an object using visual features.
+   Use exactly one override. Do not combine them. No backend-specific Compose
+   profile or manual service/dependency editing is required.
 
-Both VDMS and Qdrant use the same controller connection defaults: hostname `reid.scenescape.intel.com`, port `55555`, TLS enabled, and certificates from `make init-secrets` (`scenescape-reid` client, `scenescape-reid-s` server). Only `REID_DATABASE` selects which backend the Scene Controller uses.
-
-2. **Uncomment VDMS dependency in scene config**
-   Uncomment the `vdms` dependency:
-
-```yaml
-depends_on:
-  web:
-    condition: service_healthy
-  broker:
-    condition: service_started
-  ntpserv:
-    condition: service_started
-  vdms:
-    condition: service_started
-```
-
-3. **Enable Visual Feature Extraction in Video Pipeline**
+2. **Enable Visual Feature Extraction in Video Pipeline**
    Edit the retail-config setting in [Docker Compose](/sample_data/docker-compose-dl-streamer-example.yml) as follows:
 
 ```yaml
@@ -73,36 +57,34 @@ This reidentification-specific configuration uses a vision pipeline that include
 "pipeline": "multifilesrc loop=TRUE location=/home/pipeline-server/videos/apriltag-cam2.ts name=source ! decodebin ! videoconvert ! video/x-raw,format=BGR ! sscape_timestamp_capture name=timesync ntp-server=ntpserv use-frame-ntp-timestamp=false ! gvadetect model=/home/pipeline-server/models/intel/person-detection-retail-0013/FP32/person-detection-retail-0013.xml model-proc=/home/pipeline-server/models/object_detection/person/person-detection-retail-0013.json name=detection ! gvainference model=/home/pipeline-server/models/intel/person-reidentification-retail-0277/FP32/person-reidentification-retail-0277.xml inference-region=roi-list ! gvametaconvert add-tensor-data=true name=metaconvert ! sscape_post_inference_data_publish name=datapublisher ! gvametapublish name=destination ! appsink sync=true",
 ```
 
-4. **Start the System**
-   Launch the updated stack with the `vdms` profile to enable the visual database (see [Docker Compose Profiles](../get-started.md#docker-compose-profiles) for details on available profiles):
-
-   ```bash
-   docker compose --profile controller --profile vdms up
-   ```
-
 **Expected Result**: Scenescape starts with ReID enabled and begins assigning UUIDs based on visual similarity.
 
 ---
 
-## Switching the ReID Vector Database Backend (VDMS → Qdrant)
+## Selecting the ReID Vector Database Backend
 
-By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VDMS`). You can switch the Scene Controller to **Qdrant** without changing the camera ReID pipeline or connection host/port/TLS settings.
+VDMS and Qdrant are mutually exclusive alternatives. They use the same service
+name (`reid`), hostname (`reid.scenescape.intel.com`), port (`55555`), TLS
+material, and controller connection settings. The selected override sets
+`REID_DATABASE` and starts the matching database implementation.
 
 ### Prerequisites
 
 - ReID is already enabled (feature extraction pipeline and `reid-config.json` as in the steps above).
 - Secrets include shared ReID certificates (`scenescape-reid*` / `scenescape-reid-s*`). Regenerate with `make clean-secrets && make init-secrets` if those files are missing.
-- You can edit Compose files or pass an override file when starting services.
+- You can pass an override file when starting services.
 
 ### Steps
 
-1. **Stop the stack** if it is running (include `--profile vdms` if VDMS was enabled):
+1. **Stop the stack** using the same base and backend override files used to start it:
 
    ```bash
-   docker compose --profile controller --profile vdms down
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.vdms-override.yml \
+     --profile controller down
    ```
 
-2. **Start with the Qdrant override** instead of the VDMS profile. From the directory that contains your Compose files (for the out-of-box DL Streamer example, use `sample_data/`):
+2. **Start with the other backend override**. For example, to select Qdrant:
 
    ```bash
    docker compose -f docker-compose-dl-streamer-example.yml \
@@ -112,11 +94,12 @@ By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VD
 
    The override ([docker-compose.qdrant-override.yml](/sample_data/docker-compose.qdrant-override.yml)):
 
-   - Starts a `qdrant` service with TLS on shared host `reid.scenescape.intel.com` and port `55555` (certs from `make` / `init-secrets`)
+   - Starts the logical `reid` service using Qdrant, with TLS on shared host `reid.scenescape.intel.com` and port `55555`
    - Sets `REID_DATABASE=QDRANT` on the `scene` service
    - Connection defaults (hostname, port, TLS=`true`, cert paths) are shared via `REID_*` settings
 
-3. **Do not pass `--profile vdms`** unless you intentionally want VDMS running in parallel. The controller uses only the backend named by `REID_DATABASE`.
+3. **Do not combine the backend override files.** A deployment has one logical
+   `reid` service and one selected adapter.
 
 ### Shared ReID environment variables
 
@@ -137,12 +120,12 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 ### Switching back to VDMS
 
 1. Stop the Qdrant-backed stack.
-2. Start with the VDMS profile (and VDMS override if you use it), and omit `REID_DATABASE=QDRANT` (or set `REID_DATABASE=VDMS`):
+2. Replace the Qdrant override with the VDMS override:
 
    ```bash
    docker compose -f docker-compose-dl-streamer-example.yml \
      -f docker-compose.vdms-override.yml \
-     --profile controller --profile vdms up
+     --profile controller up
    ```
 
 > **Note:** Vector data is not migrated between VDMS and Qdrant. After a backend switch, identities are matched only against embeddings stored in the newly selected database.
@@ -153,28 +136,21 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 
 ## Steps to Disable Re-identification
 
-1. **Comment Out the Database Container**
-   Disable the active ReID database (`vdms` and/or `qdrant`) by commenting it out in Compose or omitting the `vdms` profile / Qdrant override:
+1. **Stop using the backend override**
 
-   <!-- prettier-ignore -->
-   ```yaml
-   # vdms:
-   #   image: intellabs/vdms:v2.12.0
-   #   ...
+   Stop the stack with its active override, then restart the base Compose file
+   without either ReID backend override. The base file does not contain a ReID
+   database service.
+
+   ```bash
+   docker compose -f docker-compose-dl-streamer-example.yml \
+     -f docker-compose.vdms-override.yml \
+     --profile controller down
    ```
 
-2. **Remove the Dependency from Scene Controller**
-   Comment or delete the database dependency (`vdms` or `qdrant`):
+   Substitute `docker-compose.qdrant-override.yml` when Qdrant is active.
 
-   ```yaml
-   depends_on:
-     - broker
-     - web
-     - ntpserv
-     # - vdms
-   ```
-
-3. **Remove ReID from the Camera Pipeline**
+2. **Remove ReID from the Camera Pipeline**
    Edit the retail-config setting in [Docker Compose](/sample_data/docker-compose-dl-streamer-example.yml) and revert to the config without re-id model:
 
 ```yaml
@@ -182,7 +158,7 @@ retail-config:
   file: ./dlstreamer-pipeline-server/retail-config.json
 ```
 
-4. **Restart the System** (the `vdms` profile is no longer needed since ReID is disabled):
+3. **Restart the System**:
 
    ```bash
    docker compose --profile controller up --build
@@ -226,12 +202,16 @@ The scene output includes `reid_state` for each tracked object. For canonical st
 | `DEFAULT_MINIMUM_FEATURE_COUNT`                                           | Minimum features needed before querying DB.                                                                                                                                                             | Integer (e.g., 5–20)                                                                                                                                    |
 | `DEFAULT_MAX_FEATURE_SLICE_SIZE`                                          | Proportion of features stored to improve DB performance.                                                                                                                                                | Float (e.g., 0.1–1.0)                                                                                                                                   |
 
-To apply changes (include `--profile vdms` if ReID is enabled; see [Docker Compose Profiles](../get-started.md#docker-compose-profiles)):
+To apply changes, use the same backend override you selected when starting the stack:
 
 ```bash
-docker compose --profile controller --profile vdms down
+docker compose -f docker-compose-dl-streamer-example.yml \
+  -f docker-compose.vdms-override.yml \
+  --profile controller down
 make -C docker
-docker compose --profile controller --profile vdms up --build
+docker compose -f docker-compose-dl-streamer-example.yml \
+  -f docker-compose.vdms-override.yml \
+  --profile controller up --build
 ```
 
 ---
@@ -240,18 +220,18 @@ docker compose --profile controller --profile vdms up --build
 
 1. **Issue: ReID not working**
    - **Cause**: Database container is not running, not linked, or TLS/certs do not match the shared ReID defaults.
-   - **Resolution** (VDMS):
+   - **Resolution**:
      ```bash
-     docker ps | grep vdms
-     docker compose logs vdms
+     docker compose -f docker-compose-dl-streamer-example.yml \
+       -f docker-compose.vdms-override.yml \
+       --profile controller ps reid
+     docker compose -f docker-compose-dl-streamer-example.yml \
+       -f docker-compose.vdms-override.yml \
+       --profile controller logs reid
      ```
-     Confirm the service aliases include `reid.scenescape.intel.com` and mounts `scenescape-reid-s` server certs.
-   - **Resolution** (Qdrant):
-     ```bash
-     docker ps | grep qdrant
-     docker compose logs qdrant
-     ```
-     Confirm `REID_DATABASE=QDRANT` on the `scene` service, that the `qdrant` container is healthy on port `55555` with TLS, and that `scenescape-reid*` secrets exist.
+     Substitute the Qdrant override when it is selected. Confirm the `reid`
+     service is healthy, the expected `REID_DATABASE` is set on `scene`, and
+     the shared `scenescape-reid*` certificates exist.
 
 2. **Issue: Objects not re-identifying across scenes**
    - **Cause**: Insufficient visual features collected or poor lighting.

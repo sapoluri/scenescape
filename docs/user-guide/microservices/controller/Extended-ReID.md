@@ -143,7 +143,7 @@ Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` sele
 - Values ≥ `REID_CONFIDENCE_THRESHOLD`: Included in AND constraints (strict metadata filtering)
 - Values < threshold: Ignored (rely on TIER 2 vector similarity for flexible matching)
 - Valid range: 0.0 to 1.0
-- To switch backends in a deployment, see [Switching the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#switching-the-reid-vector-database-backend-vdms--qdrant)
+- To select a backend in a deployment, see [Selecting the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#selecting-the-reid-vector-database-backend)
 
 Legacy `VDMS_*` / `QDRANT_*` names remain temporary fallbacks.
 

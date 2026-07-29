@@ -111,10 +111,9 @@ The following profiles are available:
 | `experimental`      | Enables mapping and cluster-analytics services.                               |
 | `mapping`           | Enables mapping service only.                                                 |
 | `cluster-analytics` | Enables cluster-analytics service only.                                       |
-| `vdms`              | Enables the VDMS visual database service (used for re-identification).        |
 | `tracker`           | Enables the tracker service.                                                  |
 
-> **ReID backends:** VDMS (`--profile vdms`) and Qdrant (Compose override) share the same connection defaults: host `reid.scenescape.intel.com`, port `55555`, TLS on, and `scenescape-reid*` certificates from `make init-secrets`. Only `REID_DATABASE` selects the adapter. There is no dedicated Compose profile for Qdrant in the sample stack — use `sample_data/docker-compose.qdrant-override.yml` with `--profile controller` (and without `--profile vdms`). See [Switching the ReID Vector Database Backend](./other-topics/how-to-enable-reidentification.md#switching-the-reid-vector-database-backend-vdms--qdrant).
+> **ReID backends:** Select exactly one backend by adding either `sample_data/docker-compose.vdms-override.yml` or `sample_data/docker-compose.qdrant-override.yml` to the Compose command. Both overrides provide the same logical `reid` service, shared host `reid.scenescape.intel.com`, port `55555`, TLS settings, and certificates. No ReID database profile is required. See [Selecting the ReID Vector Database Backend](./other-topics/how-to-enable-reidentification.md#selecting-the-reid-vector-database-backend).
 
 Profiles can be specified on the command line with `--profile`:
 

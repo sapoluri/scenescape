@@ -119,7 +119,6 @@ class Browser(Firefox):
       "web.scenescape.intel.com",
       "autocalibration.scenescape.intel.com",
       "reid.scenescape.intel.com",
-      "vdms.scenescape.intel.com",
     ]
     options.set_preference("network.dns.localDomains", ",".join(_host_aliases))
     service = Service(_find_geckodriver())

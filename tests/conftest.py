@@ -361,8 +361,6 @@ _HOST_ALIASES = [
   "web.scenescape.intel.com",
   "autocalibration.scenescape.intel.com",
   "reid.scenescape.intel.com",
-  "vdms.scenescape.intel.com",
-  "qdrant.scenescape.intel.com",
 ]
 
 @pytest.fixture(scope="session")

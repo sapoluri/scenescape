@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: (C) 2024 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 import random
 
 import numpy as np
@@ -21,11 +20,6 @@ class BackendFunctionalTest(FunctionalTest):
   def reid_connect(self, use_tls=True):
     self.vdb = create_reid_database()
     connect_reid_database(self.vdb, use_tls=use_tls)
-    return
-
-  def vdms_connect(self, use_tls=True):
-    """Backward-compatible alias for reid_connect()."""
-    self.reid_connect(use_tls=use_tls)
     return
 
   def generate_random_vector(self, floor=-1, ceiling=1, vsize=256):

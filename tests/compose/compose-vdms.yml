@@ -22,7 +22,6 @@ services:
       scenescape-test:
         aliases:
           - reid.scenescape.intel.com
-          - vdms.scenescape.intel.com
     environment:
       - OVERRIDE_ca_file=/run/secrets/certs/scenescape-ca.pem
       - OVERRIDE_cert_file=/run/secrets/certs/scenescape-reid-s.crt
