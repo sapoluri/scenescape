@@ -39,6 +39,10 @@ CERTDOMAIN ?= scenescape.intel.com
 DLSTREAMER_SAMPLE_VIDEOS := $(addprefix sample_data/,apriltag-cam1.ts apriltag-cam2.ts apriltag-cam3.ts qcam1.ts qcam2.ts car-detection.ts)
 DLSTREAMER_DOCKER_COMPOSE_FILE := ./sample_data/docker-compose-dl-streamer-example.yml
 DEMO_WAIT_SECONDS ?= "0"
+# ReID vector backend used by the ReID demo targets: vdms (default) or qdrant
+REID_BACKEND ?= vdms
+REID_OVERRIDE_FILE = sample_data/docker-compose.$(strip $(REID_BACKEND))-override.yml
+REID_COMPOSE_ARGS = -f docker-compose.yml -f $(REID_OVERRIDE_FILE)
 
 # Test variables
 TESTS_FOLDER := tests
@@ -89,8 +93,9 @@ help:
 	@echo "  init-secrets                Generate secrets and certificates"
 	@echo "  <image folder>              Build a specific microservice image (autocalibration, controller, etc.)"
 	@echo ""
-	@echo "  demo                        (default) Start the Scenescape demo with core services using Docker Compose"
-	@echo "  demo-all                    Start the Scenescape demo with all services using Docker Compose"
+	@echo "  demo                        (default) Start the Scenescape demo with core services (tracking, no ReID)"
+	@echo "  demo-reid                   Start the core demo plus the ReID vector database"
+	@echo "  demo-all                    Start demo-reid plus cluster analytics and experimental services"
 	@echo "  demo-cluster-analytics      Start the Scenescape demo with cluster analytics service using Docker Compose"
 	@echo "                              (the demo targets require the SUPASS environment variable to be set"
 	@echo "                              as the super user password for logging into Scenescape)"
@@ -154,6 +159,8 @@ help:
 	@echo "  - Use 'make JOBS=N' to build Scenescape images using N parallel processes."
 	@echo "  - Use 'make FOLDERS=\"<list of image folders>\"' to build specific image folders."
 	@echo "  - Image folders can be: $(IMAGE_FOLDERS)"
+	@echo "  - ReID demo targets (demo-reid, demo-all) default to REID_BACKEND=vdms."
+	@echo "    Set REID_BACKEND=qdrant to use Qdrant instead."
 	@echo ""
 
 # ========================= Build Images =============================
@@ -699,13 +706,24 @@ define start_demo
 	@echo "Or use: make demo-close"
 endef
 
+.PHONY: check-reid-backend
+check-reid-backend:
+	@case "$(strip $(REID_BACKEND))" in \
+		vdms|qdrant) ;; \
+		*) echo "REID_BACKEND must be 'vdms' (default) or 'qdrant'"; exit 1 ;; \
+	esac
+
 .PHONY: demo
 demo: build-core init-sample-data
 	$(call start_demo,--profile controller)
 
+.PHONY: demo-reid
+demo-reid: check-reid-backend build-core init-sample-data
+	$(call start_demo,$(strip $(REID_COMPOSE_ARGS) --profile controller))
+
 .PHONY: demo-all
-demo-all: build-all init-sample-data
-	$(call start_demo,--profile controller --profile cluster-analytics --profile experimental)
+demo-all: check-reid-backend build-all init-sample-data
+	$(call start_demo,$(strip $(REID_COMPOSE_ARGS) --profile controller --profile cluster-analytics --profile experimental))
 
 .PHONY: demo-cluster-analytics
 demo-cluster-analytics: build-all init-sample-data

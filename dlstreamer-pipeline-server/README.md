@@ -172,6 +172,8 @@ Following are the step-by-step instructions for enabling person reidentification
 
    To use Qdrant instead, replace `docker-compose.vdms-override.yml` with
    `docker-compose.qdrant-override.yml`. Do not combine the two overrides.
+   From the repository root, `make demo-reid` does the same and defaults to
+   VDMS; use `make demo-reid REID_BACKEND=qdrant` for Qdrant.
 
 2. Use the predefined [queuing-config-reid.json](./queuing-config-reid.json) to enable vector embedding metadata from the DL Streamer service:
 
