@@ -31,7 +31,7 @@ class TestQdrantDatabaseInitialization:
   def test_initialization_defaults(self):
     db = QdrantDatabase()
     assert db.set_name == SCHEMA_NAME
-    assert db.similarity_metric == "L2"
+    assert db.similarity_metric == "IP"
     assert db.dimensions is None
     assert db.use_tls is True
     assert hasattr(db, 'lock')
@@ -77,7 +77,7 @@ class TestQdrantSchemaManagement:
 
     assert db._schema_ready is True
     assert db.dimensions == 256
-    db._createCollection.assert_called_once_with(SCHEMA_NAME, 256, "L2")
+    db._createCollection.assert_called_once_with(SCHEMA_NAME, 256, "IP")
     db._writeSchemaMarker.assert_called_once()
 
   def test_ensure_schema_raises_on_dimension_mismatch(self):
@@ -85,7 +85,7 @@ class TestQdrantSchemaManagement:
     db.client = MagicMock()
     db.connected = True
     db._collectionExists = MagicMock(return_value=True)
-    db._readSchemaMarker = MagicMock(return_value=(True, 128, "L2"))
+    db._readSchemaMarker = MagicMock(return_value=(True, 128, "IP"))
     db._ensurePayloadIndexes = MagicMock()
 
     with pytest.raises(RuntimeError, match="has 128 dimensions"):
@@ -96,7 +96,7 @@ class TestQdrantSchemaManagement:
     db.client = MagicMock()
     db.connected = True
     db._collectionExists = MagicMock(return_value=True)
-    db._readSchemaMarker = MagicMock(return_value=(True, 256, "L2"))
+    db._readSchemaMarker = MagicMock(return_value=(True, 256, "IP"))
     db._ensurePayloadIndexes = MagicMock()
 
     db.ensureSchema(256)

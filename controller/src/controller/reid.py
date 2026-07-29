@@ -5,9 +5,56 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from controller.reid_constants import COSINE_SIMILARITY_TOLERANCE, SIMILARITY_METRIC
+from controller.reid_constraints import build_query_constraints
+from controller.reid_env import get_reid_confidence_threshold
 from scene_common import log
 
 class ReIDDatabase(ABC):
+  def __init__(self, similarity_metric=SIMILARITY_METRIC, confidence_threshold=None):
+    """Establish the backend-agnostic state shared by every ReID adapter.
+
+    Subclasses must call this before using any inherited helper, since
+    similarity scoring and TIER 1 constraint building read these attributes.
+    """
+    self.similarity_metric = similarity_metric
+    self.confidence_threshold = (
+      get_reid_confidence_threshold() if confidence_threshold is None
+      else confidence_threshold)
+    return
+
+  def _usesInnerProductMetric(self, metric=None):
+    """Return True when descriptor metric is Inner Product."""
+    if metric is None:
+      metric = self.similarity_metric
+    return str(metric).strip().upper() == "IP"
+
+  def _isValidSimilarityScore(self, score):
+    """Validate similarity score according to active metric semantics."""
+    try:
+      value = float(score)
+    except (TypeError, ValueError):
+      return False
+
+    if not np.isfinite(value):
+      return False
+
+    # With normalized embeddings, Inner Product must stay within [-1, 1].
+    # Allow a small tolerance to absorb float32 rounding from the backend.
+    if self._usesInnerProductMetric() and (
+        value < -(1.0 + COSINE_SIMILARITY_TOLERANCE) or
+        value > (1.0 + COSINE_SIMILARITY_TOLERANCE)):
+      return False
+
+    return True
+
+  def _buildQueryConstraints(self, object_type, **constraints):
+    """Build TIER 1 metadata filtering constraints for this adapter."""
+    return build_query_constraints(
+      object_type,
+      confidence_threshold=self.confidence_threshold,
+      **constraints)
+
   def prepareReidDict(self, embedding_vector, dimensions=None,
                         normalize_embeddings=False):
     """Prepare a normalized/validated ReID payload from arbitrary vector shapes.

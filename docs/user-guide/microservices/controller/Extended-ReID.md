@@ -33,7 +33,7 @@ ReID Query Flow (VDMS or Qdrant):
 
 ### Similarity Metric and Score Semantics
 
-The Re-ID metric is configured through `reid-config.json` (`similarity_metric`) and defaults to `L2`.
+The Re-ID metric is configured through `reid-config.json` (`similarity_metric`) and defaults to `COSINE`.
 
 When `similarity_metric` is `COSINE`, Re-ID embedding vectors are normalized to unit length before they are:
 
@@ -181,13 +181,13 @@ controller/config/reid-config.json
 
 ```json
 {
-  "similarity_metric": "L2",
+  "similarity_metric": "COSINE",
   "stale_feature_timeout_secs": 5.0,
   "stale_feature_check_interval_secs": 1.0,
   "feature_accumulation_threshold": 12,
   "minimum_bbox_area": 5000,
   "feature_slice_size": 10,
-  "similarity_threshold": 40.0
+  "similarity_threshold": 0.5
 }
 ```
 
@@ -195,7 +195,7 @@ controller/config/reid-config.json
 
 | Parameter                           | Type   | Default                                                | Description                                                                                                                                                                                                      |
 | ----------------------------------- | ------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `similarity_metric`                 | string | `L2`                                                   | Similarity metric for ReID matching. `L2` is the default distance-style metric (lower-is-better). `COSINE` uses normalized vectors with an inner-product backend path (higher-is-better).                        |
+| `similarity_metric`                 | string | `COSINE`                                               | Similarity metric for ReID matching. `COSINE` is the default and uses normalized vectors with an inner-product backend path (higher-is-better). `L2` provides distance-style matching (lower-is-better).         |
 | `stale_feature_timeout_secs`        | float  | 5.0                                                    | How long (seconds) to accumulate features in memory before flushing to the ReID database. Features older than this threshold are persisted for long-term storage.                                                |
 | `stale_feature_check_interval_secs` | float  | 1.0                                                    | How frequently (seconds) the background timer checks for stale features and flushes them to the ReID database. More frequent checks ensure timely database updates.                                              |
 | `feature_accumulation_threshold`    | int    | 12                                                     | Minimum number of quality features required before initiating a similarity query against the database. More features = higher statistical confidence in matching.                                                |
@@ -204,6 +204,11 @@ controller/config/reid-config.json
 | `similarity_threshold`              | float  | metric-dependent (`40.0` for `L2`, `0.5` for `COSINE`) | Match acceptance threshold interpreted using the configured metric semantics: for `COSINE`, candidates **above** the threshold match; for `L2`-style distance metrics, candidates **below** the threshold match. |
 
 **Similarity range note**: For `COSINE` (normalized vectors with backend IP/DOT), scores are validated against `[-1, 1]` because embeddings are normalized before storage and query. This range check is metric-specific and is not applied to non-cosine distance metrics.
+
+> **Migration note:** Existing ReID schemas or collections created with `L2`
+> are not compatible with the new `COSINE` default. Recreate the backend data
+> store before starting the controller, or explicitly keep
+> `"similarity_metric": "L2"` with an L2 threshold.
 
 ### Embedding Dimension Inference
 
@@ -239,8 +244,8 @@ python scene_controller.py \
 - Decrease `stale_feature_check_interval_secs`: 0.5 (check for stale features more frequently)
 - Decrease `feature_accumulation_threshold`: 8 (query sooner with fewer features)
 - `similarity_threshold` — direction depends on the configured metric:
-  - **`L2` (default)**: _Increase_ the threshold (e.g., 50.0) to accept candidates further away → more matches
-  - **`COSINE`**: _Decrease_ the threshold (e.g., 0.2) to accept candidates with lower cosine similarity → more matches
+  - **`COSINE` (default)**: _Decrease_ the threshold (e.g., 0.2) to accept candidates with lower cosine similarity → more matches
+  - **`L2`**: _Increase_ the threshold (e.g., 50.0) to accept candidates further away → more matches
 - Increase `feature_slice_size`: 20 (store more diverse samples)
 
 **For Higher Precision (only confident matches)**:
@@ -249,8 +254,8 @@ python scene_controller.py \
 - Increase `stale_feature_check_interval_secs`: 2.0 (check less frequently, reduce overhead)
 - Increase `feature_accumulation_threshold`: 16 (require more samples for statistical confidence)
 - `similarity_threshold` — direction depends on the configured metric:
-  - **`L2` (default)**: _Decrease_ the threshold (e.g., 20.0) so only close-distance candidates match → fewer, more confident matches
-  - **`COSINE`**: _Increase_ the threshold (e.g., 0.8) to accept only high-cosine-similarity candidates → fewer, more confident matches
+  - **`COSINE` (default)**: _Increase_ the threshold (e.g., 0.8) to accept only high-cosine-similarity candidates → fewer, more confident matches
+  - **`L2`**: _Decrease_ the threshold (e.g., 20.0) so only close-distance candidates match → fewer, more confident matches
 - Decrease `feature_slice_size`: 5 (store every 5th feature for better coverage)
 
 ### Future Extensibility

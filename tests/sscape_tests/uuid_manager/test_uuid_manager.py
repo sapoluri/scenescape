@@ -84,6 +84,15 @@ class TestUUIDManagerInitialization:
     assert isinstance(manager.active_ids, dict)
     assert len(manager.active_ids) == 0
 
+  def test_default_similarity_configuration_uses_cosine(self, mock_vdms_db):
+    """Unconfigured ReID should use cosine matching and its threshold."""
+
+    manager = UUIDManager()
+
+    assert manager.similarity_metric == 'COSINE'
+    assert manager.similarity_threshold == DEFAULT_SIMILARITY_THRESHOLD_COSINE
+    assert manager.reid_database.similarity_metric == 'IP'
+
   def test_default_similarity_threshold_uses_l2_value_when_metric_is_l2(self, mock_vdms_db):
     """L2 metric should use the L2-specific default threshold when not configured."""
 

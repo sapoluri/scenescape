@@ -5,22 +5,18 @@ import json
 import socket
 import threading
 
-import numpy as np
 import vdms
 
 from controller.reid import ReIDDatabase
 from controller.reid_constants import (
-  COSINE_SIMILARITY_TOLERANCE,
   K_NEIGHBORS,
   SCHEMA_NAME,
   SIMILARITY_METRIC,
 )
-from controller.reid_constraints import build_query_constraints
 from controller.reid_env import (
   get_reid_ca_cert,
   get_reid_client_cert,
   get_reid_client_key,
-  get_reid_confidence_threshold,
   get_reid_hostname,
   get_reid_port,
   get_reid_use_tls,
@@ -36,6 +32,9 @@ class VDMSDatabase(ReIDDatabase):
                confidence_threshold=None,
                ca_cert=None, client_cert=None,
                client_key=None, use_tls=None):
+    super().__init__(
+      similarity_metric=similarity_metric,
+      confidence_threshold=confidence_threshold)
     resolved_ca_cert = get_reid_ca_cert() if ca_cert is None else ca_cert
     resolved_client_cert = (
       get_reid_client_cert() if client_cert is None else client_cert)
@@ -48,39 +47,13 @@ class VDMSDatabase(ReIDDatabase):
       client_key_file=resolved_client_key
     )
     self.set_name = set_name
-    self.similarity_metric = similarity_metric
     self.dimensions = dimensions
-    self.confidence_threshold = (
-      get_reid_confidence_threshold() if confidence_threshold is None
-      else confidence_threshold)
     self.hostname = get_reid_hostname()
     self.port = get_reid_port()
     self.lock = threading.Lock()
     self._schema_lock = threading.Lock()
     self._schema_ready = False
     return
-
-  def _usesInnerProductMetric(self):
-    """Return True when descriptor metric is Inner Product."""
-    metric = str(self.similarity_metric).strip().upper()
-    return metric == "IP"
-
-  def _isValidSimilarityScore(self, score):
-    """Validate similarity score according to active metric semantics."""
-    try:
-      value = float(score)
-    except (TypeError, ValueError):
-      return False
-
-    if not np.isfinite(value):
-      return False
-
-    # With normalized embeddings, Inner Product must stay within [-1, 1].
-    # Allow a small tolerance to absorb float32 rounding from VDMS.
-    if self._usesInnerProductMetric() and (value < -(1.0 + COSINE_SIMILARITY_TOLERANCE) or value > (1.0 + COSINE_SIMILARITY_TOLERANCE)):
-      return False
-
-    return True
 
   def sendQuery(self, query, blob=None):
     """
@@ -515,13 +488,6 @@ class VDMSDatabase(ReIDDatabase):
         if key in payload and payload[key] is not None:
           return str(payload[key])
     return None
-
-  def _buildQueryConstraints(self, object_type, **constraints):
-    """Build query constraints for TIER 1 metadata filtering."""
-    return build_query_constraints(
-      object_type,
-      confidence_threshold=self.confidence_threshold,
-      **constraints)
 
   def findMatches(self, object_type, reid_vectors, set_name=SCHEMA_NAME,
                    k_neighbors=K_NEIGHBORS, **constraints):

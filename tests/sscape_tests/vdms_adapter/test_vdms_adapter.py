@@ -47,7 +47,7 @@ class TestVDMSDatabaseInitialization:
     db = VDMSDatabase()
 
     assert db.db is not None
-    assert db.similarity_metric == "L2"
+    assert db.similarity_metric == "IP"
     mock_vdms.assert_called()
 
   @patch('controller.vdms_adapter.vdms.vdms')
@@ -157,7 +157,7 @@ class TestSchemaValidation:
     marker = second_query[0]['AddEntity']
     assert marker['properties']['set_name'] == SCHEMA_NAME
     assert marker['properties']['dimensions'] == 256
-    assert marker['properties']['metric'] == 'L2'
+    assert marker['properties']['metric'] == 'IP'
   @patch('controller.vdms_adapter.vdms.vdms')
   def test_ensure_schema_raises_on_existing_dimension_mismatch(self, mock_vdms_class):
     """Verify fallback metadata check fails when existing descriptor dimensions differ."""
@@ -171,7 +171,7 @@ class TestSchemaValidation:
         'status': 0,
         'returned': 1,
         'dimensions': 128,
-        'metric': 'L2'
+        'metric': 'IP'
       }], []),
     ])
 
@@ -242,7 +242,7 @@ class TestSchemaValidation:
         'status': 0,
         'returned': 1,
         'dimensions': 256,
-        'metric': 'L2'
+        'metric': 'IP'
       }], []),
     ])
 

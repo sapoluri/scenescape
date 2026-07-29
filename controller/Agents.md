@@ -207,13 +207,15 @@ Use this when adding a third (or replacement) vector store besides VDMS and Qdra
 
 1. **Subclass `controller.reid.ReIDDatabase`** and implement the abstract methods:
    - `connect`, `addSchema`, `addEntry`, `getPersistedAttributes`, `findSchema`, `findMatches`
-2. **Also implement `ensureSchema(dimensions)`** — required by `UUIDManager` even though it is not on the ABC today. Mirror VDMS/Qdrant: create-or-verify collection/schema for the configured metric and inferred embedding size.
-3. **Reuse shared helpers**:
-   - `prepareReidDict` / `prepareReidVector` from the base class
-   - `controller.reid_constraints.build_query_constraints` for TIER 1 metadata filters
+2. **Call `super().__init__(similarity_metric=..., confidence_threshold=...)`** first — it sets the state the inherited helpers read.
+3. **Also implement `ensureSchema(dimensions)`** — required by `UUIDManager` even though it is not on the ABC today. Mirror VDMS/Qdrant: create-or-verify collection/schema for the configured metric and inferred embedding size.
+4. **Reuse shared helpers** from the base class — do not reimplement them:
+   - `prepareReidDict` / `prepareReidVector` for embedding preparation
+   - `_buildQueryConstraints` for TIER 1 metadata filters (wraps `controller.reid_constraints.build_query_constraints`)
+   - `_usesInnerProductMetric` / `_isValidSimilarityScore` for metric-aware score handling
    - Constants from `controller.reid_constants` (`SCHEMA_NAME`, metrics, neighbor count)
    - Connection/tuning from `controller.reid_env` (`REID_*` getters) — do **not** invent backend-prefixed env vars (`MYDB_HOSTNAME`, etc.)
-4. **Register the backend** in `controller.uuid_manager.available_databases`:
+5. **Register the backend** in `controller.uuid_manager.available_databases`:
 
 ```python
 available_databases = {
@@ -223,11 +225,11 @@ available_databases = {
 }
 ```
 
-5. **Reuse shared connection defaults** from `controller.reid_env` (`reid.scenescape.intel.com:55555`, TLS on, `scenescape-reid*` cert paths). Do not add per-backend hostname/port/TLS defaults — only `REID_DATABASE` differs by backend.
+6. **Reuse shared connection defaults** from `controller.reid_env` (`reid.scenescape.intel.com:55555`, TLS on, `scenescape-reid*` cert paths). Do not add per-backend hostname/port/TLS defaults — only `REID_DATABASE` differs by backend.
 
 ### Behavioral expectations
 
-- **`findMatches`**: Return a list (one entry per query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (VDMS-compatible score semantics for the active metric).
+- **`findMatches`**: Return a list (one entry per query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (VDMS-compatible score semantics for the active metric). If the store's native score does not already follow that convention, convert it in the adapter — Qdrant's `_toSimilarityScore` is the reference example.
 - **`getPersistedAttributes`**: Return the latest persist payload for a UUID (by `persist_timestamp`), or `{}` if none.
 - **Metrics**: Controller config uses `L2` / `COSINE`; adapters map to store-native distance (e.g. Qdrant DOT for IP/COSINE path). Keep score validation consistent with `uuid_manager` thresholds.
 - **Schema markers / versioning**: Follow the existing create-first + marker/metadata verification pattern so multi-instance controllers do not silently diverge on dimensions/metric.
