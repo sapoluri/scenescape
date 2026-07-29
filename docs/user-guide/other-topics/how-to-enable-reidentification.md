@@ -10,7 +10,7 @@ This task is important for enabling persistent object tracking across different 
 
 ---
 
-## Prerequisites
+## Prerequisites for Re-identification
 
 Before you begin, ensure the following:
 
@@ -177,10 +177,10 @@ make demo-k8s DEMO_K8S_MODE=all                      # ReID plus mapping and clu
 The ReID container runs with `readOnlyRootFilesystem: true`. Each backend gets
 `emptyDir` volumes for the only paths it writes:
 
-| Backend | Writable mounts                       | Notes                                                                          |
-| ------- | ------------------------------------- | ------------------------------------------------------------------------------ |
-| VDMS    | `/vdms/data`, `/tmp`                  | `OVERRIDE_db_root_path` moves the database off the image layer                 |
-| Qdrant  | `/qdrant/storage`, `/qdrant/snapshots` | `QDRANT_INIT_FILE_PATH` moves the init indicator into writable storage         |
+| Backend | Writable mounts                        | Notes                                                                  |
+| ------- | -------------------------------------- | ---------------------------------------------------------------------- |
+| VDMS    | `/vdms/data`, `/tmp`                   | `OVERRIDE_db_root_path` moves the database off the image layer         |
+| Qdrant  | `/qdrant/storage`, `/qdrant/snapshots` | `QDRANT_INIT_FILE_PATH` moves the init indicator into writable storage |
 
 Because the VDMS image writes its generated config next to the server binary,
 the chart renders that config into `/vdms/data` and starts the server with
