@@ -5,6 +5,9 @@
 
 Connection and tuning knobs use REID_* names and are backend-agnostic.
 Only REID_DATABASE selects which adapter runs.
+
+Every getter runs while the adapter is being constructed, so a malformed value
+raises at controller startup rather than degrading behaviour at query time.
 """
 
 import os
@@ -18,7 +21,16 @@ DEFAULT_CA_CERT = "/run/secrets/certs/scenescape-ca.pem"
 DEFAULT_CLIENT_CERT = "/run/secrets/certs/scenescape-reid.crt"
 DEFAULT_CLIENT_KEY = "/run/secrets/certs/scenescape-reid.key"
 
+PORT_RANGE = (1, 65535)
+CONFIDENCE_THRESHOLD_RANGE = (0.0, 1.0)
+
 _TRUE_VALUES = ("1", "true", "yes", "on")
+_FALSE_VALUES = ("0", "false", "no", "off")
+
+
+def _parse_error(name, value, expected):
+  """Build a ValueError naming the variable, its value, and the accepted form."""
+  return ValueError(f"Invalid {name}='{value}': expected {expected}")
 
 
 def _env_value(name, default=None):
@@ -29,8 +41,63 @@ def _env_value(name, default=None):
   return str(value).strip()
 
 
+def _env_int(name, default, value_range):
+  """Return an integer env value, rejecting non-numeric or out-of-range input."""
+  raw = _env_value(name)
+  if raw is None:
+    return int(default)
+
+  low, high = value_range
+  expected = f"an integer between {low} and {high}"
+  try:
+    parsed = int(raw)
+  except ValueError:
+    raise _parse_error(name, raw, expected) from None
+  if not low <= parsed <= high:
+    raise _parse_error(name, raw, expected)
+  return parsed
+
+
+def _env_float(name, default, value_range):
+  """Return a float env value, rejecting non-numeric, NaN, or out-of-range input."""
+  raw = _env_value(name)
+  if raw is None:
+    return float(default)
+
+  low, high = value_range
+  expected = f"a number between {low} and {high}"
+  try:
+    parsed = float(raw)
+  except ValueError:
+    raise _parse_error(name, raw, expected) from None
+  # NaN fails every comparison, so this also rejects it.
+  if not low <= parsed <= high:
+    raise _parse_error(name, raw, expected)
+  return parsed
+
+
+def _env_bool(name, default):
+  """Return a boolean env value, rejecting words that are neither true nor false."""
+  raw = _env_value(name)
+  if raw is None:
+    return bool(default)
+
+  lowered = raw.lower()
+  if lowered in _TRUE_VALUES:
+    return True
+  if lowered in _FALSE_VALUES:
+    return False
+  raise _parse_error(
+    name, raw,
+    f"one of {', '.join(_TRUE_VALUES)} (true) or {', '.join(_FALSE_VALUES)} (false)")
+
+
 def get_reid_database():
-  """Return selected ReID backend name (uppercase)."""
+  """Return selected ReID backend name (uppercase).
+
+  Membership is validated by controller.reid_registry, which owns the set of
+  available adapters.
+  """
   return _env_value("REID_DATABASE", DEFAULT_DATABASE).upper()
 
 
@@ -41,15 +108,12 @@ def get_reid_hostname():
 
 def get_reid_port():
   """Return shared ReID database port."""
-  return int(_env_value("REID_PORT", DEFAULT_PORT))
+  return _env_int("REID_PORT", DEFAULT_PORT, PORT_RANGE)
 
 
 def get_reid_use_tls():
   """Return whether TLS should be used for the ReID database connection."""
-  value = _env_value("REID_USE_TLS")
-  if value is None:
-    return bool(DEFAULT_USE_TLS)
-  return value.lower() in _TRUE_VALUES
+  return _env_bool("REID_USE_TLS", DEFAULT_USE_TLS)
 
 
 def get_reid_api_key():
@@ -59,7 +123,9 @@ def get_reid_api_key():
 
 def get_reid_confidence_threshold():
   """Return TIER 1 metadata confidence threshold."""
-  return float(_env_value("REID_CONFIDENCE_THRESHOLD", DEFAULT_CONFIDENCE_THRESHOLD))
+  return _env_float(
+    "REID_CONFIDENCE_THRESHOLD", DEFAULT_CONFIDENCE_THRESHOLD,
+    CONFIDENCE_THRESHOLD_RANGE)
 
 
 def get_reid_ca_cert():

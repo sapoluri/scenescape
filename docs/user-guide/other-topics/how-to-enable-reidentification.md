@@ -120,13 +120,15 @@ Only `REID_DATABASE` selects the backend. Connection and tuning use shared `REID
 | ------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
 | `REID_DATABASE`                                         | Backend selector (`VDMS` or `QDRANT`) | `VDMS`                                                                               |
 | `REID_HOSTNAME`                                         | Database host                         | `reid.scenescape.intel.com`                                                          |
-| `REID_PORT`                                             | Database port                         | `55555`                                                                              |
-| `REID_USE_TLS`                                          | Use TLS                               | `true`                                                                               |
+| `REID_PORT`                                             | Database port (1–65535)               | `55555`                                                                              |
+| `REID_USE_TLS`                                          | Use TLS (`true`/`false`)              | `true`                                                                               |
 | `REID_API_KEY`                                          | Optional API key                      | unset (Qdrant)                                                                       |
 | `REID_CONFIDENCE_THRESHOLD`                             | TIER 1 metadata confidence threshold  | `0.8`                                                                                |
 | `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS material                   | `/run/secrets/certs/scenescape-ca.pem`, `scenescape-reid.crt`, `scenescape-reid.key` |
 
 Backend-prefixed names such as `VDMS_HOSTNAME` or `QDRANT_PORT` are no longer read. Set the `REID_*` equivalent instead.
+
+Values are validated at controller startup. A port outside 1–65535, a confidence threshold outside 0.0–1.0, or an unrecognized boolean stops the controller with a message naming the variable and its value, so a typo cannot silently disable TLS or widen a threshold.
 
 ### Switching back to VDMS
 

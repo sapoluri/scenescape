@@ -173,6 +173,7 @@ docker compose exec scene bash
 - `CONTROLLER_ENABLE_TRACING`: Enable OpenTelemetry tracing (true/false)
 - `REID_DATABASE`: ReID vector backend (`VDMS` default, or `QDRANT`) — the only backend selector
 - Shared connection/tuning (same for every backend): `REID_HOSTNAME` (`reid.scenescape.intel.com`), `REID_PORT` (`55555`), `REID_USE_TLS` (`true`), `REID_API_KEY`, `REID_CONFIDENCE_THRESHOLD`, `REID_CA_CERT`, `REID_CLIENT_CERT`, `REID_CLIENT_KEY` (see `controller.reid_env`)
+- `reid_env` parses strictly: out-of-range ports/thresholds and unrecognized booleans raise `ValueError` naming the variable and value. Read new typed settings through `_env_int` / `_env_float` / `_env_bool` rather than calling `int()` / `os.getenv` at the call site, so bad config fails at startup instead of degrading behaviour later.
 - Certificates: `make init-secrets` / `tools/certificates` generates shared `scenescape-reid` (client) and `scenescape-reid-s` (server) material — not per-backend cert names
 
 User-facing switch steps: `docs/user-guide/other-topics/how-to-enable-reidentification.md` (VDMS → Qdrant).

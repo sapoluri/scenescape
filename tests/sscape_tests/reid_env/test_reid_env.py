@@ -80,6 +80,65 @@ class TestReidEnvCanonicalNames:
     assert reid_env.get_reid_port() == 55555
 
 
+class TestStrictParsing:
+  """Malformed values must fail loudly instead of silently using a default."""
+
+  @pytest.mark.parametrize("value", ["5555o", "6543.0", "port", "-1", "0", "65536"])
+  def test_invalid_port_is_rejected(self, monkeypatch, value):
+    monkeypatch.setenv("REID_PORT", value)
+    with pytest.raises(ValueError) as excinfo:
+      reid_env.get_reid_port()
+    message = str(excinfo.value)
+    assert "REID_PORT" in message
+    assert value in message
+    assert "between 1 and 65535" in message
+
+  @pytest.mark.parametrize("value", ["1", "55555", "65535"])
+  def test_port_boundaries_are_accepted(self, monkeypatch, value):
+    monkeypatch.setenv("REID_PORT", value)
+    assert reid_env.get_reid_port() == int(value)
+
+  @pytest.mark.parametrize("value", ["0.8.1", "high", "5.0", "-0.1", "nan", "inf"])
+  def test_invalid_confidence_threshold_is_rejected(self, monkeypatch, value):
+    monkeypatch.setenv("REID_CONFIDENCE_THRESHOLD", value)
+    with pytest.raises(ValueError) as excinfo:
+      reid_env.get_reid_confidence_threshold()
+    message = str(excinfo.value)
+    assert "REID_CONFIDENCE_THRESHOLD" in message
+    assert value in message
+    assert "between 0.0 and 1.0" in message
+
+  @pytest.mark.parametrize("value", ["0", "0.0", "0.5", "1", "1.0"])
+  def test_confidence_threshold_boundaries_are_accepted(self, monkeypatch, value):
+    monkeypatch.setenv("REID_CONFIDENCE_THRESHOLD", value)
+    assert reid_env.get_reid_confidence_threshold() == float(value)
+
+  @pytest.mark.parametrize("value", ["disabled", "enabled", "tru", "2", "none"])
+  def test_unrecognized_tls_value_does_not_silently_disable_tls(
+      self, monkeypatch, value):
+    """A typo must not quietly drop the connection to plaintext."""
+    monkeypatch.setenv("REID_USE_TLS", value)
+    with pytest.raises(ValueError) as excinfo:
+      reid_env.get_reid_use_tls()
+    message = str(excinfo.value)
+    assert "REID_USE_TLS" in message
+    assert value in message
+
+  def test_blank_tls_value_keeps_secure_default(self, monkeypatch):
+    monkeypatch.setenv("REID_USE_TLS", "  ")
+    assert reid_env.get_reid_use_tls() is True
+
+  @pytest.mark.parametrize("value", ["1", "true", "TRUE", "Yes", "on"])
+  def test_true_spellings(self, monkeypatch, value):
+    monkeypatch.setenv("REID_USE_TLS", value)
+    assert reid_env.get_reid_use_tls() is True
+
+  @pytest.mark.parametrize("value", ["0", "false", "FALSE", "No", "off"])
+  def test_false_spellings(self, monkeypatch, value):
+    monkeypatch.setenv("REID_USE_TLS", value)
+    assert reid_env.get_reid_use_tls() is False
+
+
 class TestRetiredBackendSpecificNames:
   """Backend-prefixed names were removed; only REID_* is honored."""
 

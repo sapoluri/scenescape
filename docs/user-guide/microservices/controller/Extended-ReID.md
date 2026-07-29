@@ -134,8 +134,8 @@ Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` sele
 | ------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
 | `REID_DATABASE`                                         | Backend (`VDMS` or `QDRANT`)         | `VDMS`                                                              |
 | `REID_HOSTNAME`                                         | Database host                        | `reid.scenescape.intel.com`                                         |
-| `REID_PORT`                                             | Database port                        | `55555`                                                             |
-| `REID_USE_TLS`                                          | TLS on/off                           | `true`                                                              |
+| `REID_PORT`                                             | Database port (1–65535)              | `55555`                                                             |
+| `REID_USE_TLS`                                          | TLS on/off (`true`/`false`)          | `true`                                                              |
 | `REID_API_KEY`                                          | Optional API key                     | unset                                                               |
 | `REID_CONFIDENCE_THRESHOLD`                             | TIER 1 metadata confidence threshold | `0.8`                                                               |
 | `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS paths                     | `scenescape-ca.pem` / `scenescape-reid.crt` / `scenescape-reid.key` |
@@ -146,6 +146,8 @@ Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` sele
 - To select a backend in a deployment, see [Selecting the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#selecting-the-reid-vector-database-backend)
 
 Backend-prefixed names such as `VDMS_HOSTNAME` or `QDRANT_PORT` are no longer read. Set the `REID_*` equivalent instead.
+
+These values are validated when the controller starts. A port outside 1–65535, a threshold outside 0.0–1.0, or a boolean the parser does not recognize (anything other than `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`, case-insensitive) aborts startup with a message naming the variable and its value. Nothing silently falls back to a default — in particular, a misspelled `REID_USE_TLS` will not quietly drop the connection to plaintext. Blank values are treated as unset.
 
 ## Configuring Confidence Threshold
 
