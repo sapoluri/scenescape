@@ -126,7 +126,7 @@ Only `REID_DATABASE` selects the backend. Connection and tuning use shared `REID
 | `REID_CONFIDENCE_THRESHOLD`                             | TIER 1 metadata confidence threshold  | `0.8`                                                                                |
 | `REID_CA_CERT` / `REID_CLIENT_CERT` / `REID_CLIENT_KEY` | TLS / mTLS material                   | `/run/secrets/certs/scenescape-ca.pem`, `scenescape-reid.crt`, `scenescape-reid.key` |
 
-Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
+Backend-prefixed names such as `VDMS_HOSTNAME` or `QDRANT_PORT` are no longer read. Set the `REID_*` equivalent instead.
 
 ### Switching back to VDMS
 

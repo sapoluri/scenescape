@@ -31,8 +31,13 @@ class ReidSimilaritySearch(BackendFunctionalTest):
   def descriptor_set_reid(self):
     log.info("Add the descriptor set for RE-ID data")
     if REID_DATABASE == "QDRANT":
-      assert self.vdb.addSchema(self.set_name, "L2", 256), \
-        "Failed to create Qdrant collection for similarity search"
+      from controller.qdrant_adapter import QdrantDatabase
+      from tests.functional.reid_backend import connect_reid_database
+      # Use a dedicated adapter bound to this run's collection and L2 metric so
+      # ensureSchema initializes the custom set rather than the default IP schema.
+      self.vdb = QdrantDatabase(set_name=self.set_name, similarity_metric="L2")
+      connect_reid_database(self.vdb, use_tls=True)
+      self.vdb.ensureSchema(256)
       return
 
     descriptor_set = {
@@ -53,20 +58,17 @@ class ReidSimilaritySearch(BackendFunctionalTest):
   def descriptor_objects(self):
     log.info("Add descriptors for two distinct objects")
     if REID_DATABASE == "QDRANT":
-      self.vdb.ensureSchema(256)
       self.vdb.addEntry(
         "person-1",
         "track-1",
         "person",
         [self.thing_1],
-        set_name=self.set_name,
         run_id=self.run_id)
       self.vdb.addEntry(
         "person-2",
         "track-2",
         "person",
         [self.thing_2],
-        set_name=self.set_name,
         run_id=self.run_id)
       return
 

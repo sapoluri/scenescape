@@ -38,13 +38,15 @@ class BackendFunctionalTest(FunctionalTest):
         reid_vectors.append(values)
 
     if REID_DATABASE == "QDRANT":
-      self.vdb.ensureSchema(256)
+      # Query the adapter's configured set; callers that need a custom collection
+      # should bind the adapter to that set_name before searching.
+      if set_name != self.vdb.set_name:
+        self.vdb.set_name = set_name
       response = []
       for reid_vector in reid_vectors:
         matches = self.vdb.findMatches(
           "person",
           [reid_vector],
-          set_name=set_name,
           k_neighbors=20)
         entities = matches[0] if matches else []
         response.append({

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+from controller.reid_constants import RESERVED_ENTRY_KEYS
 from controller.reid_env import DEFAULT_CONFIDENCE_THRESHOLD
 from scene_common import log
 
@@ -10,10 +11,11 @@ def build_query_constraints(object_type, confidence_threshold=DEFAULT_CONFIDENCE
   """
   Build TIER 1 metadata constraints shared by ReID vector database adapters.
 
-  Constraint routing logic mirrors the VDMS adapter:
-  - Object type is always AND constraint (required field)
+  Constraint routing logic:
+  - Object type is always an AND constraint (required field; not overridable)
   - Dict values with confidence >= threshold become exact-match constraints
   - Low-confidence or missing-confidence constraints are ignored (TIER 2 handles them)
+  - Reserved identity/persist keys in metadata are ignored
 
   @param   object_type           Class of the object (Person, Vehicle, etc.)
   @param   confidence_threshold  Minimum confidence for applying metadata filters
@@ -31,6 +33,9 @@ def build_query_constraints(object_type, confidence_threshold=DEFAULT_CONFIDENCE
 
   if constraints:
     for key, value in constraints.items():
+      if key in RESERVED_ENTRY_KEYS:
+        log.debug(f"[ReID] Skipping reserved constraint key '{key}'")
+        continue
       if value is None:
         log.debug(f"[ReID] Skipping {key}: value is None")
         continue

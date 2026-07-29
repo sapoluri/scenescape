@@ -206,16 +206,18 @@ Use this when adding a third (or replacement) vector store besides VDMS and Qdra
 ### Contract
 
 1. **Subclass `controller.reid.ReIDDatabase`** and implement the abstract methods:
-   - `connect`, `addSchema`, `addEntry`, `getPersistedAttributes`, `findMatches`
+   - `connect`, `addEntry`, `getPersistedAttributes`, `findMatches`
    - Schema hooks: `_schemaResourceLabel`, `_tryCreateSchema`, `_readSchemaMarker`,
      `_persistSchemaMarker`, `findSchemaMetadata`
-2. **Call `super().__init__(set_name=..., similarity_metric=..., dimensions=..., confidence_threshold=...)`** first — it sets shared state (including schema locks) that inherited helpers read.
-3. **Reuse the base schema lifecycle** — do not reimplement `ensureSchema` / `ensureSchemaInner` / `findSchema` / `findSchemaDetails` / `_writeSchemaMarker`. Override `_afterSchemaVerified` only when the backend needs post-verify work (Qdrant uses it for payload indexes).
+2. **Call `super().__init__(set_name=..., similarity_metric=..., dimensions=..., confidence_threshold=...)`** first — it sets shared state (including schema locks) that inherited helpers read. Prefer `dimensions=None` and let `UUIDManager`/`ensureSchema` infer at runtime.
+3. **Reuse the base schema lifecycle** — do not reimplement `ensureSchema` / `ensureSchemaInner` / `findSchema` / `findSchemaDetails` / `_writeSchemaMarker` / `_initializeSchemaOnConnect`. Override `_afterSchemaVerified` only when the backend needs post-verify work (Qdrant uses it for payload indexes). There is no separate `addSchema` API; create/verify goes through `ensureSchema`.
 4. **Reuse shared helpers** from the base class — do not reimplement them:
-   - `prepareReidDict` / `prepareReidVector` for embedding preparation
+   - `prepareReidDict` / `prepareReidVector` / `_prepareReidVectors` for embedding preparation
+   - `_buildEntryProperties` / `_decodeLatestPersist` for entry metadata and persist payloads
    - `_buildQueryConstraints` for TIER 1 metadata filters (wraps `controller.reid_constraints.build_query_constraints`)
-   - `_usesInnerProductMetric` / `_isValidSimilarityScore` for metric-aware score handling
-   - Constants from `controller.reid_constants` (`SCHEMA_NAME`, metrics, neighbor count)
+   - `_normalizeSimilarityScore` / `_entitiesFromNormalizedScores` / `_usesInnerProductMetric` for metric-aware score handling
+   - `_resolveSetName` so omitted `set_name` always means `self.set_name`
+   - Constants/helpers from `controller.reid_constants` (`SCHEMA_NAME`, metrics, reserved keys)
    - Connection/tuning from `controller.reid_env` (`REID_*` getters) — do **not** invent backend-prefixed env vars (`MYDB_HOSTNAME`, etc.)
 5. **Register the backend** in `controller.uuid_manager.available_databases`:
 
@@ -231,10 +233,11 @@ available_databases = {
 
 ### Behavioral expectations
 
-- **`findMatches`**: Return a list (one entry per query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (VDMS-compatible score semantics for the active metric). If the store's native score does not already follow that convention, convert it in the adapter — Qdrant's `_toSimilarityScore` is the reference example.
-- **`getPersistedAttributes`**: Return the latest persist payload for a UUID (by `persist_timestamp`), or `{}` if none.
-- **Metrics**: Controller config uses `L2` / `COSINE`; adapters map to store-native distance (e.g. Qdrant DOT for IP/COSINE path). Keep score validation consistent with `uuid_manager` thresholds.
-- **Schema markers / versioning**: Implement the create/marker hooks so the shared `ensureSchemaInner` create-first + marker/metadata verification pattern keeps multi-instance controllers from silently diverging on dimensions/metric.
+- **`findMatches`**: Return a list (one entry per valid query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (canonical float scores for the active metric). Preserve empty inner lists for failed/empty searches so majority voting keeps a stable denominator. Convert store-native scores in the adapter before `_entitiesFromNormalizedScores` — Qdrant's `_toSimilarityScore` is the reference example.
+- **`getPersistedAttributes`**: Return the latest persist payload for a UUID (by `persist_timestamp`), or `{}` if none. Prefer `_decodeLatestPersist` on normalized dict records.
+- **`addEntry` / persist**: Use `_buildEntryProperties`. Persist dicts must include `timestamp`. Reserved keys (`uuid`, `rvid`, `type`, `persist`, `persist_timestamp`) cannot be overwritten by metadata.
+- **Metrics**: Controller config uses `L2` / `COSINE`; adapters map to store-native distance (e.g. Qdrant DOT for IP/COSINE path). Keep score validation consistent with `uuid_manager` thresholds via `reid_constants.normalize_similarity_score`.
+- **Schema markers / versioning**: Implement the create/marker hooks so the shared `ensureSchemaInner` create-first + marker/metadata verification pattern keeps multi-instance controllers from silently diverging on dimensions/metric. Marker write failures must raise.
 
 ### Tests and deployment
 

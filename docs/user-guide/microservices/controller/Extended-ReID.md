@@ -145,7 +145,7 @@ Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` sele
 - Valid range: 0.0 to 1.0
 - To select a backend in a deployment, see [Selecting the ReID Vector Database Backend](../../other-topics/how-to-enable-reidentification.md#selecting-the-reid-vector-database-backend)
 
-Legacy `VDMS_*` / `QDRANT_*` names remain temporary fallbacks.
+Backend-prefixed names such as `VDMS_HOSTNAME` or `QDRANT_PORT` are no longer read. Set the `REID_*` equivalent instead.
 
 ## Configuring Confidence Threshold
 

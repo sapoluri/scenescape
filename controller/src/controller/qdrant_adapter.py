@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-import json
-import uuid
+import uuid as uuid_lib
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -94,13 +93,7 @@ class QdrantDatabase(ReIDDatabase):
         self.client = self._createClient()
         self.client.get_collections()
         self.connected = True
-      if self.dimensions is not None:
-        with self._schema_lock:
-          self.ensureSchemaInner(
-            int(self.dimensions),
-            str(self.similarity_metric).strip().upper(),
-            "connect")
-          self._schema_ready = True
+      self._initializeSchemaOnConnect()
     except Exception as e:
       self.connected = False
       log.warning(f"Failed to connect to Qdrant: {e}")
@@ -167,7 +160,7 @@ class QdrantDatabase(ReIDDatabase):
     )
 
   def _markerPointId(self, set_name):
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"reid-schema-marker:{set_name}"))
+    return str(uuid_lib.uuid5(uuid_lib.NAMESPACE_URL, f"reid-schema-marker:{set_name}"))
 
   def _tryCreateSchema(self, dimensions, metric):
     if self._collectionExists(self.set_name):
@@ -228,64 +221,17 @@ class QdrantDatabase(ReIDDatabase):
   def _afterSchemaVerified(self):
     self._ensurePayloadIndexes(self.set_name)
 
-  def addSchema(self, set_name, similarity_metric, dimensions):
-    try:
-      if self._collectionExists(set_name):
-        return False
-      self._createCollection(set_name, dimensions, similarity_metric)
-      return True
-    except Exception as e:
-      log.warning(
-        f"Failed to add collection '{set_name}' to Qdrant: {e}")
-      return False
-
-  def _buildPayload(self, uuid_value, rvid, object_type, persist=None, **metadata):
-    properties = {
-      "uuid": f"{uuid_value}",
-      "rvid": f"{rvid}",
-      "type": f"{object_type}",
-    }
-
-    if persist:
-      persist = persist.copy()
-      persist_timestamp = persist.pop('timestamp')
-      properties["persist"] = json.dumps(persist)
-      properties["persist_timestamp"] = persist_timestamp
-      log.debug(
-        f"[Qdrant] addEntry: Storing persist keys={list(persist.keys())} for uuid={uuid_value}")
-
-    for key, value in metadata.items():
-      if isinstance(value, dict):
-        if 'label' in value:
-          properties[key] = str(value['label'])
-          log.debug(
-            f"[Qdrant] addEntry: Extracted label '{value['label']}' from {key} metadata dict")
-        else:
-          properties[key] = json.dumps(value)
-          log.debug(f"[Qdrant] addEntry: Serialized {key} as JSON (no label field)")
-      else:
-        properties[key] = str(value)
-
-    return properties
-
-  def addEntry(self, uuid_value, rvid, object_type, reid_vectors, set_name=SCHEMA_NAME,
+  def addEntry(self, uuid, rvid, object_type, reid_vectors, set_name=None,
                persist=None, **metadata):
     self._ensureClient()
-    properties = self._buildPayload(uuid_value, rvid, object_type, persist=persist, **metadata)
-    normalize_embeddings = self._usesInnerProductMetric()
+    set_name = self._resolveSetName(set_name)
+    properties = self._buildEntryProperties(
+      uuid, rvid, object_type, persist=persist, **metadata)
     points = []
 
-    for reid_vector in reid_vectors:
-      prepared_reid = self.prepareReidDict(
-        reid_vector,
-        self.dimensions,
-        normalize_embeddings=normalize_embeddings)
-      if prepared_reid is None:
-        continue
-
-      vec_array = prepared_reid["embedded_vector"]
+    for vec_array in self._prepareReidVectors(reid_vectors):
       points.append(models.PointStruct(
-        id=str(uuid.uuid4()),
+        id=str(uuid_lib.uuid4()),
         vector=vec_array.tolist(),
         payload=properties.copy(),
       ))
@@ -322,30 +268,7 @@ class QdrantDatabase(ReIDDatabase):
         break
     return points
 
-  def _latestPersistFromPoints(self, points, uuid_value):
-    points_with_persist = [
-      point for point in points
-      if isinstance(point.payload, dict) and
-      isinstance(point.payload.get('persist'), str) and
-      point.payload.get('persist').strip()
-    ]
-
-    if not points_with_persist:
-      log.debug(f"[Qdrant] getPersistedAttributes: No persist data found for uuid={uuid_value}")
-      return {}
-
-    latest = max(
-      points_with_persist,
-      key=lambda point: point.payload.get('persist_timestamp', 0))
-    try:
-      return json.loads(latest.payload['persist'])
-    except (json.JSONDecodeError, TypeError, KeyError) as e:
-      log.warning(
-        f"[Qdrant] getPersistedAttributes: Failed to deserialize persist for "
-        f"uuid={uuid_value}: {e}")
-      return {}
-
-  def getPersistedAttributes(self, uuid_value, set_name=SCHEMA_NAME):
+  def getPersistedAttributes(self, uuid, set_name=None):
     """
     Retrieve the most recent persist attributes stored for a given object UUID.
 
@@ -353,7 +276,8 @@ class QdrantDatabase(ReIDDatabase):
     Falls back to a full filtered scroll when ordered lookup is unavailable
     (for example collections created before payload indexes existed).
     """
-    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid_value}"]})
+    set_name = self._resolveSetName(set_name)
+    query_filter = self._buildQdrantFilter({"uuid": ["==", f"{uuid}"]})
     try:
       points, _ = self.client.scroll(
         collection_name=set_name,
@@ -369,28 +293,32 @@ class QdrantDatabase(ReIDDatabase):
     except Exception as e:
       log.debug(
         f"[Qdrant] getPersistedAttributes: Ordered scroll failed for "
-        f"uuid={uuid_value}, falling back to full scroll: {e}")
+        f"uuid={uuid}, falling back to full scroll: {e}")
       try:
         points = self._scrollMatchingPoints(set_name, query_filter)
       except Exception as fallback_error:
         log.debug(
-          f"[Qdrant] getPersistedAttributes: Query failed for uuid={uuid_value}: "
+          f"[Qdrant] getPersistedAttributes: Query failed for uuid={uuid}: "
           f"{fallback_error}")
         return {}
 
     if not points:
-      log.debug(f"[Qdrant] getPersistedAttributes: No entry found for uuid={uuid_value}")
+      log.debug(f"[Qdrant] getPersistedAttributes: No entry found for uuid={uuid}")
       return {}
 
-    return self._latestPersistFromPoints(points, uuid_value)
+    payloads = [
+      point.payload for point in points if isinstance(point.payload, dict)]
+    return self._decodeLatestPersist(payloads, uuid)
 
   def findSchemaMetadata(self, set_name):
     if not self._collectionExists(set_name):
       return False, None, None
 
-    marker_exists, marker_dimensions, marker_metric = self._readSchemaMarker()
-    if marker_exists:
-      return True, marker_dimensions, marker_metric
+    # Marker points are keyed by self.set_name; only consult them for that resource.
+    if set_name == self.set_name:
+      marker_exists, marker_dimensions, marker_metric = self._readSchemaMarker()
+      if marker_exists:
+        return True, marker_dimensions, marker_metric
 
     try:
       collection = self.client.get_collection(set_name)
@@ -421,8 +349,9 @@ class QdrantDatabase(ReIDDatabase):
       return None
     return models.Filter(must=must_conditions)
 
-  def findMatches(self, object_type, reid_vectors, set_name=SCHEMA_NAME,
+  def findMatches(self, object_type, reid_vectors, set_name=None,
                   k_neighbors=K_NEIGHBORS, **constraints):
+    set_name = self._resolveSetName(set_name)
     log.debug(
       f"[Qdrant] findMatches called: object_type={object_type}, k_neighbors={k_neighbors}")
     log.debug(f"[Qdrant] findMatches constraints received: {constraints}")
@@ -432,17 +361,7 @@ class QdrantDatabase(ReIDDatabase):
     query_filter = self._buildQdrantFilter(query_constraints)
     log.debug(f"[Qdrant] Executing TIER 1 find with constraints: {query_constraints}")
 
-    normalize_embeddings = self._usesInnerProductMetric()
-    query_vectors = []
-    for reid_vector in reid_vectors:
-      vec_array = self.prepareReidVector(
-        reid_vector,
-        self.dimensions,
-        normalize_embeddings=normalize_embeddings)
-      if vec_array is None:
-        continue
-      query_vectors.append(vec_array.tolist())
-
+    query_vectors = [vec.tolist() for vec in self._prepareReidVectors(reid_vectors)]
     if not query_vectors:
       log.warning("findMatches: No valid vectors for similarity search")
       return None
@@ -464,22 +383,15 @@ class QdrantDatabase(ReIDDatabase):
         result.append([])
         continue
 
-      valid_entities = []
+      entities = []
       for hit in hits:
         payload = hit.payload or {}
-        similarity = self._toSimilarityScore(hit.score)
-        if not self._isValidSimilarityScore(similarity):
-          log.warning(
-            f"findMatches: Discarding entity with invalid similarity score "
-            f"{similarity} for metric {self.similarity_metric}")
-          continue
-        valid_entities.append({
+        entities.append({
           "uuid": payload.get("uuid"),
           "rvid": payload.get("rvid"),
-          "_distance": similarity,
+          "_distance": self._toSimilarityScore(hit.score),
         })
-
-      result.append(valid_entities)
+      result.append(self._entitiesFromNormalizedScores(entities))
 
     log.debug(
       f"[Qdrant] findMatches returned {len(result)} per-vector result item(s) from "

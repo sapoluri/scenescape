@@ -9,7 +9,16 @@ import math
 import numpy as np
 
 from controller.qdrant_adapter import QdrantDatabase
-from controller.reid_constants import is_within_inner_product_range
+from controller.reid_constants import (
+  DEFAULT_CONFIG_SIMILARITY_METRIC,
+  SUPPORTED_CONFIG_SIMILARITY_METRICS,
+  is_higher_better_metric,
+  is_similarity_match,
+  normalize_config_similarity_metric,
+  normalize_similarity_score,
+  pick_best_metric_value,
+  resolve_database_similarity_metric,
+)
 from controller.reid_env import get_reid_database
 from controller.vdms_adapter import VDMSDatabase
 from controller.moving_object import ReidState, MovingObject
@@ -25,8 +34,8 @@ DEFAULT_MAX_QUERY_TIME = 4
 DEFAULT_MAX_SIMILARITY_QUERIES_TRACKED = 10
 DEFAULT_STALE_FEATURE_TIMEOUT_SECS = 5.0
 DEFAULT_STALE_FEATURE_CHECK_INTERVAL_SECS = 1.0
-DEFAULT_SIMILARITY_METRIC = "COSINE"
-SUPPORTED_SIMILARITY_METRICS = {"COSINE", "L2"}
+DEFAULT_SIMILARITY_METRIC = DEFAULT_CONFIG_SIMILARITY_METRIC
+SUPPORTED_SIMILARITY_METRICS = SUPPORTED_CONFIG_SIMILARITY_METRICS
 available_databases = {
   "VDMS": VDMSDatabase,
   "QDRANT": QdrantDatabase,
@@ -34,21 +43,19 @@ available_databases = {
 
 class UUIDManager:
   def _normalizeSimilarityMetric(self, metric):
-    normalized_metric = str(metric).strip().upper()
-    if normalized_metric not in SUPPORTED_SIMILARITY_METRICS:
+    normalized_metric = normalize_config_similarity_metric(
+      metric, default=DEFAULT_SIMILARITY_METRIC)
+    if str(metric).strip().upper() != normalized_metric and (
+        str(metric).strip().upper() not in SUPPORTED_SIMILARITY_METRICS):
       log.warning(
         f"Unsupported similarity_metric '{metric}', "
         f"supported values are {sorted(SUPPORTED_SIMILARITY_METRICS)}; "
         f"falling back to {DEFAULT_SIMILARITY_METRIC}")
-      return DEFAULT_SIMILARITY_METRIC
     return normalized_metric
 
   def _resolveDatabaseSimilarityMetric(self, configured_metric):
-    """Translate controller-facing similarity metric to the VDMS descriptor metric."""
-    metric = self._normalizeSimilarityMetric(configured_metric)
-    if metric == "COSINE":
-      return "IP"
-    return metric
+    """Translate controller-facing similarity metric to the backend descriptor metric."""
+    return resolve_database_similarity_metric(configured_metric)
 
   def _resolveDefaultSimilarityThreshold(self, similarity_metric):
     """Return the default threshold for the configured similarity metric."""
@@ -153,8 +160,17 @@ class UUIDManager:
     self.feature_slice_size = reid_config_data.get(
       'feature_slice_size', DEFAULT_FEATURE_SLICE_SIZE)
     if hasattr(self, 'reid_database') and self.reid_database is not None:
-      self.reid_database.similarity_metric = self._resolveDatabaseSimilarityMetric(
-        self.similarity_metric)
+      new_db_metric = self._resolveDatabaseSimilarityMetric(self.similarity_metric)
+      current_db_metric = getattr(self.reid_database, 'similarity_metric', None)
+      schema_ready = getattr(self.reid_database, '_schema_ready', False) is True
+      if (schema_ready and
+          current_db_metric is not None and
+          str(current_db_metric).strip().upper() != new_db_metric):
+        raise ValueError(
+          f"Cannot change ReID similarity metric from {current_db_metric} to "
+          f"{new_db_metric} after schema initialization; restart the controller "
+          f"and flush the {self.reid_database._schemaResourceLabel()}.")
+      self.reid_database.similarity_metric = new_db_metric
 
   def _rescheduleStaleFeatureTimer(self):
     """Cancel any existing stale-feature timer and start a new one."""
@@ -575,29 +591,17 @@ class UUIDManager:
     metric = getattr(self.reid_database, 'similarity_metric', None)
     if metric is None:
       return False
-    return str(metric).strip().upper() == "IP"
+    return is_higher_better_metric(metric)
 
   def _isSimilarityMatch(self, metric_value, threshold):
     """Evaluate threshold semantics according to the active descriptor metric."""
-    if metric_value is None:
-      return False
-
-    if not math.isfinite(metric_value):
-      return False
-
-    if self._isHigherBetterMetric():
-      if not is_within_inner_product_range(metric_value):
-        return False
-      return metric_value > threshold
-    return metric_value < threshold
+    metric = getattr(self.reid_database, 'similarity_metric', None)
+    return is_similarity_match(metric_value, threshold, metric)
 
   def _pickBestMetricValue(self, metric_values):
     """Pick best metric value according to descriptor metric semantics."""
-    if not metric_values:
-      return None
-    if self._isHigherBetterMetric():
-      return max(metric_values)
-    return min(metric_values)
+    metric = getattr(self.reid_database, 'similarity_metric', None)
+    return pick_best_metric_value(metric_values, metric)
 
   def _findBestMetricCandidate(self, entities):
     """
@@ -610,19 +614,19 @@ class UUIDManager:
     Structure of entities:
     [{'uuid': <UUID>, 'rvid': <TRACKER_ID>, '_distance': <SIMILARITY_SCORE>}, ...]
     """
-    is_higher_better = self._isHigherBetterMetric()
+    metric = getattr(self.reid_database, 'similarity_metric', None)
+    is_higher_better = is_higher_better_metric(metric)
     if entities:
       filtered_entities = []
       for entity in entities:
-        metric_value = entity.get('_distance')
-        if metric_value is None or not math.isfinite(metric_value):
+        metric_value = normalize_similarity_score(entity.get('_distance'), metric)
+        if metric_value is None:
+          if is_higher_better and entity.get('_distance') is not None:
+            log.warning(
+              f"Ignoring out-of-range IP similarity score {entity.get('_distance')} "
+              f"for uuid={entity.get('uuid')}")
           continue
-        if is_higher_better and not is_within_inner_product_range(metric_value):
-          log.warning(
-            f"Ignoring out-of-range IP similarity score {metric_value} "
-            f"for uuid={entity.get('uuid')}")
-          continue
-        filtered_entities.append(entity)
+        filtered_entities.append({**entity, '_distance': metric_value})
 
       if not filtered_entities:
         return (None, None)

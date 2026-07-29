@@ -20,7 +20,7 @@ class TestQdrantDatabaseInterface:
 
   def test_required_methods_exist(self):
     required_methods = [
-      'addSchema', 'addEntry', 'findSchema', 'findMatches', 'getPersistedAttributes']
+      'addEntry', 'findSchema', 'findMatches', 'getPersistedAttributes', 'ensureSchema']
     db = QdrantDatabase()
     for method_name in required_methods:
       assert hasattr(db, method_name)

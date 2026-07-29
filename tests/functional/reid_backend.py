@@ -26,10 +26,10 @@ def get_reid_profile_module(semantic=False):
   return profiles.REID_SEMANTIC if semantic else profiles.REID
 
 
-def create_reid_database():
+def create_reid_database(**kwargs):
   if REID_DATABASE == "QDRANT":
-    return QdrantDatabase()
-  return VDMSDatabase()
+    return QdrantDatabase(**kwargs)
+  return VDMSDatabase(**kwargs)
 
 
 def connect_reid_database(db, use_tls=True):
@@ -79,18 +79,13 @@ def wait_for_reid_backend_ready(use_tls=False, max_attempts=30, retry_interval=1
 
 
 def ensure_reid_schema(dimensions=256, similarity_metric="L2"):
-  db = create_reid_database()
+  """Ensure the default ReID schema exists with the requested dimensions/metric."""
+  db = create_reid_database(similarity_metric=similarity_metric, dimensions=None)
   connect_reid_database(db, use_tls=False)
-  if REID_DATABASE == "QDRANT":
-    db.ensureSchema(dimensions)
-    return
-
-  if not db.findSchema(SCHEMA_NAME):
-    log.info("Creating reid_vector descriptor set...")
-    db.addSchema(SCHEMA_NAME, similarity_metric, dimensions)
-    log.info("Descriptor set created successfully")
-  else:
-    log.info("Descriptor set already exists")
+  db.ensureSchema(dimensions)
+  log.info(
+    f"Ensured ReID schema '{db.set_name}' "
+    f"({dimensions}D, {db.similarity_metric})")
 
 
 def query_reid_count(object_type="person"):
