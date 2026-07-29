@@ -172,6 +172,28 @@ make demo-k8s DEMO_K8S_MODE=all                      # ReID plus mapping and clu
 
 **Expected Result**: The Scene Controller connects to Qdrant, creates or verifies the ReID collection, and continues UUID assignment via visual similarity.
 
+#### ReID pod filesystem
+
+The ReID container runs with `readOnlyRootFilesystem: true`. Each backend gets
+`emptyDir` volumes for the only paths it writes:
+
+| Backend | Writable mounts                       | Notes                                                                          |
+| ------- | ------------------------------------- | ------------------------------------------------------------------------------ |
+| VDMS    | `/vdms/data`, `/tmp`                  | `OVERRIDE_db_root_path` moves the database off the image layer                 |
+| Qdrant  | `/qdrant/storage`, `/qdrant/snapshots` | `QDRANT_INIT_FILE_PATH` moves the init indicator into writable storage         |
+
+Because the VDMS image writes its generated config next to the server binary,
+the chart renders that config into `/vdms/data` and starts the server with
+`-cfg`. If you pin a different VDMS image, confirm it still provides
+`override_default_config.py` and the `-cfg` flag.
+
+ReID vector data is stored in `emptyDir` and is lost when the pod restarts,
+which matches the behaviour before the volumes existed. Replace `reid-data`
+with a PersistentVolumeClaim if the embeddings must survive restarts.
+
+The pod still runs as root (`runAsUser: 0`) because both upstream images expect
+it; that is a separate hardening step.
+
 ---
 
 ## Steps to Disable Re-identification

@@ -30,6 +30,20 @@ spec:
         - image: {{ $image.repository }}/{{ $image.name }}:{{ $image.tag }}
           imagePullPolicy: {{ $image.pullPolicy }}
           name: {{ .Release.Name }}-reid
+          {{- if eq $backend "vdms" }}
+          # The image's start.sh renders its config next to the binary in
+          # /vdms/build, which a read-only root filesystem rejects. Render it
+          # into the writable data volume and point the server at it instead.
+          command:
+            - sh
+            - -c
+            - >-
+              python3 /vdms/override_default_config.py
+              -i /vdms/config-vdms.json
+              -o /vdms/data/config-vdms.json &&
+              cd /vdms/build &&
+              exec ./vdms -cfg /vdms/data/config-vdms.json
+          {{- end }}
           env:
           {{- if eq $backend "vdms" }}
           - name: OVERRIDE_ca_file
@@ -38,6 +52,8 @@ spec:
             value: /run/secrets/certs/scenescape-reid-s.crt
           - name: OVERRIDE_key_file
             value: /run/secrets/certs/scenescape-reid-s.key
+          - name: OVERRIDE_db_root_path
+            value: /vdms/data/db
           {{- else }}
           - name: QDRANT__SERVICE__HTTP_PORT
             value: "55555"
@@ -49,10 +65,14 @@ spec:
             value: /run/secrets/certs/scenescape-reid-s.key
           - name: QDRANT__TLS__CA_CERT
             value: /run/secrets/certs/scenescape-ca.pem
+          # Default is relative to the read-only working directory /qdrant.
+          - name: QDRANT_INIT_FILE_PATH
+            value: /qdrant/storage/.qdrant-initialized
           {{- end }}
           {{- include "proxy_envs" . | indent 10 }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -73,6 +93,18 @@ spec:
             subPath: scenescape-reid-s.key
             name: certs
             readOnly: true
+          # Writable paths required by the backend under a read-only root.
+          {{- if eq $backend "vdms" }}
+          - mountPath: /vdms/data
+            name: reid-data
+          - mountPath: /tmp
+            name: reid-tmp
+          {{- else }}
+          - mountPath: /qdrant/storage
+            name: reid-data
+          - mountPath: /qdrant/snapshots
+            name: reid-snapshots
+          {{- end }}
       restartPolicy: Always
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -80,5 +112,16 @@ spec:
       {{- end }}
       volumes:
       {{ include "certs_volume" . | indent 6 }}
+      # ReID vector data was already lost on pod restart before this volume
+      # existed; emptyDir keeps that behaviour. Swap for a PVC to persist it.
+      - name: reid-data
+        emptyDir: {}
+      {{- if eq $backend "vdms" }}
+      - name: reid-tmp
+        emptyDir: {}
+      {{- else }}
+      - name: reid-snapshots
+        emptyDir: {}
+      {{- end }}
 status: {}
 {{- end }}
