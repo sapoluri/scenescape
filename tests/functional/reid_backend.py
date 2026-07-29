@@ -5,18 +5,15 @@
 
 """Helpers for functional ReID tests across VDMS and Qdrant backends."""
 
-import os
 import time
 
-from controller.qdrant_adapter import QdrantDatabase
 from controller.reid_constants import SCHEMA_NAME
-from controller.vdms_adapter import VDMSDatabase, vdms
-from qdrant_client.http import models
+from controller.reid_registry import create_reid_database, normalize_backend_name
 from tests.utils.log import get_logger
 
 log = get_logger(__name__)
 
-REID_DATABASE = os.getenv("REID_DATABASE", "VDMS").strip().upper()
+REID_DATABASE = normalize_backend_name()
 
 
 def get_reid_profile_module(semantic=False):
@@ -26,12 +23,6 @@ def get_reid_profile_module(semantic=False):
   return profiles.REID_SEMANTIC if semantic else profiles.REID
 
 
-def create_reid_database(**kwargs):
-  if REID_DATABASE == "QDRANT":
-    return QdrantDatabase(**kwargs)
-  return VDMSDatabase(**kwargs)
-
-
 def connect_reid_database(db, use_tls=True):
   if REID_DATABASE == "QDRANT":
     db.connect()
@@ -39,6 +30,7 @@ def connect_reid_database(db, use_tls=True):
     return
 
   if not use_tls:
+    from controller.vdms_adapter import vdms
     db.db = vdms.vdms(use_tls=False)
   db.connect()
   assert db.db.connected, "Failed to connect to VDMS. Is the VDMS service running?"
@@ -93,6 +85,7 @@ def query_reid_count(object_type="person"):
   connect_reid_database(db, use_tls=False)
 
   if REID_DATABASE == "QDRANT":
+    from qdrant_client.http import models
     query_filter = models.Filter(must=[
       models.FieldCondition(
         key="type",

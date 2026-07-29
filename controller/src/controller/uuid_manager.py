@@ -8,7 +8,6 @@ import math
 
 import numpy as np
 
-from controller.qdrant_adapter import QdrantDatabase
 from controller.reid_constants import (
   DEFAULT_CONFIG_SIMILARITY_METRIC,
   SUPPORTED_CONFIG_SIMILARITY_METRICS,
@@ -19,8 +18,7 @@ from controller.reid_constants import (
   pick_best_metric_value,
   resolve_database_similarity_metric,
 )
-from controller.reid_env import get_reid_database
-from controller.vdms_adapter import VDMSDatabase
+from controller.reid_registry import create_reid_database
 from controller.moving_object import ReidState, MovingObject
 from scene_common import log
 from scene_common.timestamp import get_epoch_time
@@ -36,10 +34,6 @@ DEFAULT_STALE_FEATURE_TIMEOUT_SECS = 5.0
 DEFAULT_STALE_FEATURE_CHECK_INTERVAL_SECS = 1.0
 DEFAULT_SIMILARITY_METRIC = DEFAULT_CONFIG_SIMILARITY_METRIC
 SUPPORTED_SIMILARITY_METRICS = SUPPORTED_CONFIG_SIMILARITY_METRICS
-available_databases = {
-  "VDMS": VDMSDatabase,
-  "QDRANT": QdrantDatabase,
-}
 
 class UUIDManager:
   def _normalizeSimilarityMetric(self, metric):
@@ -100,16 +94,9 @@ class UUIDManager:
     # ReID embedding dimensions are inferred from the first observed embedding.
     if reid_config_data is None:
       reid_config_data = {}
-    if database is None:
-      database = get_reid_database()
-    database = str(database).strip().upper()
-    if database not in available_databases:
-      supported = sorted(available_databases)
-      raise ValueError(
-        f"Unsupported REID database '{database}'. Supported values: {supported}")
     self._inferred_dimensions = None
     self._dimensions_lock = threading.Lock()
-    self.reid_database = available_databases[database](dimensions=None)
+    self.reid_database = create_reid_database(database, dimensions=None)
 
     self.pool = concurrent.futures.ThreadPoolExecutor()
     self.similarity_query_times = collections.deque(

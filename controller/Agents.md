@@ -63,9 +63,9 @@ The **Scene Controller** is the central runtime state management service for Sce
 8. **`vdms_adapter.py` / `qdrant_adapter.py`**: ReID vector database backends
    - Implement `ReIDDatabase` for VDMS and Qdrant
    - Schema setup, insert, similarity search, persist-attribute lookup
-   - Selected at runtime via `REID_DATABASE` (`uuid_manager.available_databases`)
+   - Selected at runtime via `REID_DATABASE` (`reid_registry.create_reid_database`)
 
-9. **`reid_constraints.py` / `reid_env.py`**: Shared TIER 1 constraint builder and `REID_*` environment resolution
+9. **`reid_constraints.py` / `reid_env.py` / `reid_registry.py`**: Shared TIER 1 constraint builder, `REID_*` environment resolution, and lazy backend lookup
 
 10. **`data_source.py`**: Data source abstraction
 
@@ -219,13 +219,13 @@ Use this when adding a third (or replacement) vector store besides VDMS and Qdra
    - `_resolveSetName` so omitted `set_name` always means `self.set_name`
    - Constants/helpers from `controller.reid_constants` (`SCHEMA_NAME`, metrics, reserved keys)
    - Connection/tuning from `controller.reid_env` (`REID_*` getters) — do **not** invent backend-prefixed env vars (`MYDB_HOSTNAME`, etc.)
-5. **Register the backend** in `controller.uuid_manager.available_databases`:
+5. **Register the backend** in `controller.reid_registry._BACKENDS`. Entries are `(module path, class name)` strings so the adapter module — and its client library — is imported only when that backend is selected. Do not import the adapter into the registry at module scope, and do not add the class anywhere else; `create_reid_database` is the only production construction path.
 
 ```python
-available_databases = {
-  "VDMS": VDMSDatabase,
-  "QDRANT": QdrantDatabase,
-  "MYDB": MyDatabase,  # REID_DATABASE=MYDB
+_BACKENDS = {
+  "VDMS": ("controller.vdms_adapter", "VDMSDatabase"),
+  "QDRANT": ("controller.qdrant_adapter", "QdrantDatabase"),
+  "MYDB": ("controller.mydb_adapter", "MyDatabase"),  # REID_DATABASE=MYDB
 }
 ```
 
@@ -459,12 +459,13 @@ controller/
 │   │   ├── reid_constants.py          # Shared ReID constants
 │   │   ├── reid_constraints.py        # Shared TIER 1 constraint builder
 │   │   ├── reid_env.py                # Shared REID_* environment resolution
+│   │   ├── reid_registry.py           # Backend registry (lazy adapter lookup)
 │   │   ├── vdms_adapter.py            # VDMS ReID backend
 │   │   ├── qdrant_adapter.py          # Qdrant ReID backend
 │   │   ├── data_source.py             # Camera feeds
 │   │   ├── detections_builder.py      # Detection parsing
 │   │   ├── time_chunking.py           # Temporal processing
-│   │   ├── uuid_manager.py            # ID generation + backend registry
+│   │   ├── uuid_manager.py            # ID generation + ReID tracking state
 │   │   └── observability/             # Metrics/tracing
 │   ├── robot_vision/                  # Robot-specific extensions
 │   ├── schema/                        # JSON schemas
