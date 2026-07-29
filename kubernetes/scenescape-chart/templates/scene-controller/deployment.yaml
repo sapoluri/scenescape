@@ -49,6 +49,10 @@ spec:
             value: {{ .Values.scene.analyticsOnly | quote }}
           - name: REID_HOSTNAME
             value: reid.{{ .Release.Namespace }}.svc.cluster.local
+          {{- if .Values.reid.enabled }}
+          - name: REID_DATABASE
+            value: {{ include "reid.backend" . | upper | quote }}
+          {{- end }}
             {{ include "proxy_envs" . | indent 10 }}
           ports:
           - containerPort: 8080
@@ -72,6 +76,7 @@ spec:
             subPath: scenescape-ca.pem
             name: certs
             readOnly: true
+          {{- if .Values.reid.enabled }}
           - mountPath: /run/secrets/certs/scenescape-reid.key
             subPath: scenescape-reid.key
             name: certs
@@ -80,6 +85,7 @@ spec:
             subPath: scenescape-reid.crt
             name: certs
             readOnly: true
+          {{- end }}
           - mountPath: /run/secrets/django/secrets.py
             subPath: secrets.py
             name: secrets-py

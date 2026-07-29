@@ -141,6 +141,33 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 
 > **Note:** Vector data is not migrated between VDMS and Qdrant. After a backend switch, identities are matched only against embeddings stored in the newly selected database.
 
+### Kubernetes (Helm)
+
+The Helm chart mirrors the Compose model: a single logical `reid` Service backed
+by exactly one database Deployment, sharing the `reid.scenescape.intel.com`
+certificates and port `55555`. Select the backend with `reid.backend`:
+
+```bash
+helm upgrade scenescape-release-1 --install kubernetes/scenescape-chart/ \
+  -n scenescape --create-namespace \
+  --set reid.enabled=true --set reid.backend=qdrant
+```
+
+The chart sets `REID_DATABASE` on the Scene Controller from `reid.backend`, so
+no other value needs to change. Setting `reid.enabled=false` removes the
+database Deployment, Service, and ReID certificates, and drops the ReID client
+certificates from the Scene Controller.
+
+From the repository root, `make demo-k8s` follows the same tiers as the Compose
+demo:
+
+```bash
+make demo-k8s                                        # core services, no ReID
+make demo-k8s DEMO_K8S_MODE=reid                     # core plus ReID (VDMS)
+make demo-k8s DEMO_K8S_MODE=reid REID_BACKEND=qdrant # core plus ReID (Qdrant)
+make demo-k8s DEMO_K8S_MODE=all                      # ReID plus mapping and cluster analytics
+```
+
 **Expected Result**: The Scene Controller connects to Qdrant, creates or verifies the ReID collection, and continues UUID assignment via visual similarity.
 
 ---

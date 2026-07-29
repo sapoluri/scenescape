@@ -101,7 +101,7 @@ help:
 	@echo "                              as the super user password for logging into Scenescape)"
 	@echo "  demo-tracker                Start the Scenescape demo with Tracker service + Controller in analytics only mode using Docker Compose"
 	@echo "  demo-close                  Stop the running Scenescape demo and remove all volumes"
-	@echo "  demo-k8s                    Start the Scenescape demo using Kubernetes (DEMO_K8S_MODE=core|all, default: core)"
+	@echo "  demo-k8s                    Start the Scenescape demo using Kubernetes (DEMO_K8S_MODE=core|reid|all, default: core)"
 	@echo ""
 	@echo "  list-dependencies           List all apt/pip dependencies for all microservices"
 	@echo "  build-sources-image         Build the image with 3rd party sources"
@@ -159,8 +159,8 @@ help:
 	@echo "  - Use 'make JOBS=N' to build Scenescape images using N parallel processes."
 	@echo "  - Use 'make FOLDERS=\"<list of image folders>\"' to build specific image folders."
 	@echo "  - Image folders can be: $(IMAGE_FOLDERS)"
-	@echo "  - ReID demo targets (demo-reid, demo-all) default to REID_BACKEND=vdms."
-	@echo "    Set REID_BACKEND=qdrant to use Qdrant instead."
+	@echo "  - ReID demo targets (demo-reid, demo-all, demo-k8s with DEMO_K8S_MODE=reid|all)"
+	@echo "    default to REID_BACKEND=vdms. Set REID_BACKEND=qdrant to use Qdrant instead."
 	@echo ""
 
 # ========================= Build Images =============================
@@ -743,8 +743,8 @@ demo-close:
 	@rm -f .scenescape-profile
 
 .PHONY: demo-k8s
-demo-k8s:
-	$(MAKE) -C kubernetes DEPLOYMENT_TEST=$(DEPLOYMENT_TEST) DEMO_K8S_MODE=$(DEMO_K8S_MODE)
+demo-k8s: check-reid-backend
+	$(MAKE) -C kubernetes DEPLOYMENT_TEST=$(DEPLOYMENT_TEST) DEMO_K8S_MODE=$(DEMO_K8S_MODE) REID_BACKEND=$(strip $(REID_BACKEND))
 
 .PHONY: docker-compose.yml
 docker-compose.yml:

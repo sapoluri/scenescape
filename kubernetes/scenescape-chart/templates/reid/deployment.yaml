@@ -1,23 +1,25 @@
-# SPDX-FileCopyrightText: (C) 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2025-2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if .Values.vdms.enabled }}
+{{- if .Values.reid.enabled }}
+{{- $backend := include "reid.backend" . }}
+{{- $image := (index .Values.reid $backend).image }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-vdms-dep
+  name: {{ .Release.Name }}-reid-dep
   labels:
-    app: {{ .Release.Name }}-vdms
+    app: {{ .Release.Name }}-reid
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ .Release.Name }}-vdms
+      app: {{ .Release.Name }}-reid
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}-vdms
+        app: {{ .Release.Name }}-reid
         {{ include "releaseLabels" . | indent 8 }}
     spec:
       shareProcessNamespace: true
@@ -25,22 +27,38 @@ spec:
         runAsUser: 0
         runAsGroup: 0
       containers:
-        - image: {{ .Values.vdms.image.repository }}/{{ .Values.vdms.image.name }}:{{ .Values.vdms.image.tag }}
-          imagePullPolicy: {{ .Values.vdms.image.pullPolicy }}
-          name: {{ .Release.Name }}-vdms
+        - image: {{ $image.repository }}/{{ $image.name }}:{{ $image.tag }}
+          imagePullPolicy: {{ $image.pullPolicy }}
+          name: {{ .Release.Name }}-reid
           env:
+          {{- if eq $backend "vdms" }}
           - name: OVERRIDE_ca_file
             value: /run/secrets/certs/scenescape-ca.pem
           - name: OVERRIDE_cert_file
             value: /run/secrets/certs/scenescape-reid-s.crt
           - name: OVERRIDE_key_file
             value: /run/secrets/certs/scenescape-reid-s.key
-            {{- include "proxy_envs" . | indent 10 }}
+          {{- else }}
+          - name: QDRANT__SERVICE__HTTP_PORT
+            value: "55555"
+          - name: QDRANT__SERVICE__ENABLE_TLS
+            value: "true"
+          - name: QDRANT__TLS__CERT
+            value: /run/secrets/certs/scenescape-reid-s.crt
+          - name: QDRANT__TLS__KEY
+            value: /run/secrets/certs/scenescape-reid-s.key
+          - name: QDRANT__TLS__CA_CERT
+            value: /run/secrets/certs/scenescape-ca.pem
+          {{- end }}
+          {{- include "proxy_envs" . | indent 10 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
+          ports:
+          - containerPort: 55555
+            protocol: TCP
           resources: {}
           volumeMounts:
           - mountPath: /run/secrets/certs/scenescape-ca.pem
