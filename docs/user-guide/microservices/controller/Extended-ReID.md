@@ -28,6 +28,7 @@ ReID Query Flow (VDMS or Qdrant):
     ↓
   Return top-k matches with metadata
 ```
+
 ## Key Concepts
 
 ### Similarity Metric and Score Semantics
@@ -194,12 +195,12 @@ controller/config/reid-config.json
 
 | Parameter                           | Type   | Default                                                | Description                                                                                                                                                                                                      |
 | ----------------------------------- | ------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `similarity_metric`                 | string | `L2`                                                   | Similarity metric for ReID matching. `L2` is the default distance-style metric (lower-is-better). `COSINE` uses normalized vectors with an inner-product backend path (higher-is-better). |
-| `stale_feature_timeout_secs`        | float  | 5.0                                                    | How long (seconds) to accumulate features in memory before flushing to the ReID database. Features older than this threshold are persisted for long-term storage.                         |
-| `stale_feature_check_interval_secs` | float  | 1.0                                                    | How frequently (seconds) the background timer checks for stale features and flushes them to the ReID database. More frequent checks ensure timely database updates.                       |
+| `similarity_metric`                 | string | `L2`                                                   | Similarity metric for ReID matching. `L2` is the default distance-style metric (lower-is-better). `COSINE` uses normalized vectors with an inner-product backend path (higher-is-better).                        |
+| `stale_feature_timeout_secs`        | float  | 5.0                                                    | How long (seconds) to accumulate features in memory before flushing to the ReID database. Features older than this threshold are persisted for long-term storage.                                                |
+| `stale_feature_check_interval_secs` | float  | 1.0                                                    | How frequently (seconds) the background timer checks for stale features and flushes them to the ReID database. More frequent checks ensure timely database updates.                                              |
 | `feature_accumulation_threshold`    | int    | 12                                                     | Minimum number of quality features required before initiating a similarity query against the database. More features = higher statistical confidence in matching.                                                |
 | `minimum_bbox_area`                 | int    | 5000                                                   | Minimum bounding-box area in pixels required before a detected object contributes a ReID embedding to quality feature accumulation.                                                                              |
-| `feature_slice_size`                | int    | 10                                                     | When persisting features to the ReID database, sample every Nth feature vector from the accumulated set to reduce database bloat. Example: slice_size=10 stores every 10th vector. |
+| `feature_slice_size`                | int    | 10                                                     | When persisting features to the ReID database, sample every Nth feature vector from the accumulated set to reduce database bloat. Example: slice_size=10 stores every 10th vector.                               |
 | `similarity_threshold`              | float  | metric-dependent (`40.0` for `L2`, `0.5` for `COSINE`) | Match acceptance threshold interpreted using the configured metric semantics: for `COSINE`, candidates **above** the threshold match; for `L2`-style distance metrics, candidates **below** the threshold match. |
 
 **Similarity range note**: For `COSINE` (normalized vectors with backend IP/DOT), scores are validated against `[-1, 1]` because embeddings are normalized before storage and query. This range check is metric-specific and is not applied to non-cosine distance metrics.
