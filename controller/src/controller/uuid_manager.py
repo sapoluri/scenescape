@@ -10,7 +10,7 @@ import numpy as np
 
 from controller.qdrant_adapter import QdrantDatabase
 from controller.reid_constants import COSINE_SIMILARITY_TOLERANCE
-from controller.reid_env import DEFAULT_DATABASE, get_reid_database
+from controller.reid_env import get_reid_database
 from controller.vdms_adapter import VDMSDatabase
 from controller.moving_object import ReidState, MovingObject
 from scene_common import log

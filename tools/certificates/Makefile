@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (C) 2024 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2024 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 SHELL=/bin/bash
@@ -12,8 +12,8 @@ default: deploy-certificates
 
 #.PHONY targets won't be skipped if files with these names happen to exist
 .PHONY: default ca deploy-certificates deploy-csr
-.PHONY: broker-cert web-cert vdms-c-cert vdms-s-cert reid-cert reid-s-cert qdrant-s-cert autocalibration-cert mapping-cert
-.PHONY: broker-csr web-csr vdms-c-csr vdms-s-csr reid-csr reid-s-csr qdrant-s-csr autocalibration-csr mapping-csr
+.PHONY: broker-cert web-cert reid-cert reid-s-cert autocalibration-cert mapping-cert
+.PHONY: broker-csr web-csr reid-csr reid-s-csr autocalibration-csr mapping-csr
 
 #.SECONDARY prevents make from deleting files created by intermediate targets
 .SECONDARY:
@@ -34,18 +34,6 @@ web-cert: \
 	$(SECRETSDIR)/certs/scenescape-web.key \
 	$(SECRETSDIR)/certs/scenescape-web.crt \
 
-vdms-c-cert: HOST=vdms-c
-vdms-c-cert: KEY_USAGE=clientAuth
-vdms-c-cert: \
-	$(SECRETSDIR)/certs/scenescape-vdms-c.key \
-	$(SECRETSDIR)/certs/scenescape-vdms-c.crt \
-
-vdms-s-cert: HOST=vdms
-vdms-s-cert: KEY_USAGE=serverAuth
-vdms-s-cert: \
-	$(SECRETSDIR)/certs/scenescape-vdms-s.key \
-	$(SECRETSDIR)/certs/scenescape-vdms-s.crt \
-
 reid-cert: HOST=reid
 reid-cert: KEY_USAGE=clientAuth
 reid-cert: \
@@ -57,12 +45,6 @@ reid-s-cert: KEY_USAGE=serverAuth
 reid-s-cert: \
 	$(SECRETSDIR)/certs/scenescape-reid-s.key \
 	$(SECRETSDIR)/certs/scenescape-reid-s.crt \
-
-qdrant-s-cert: HOST=qdrant
-qdrant-s-cert: KEY_USAGE=serverAuth
-qdrant-s-cert: \
-	$(SECRETSDIR)/certs/scenescape-qdrant-s.key \
-	$(SECRETSDIR)/certs/scenescape-qdrant-s.crt \
 
 autocalibration-cert: HOST=autocalibration
 autocalibration-cert: KEY_USAGE=serverAuth
@@ -88,18 +70,6 @@ web-csr: \
 	$(SECRETSDIR)/certs/scenescape-web.key \
 	$(SECRETSDIR)/certs/scenescape-web.csr \
 
-vdms-c-csr: HOST=vdms-c
-vdms-c-csr: KEY_USAGE=clientAuth
-vdms-c-csr: \
-	$(SECRETSDIR)/certs/scenescape-vdms-c.key \
-	$(SECRETSDIR)/certs/scenescape-vdms-c.csr \
-
-vdms-s-csr: HOST=vdms
-vdms-s-csr: KEY_USAGE=serverAuth
-vdms-s-csr: \
-	$(SECRETSDIR)/certs/scenescape-vdms-s.key \
-	$(SECRETSDIR)/certs/scenescape-vdms-s.csr \
-
 reid-csr: HOST=reid
 reid-csr: KEY_USAGE=clientAuth
 reid-csr: \
@@ -111,12 +81,6 @@ reid-s-csr: KEY_USAGE=serverAuth
 reid-s-csr: \
 	$(SECRETSDIR)/certs/scenescape-reid-s.key \
 	$(SECRETSDIR)/certs/scenescape-reid-s.csr \
-
-qdrant-s-csr: HOST=qdrant
-qdrant-s-csr: KEY_USAGE=serverAuth
-qdrant-s-csr: \
-	$(SECRETSDIR)/certs/scenescape-qdrant-s.key \
-	$(SECRETSDIR)/certs/scenescape-qdrant-s.csr \
 
 autocalibration-csr: HOST=autocalibration
 autocalibration-csr: KEY_USAGE=serverAuth

@@ -32,7 +32,7 @@ class ServiceProfile:
 
 
 # Common wait configs reused across profiles
-_QDRANT = WaitConfig(log_pattern=r"Qdrant HTTP listening on 55555|TLS enabled")
+_QDRANT = WaitConfig(log_pattern=r"Qdrant HTTP listening on 55555")
 _PGSERVER = WaitConfig(
   log_pattern="database system is ready to accept connections",
   timeout=300,

@@ -104,14 +104,12 @@ def query_reid_count(object_type="person"):
         match=models.MatchValue(value=str(object_type)),
       )
     ])
-    points, _ = db.client.scroll(
+    count_result = db.client.count(
       collection_name=SCHEMA_NAME,
-      scroll_filter=query_filter,
-      limit=10000,
-      with_payload=False,
-      with_vectors=False,
+      count_filter=query_filter,
+      exact=True,
     )
-    return len(points)
+    return int(count_result.count)
 
   query = [{
     "FindDescriptor": {

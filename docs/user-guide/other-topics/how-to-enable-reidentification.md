@@ -42,6 +42,8 @@ For information on VDMS, visit the official documentation: https://intellabs.git
 
 Scenescape leverages VDMS to store object vector embeddings for the purpose of reidentifying an object using visual features.
 
+Both VDMS and Qdrant use the same controller connection defaults: hostname `reid.scenescape.intel.com`, port `55555`, TLS enabled, and certificates from `make init-secrets` (`scenescape-reid` client, `scenescape-reid-s` server). Only `REID_DATABASE` selects which backend the Scene Controller uses.
+
 2. **Uncomment VDMS dependency in scene config**
    Uncomment the `vdms` dependency:
 
@@ -84,11 +86,12 @@ This reidentification-specific configuration uses a vision pipeline that include
 
 ## Switching the ReID Vector Database Backend (VDMS → Qdrant)
 
-By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VDMS`). You can switch the Scene Controller to **Qdrant** without changing the camera ReID pipeline.
+By default, Scenescape uses **VDMS** as the ReID vector store (`REID_DATABASE=VDMS`). You can switch the Scene Controller to **Qdrant** without changing the camera ReID pipeline or connection host/port/TLS settings.
 
 ### Prerequisites
 
 - ReID is already enabled (feature extraction pipeline and `reid-config.json` as in the steps above).
+- Secrets include shared ReID certificates (`scenescape-reid*` / `scenescape-reid-s*`). Regenerate with `make clean-secrets && make init-secrets` if those files are missing.
 - You can edit Compose files or pass an override file when starting services.
 
 ### Steps
@@ -151,7 +154,7 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
 ## Steps to Disable Re-identification
 
 1. **Comment Out the Database Container**
-   Disable `vdms` by commenting it out in `docker-compose.yml`:
+   Disable the active ReID database (`vdms` and/or `qdrant`) by commenting it out in Compose or omitting the `vdms` profile / Qdrant override:
 
    <!-- prettier-ignore -->
    ```yaml
@@ -161,7 +164,7 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
    ```
 
 2. **Remove the Dependency from Scene Controller**
-   Comment or delete the `vdms` dependency:
+   Comment or delete the database dependency (`vdms` or `qdrant`):
 
    ```yaml
    depends_on:
@@ -170,7 +173,6 @@ Legacy `VDMS_*` / `QDRANT_*` names still work as temporary fallbacks.
      - ntpserv
      # - vdms
    ```
-
 3. **Remove ReID from the Camera Pipeline**
    Edit the retail-config setting in [Docker Compose](/sample_data/docker-compose-dl-streamer-example.yml) and revert to the config without re-id model:
 
@@ -218,7 +220,7 @@ The scene output includes `reid_state` for each tracked object. For canonical st
 
 | Parameter                                                                 | Purpose                                                                                                                                                                                          | Expected Value/Range                                                                                                                                    |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_SIMILARITY_THRESHOLD_L2` / `DEFAULT_SIMILARITY_THRESHOLD_COSINE` | Match-acceptance threshold defaults selected by `similarity_metric`: `L2` uses `DEFAULT_SIMILARITY_THRESHOLD_L2`, and `COSINE` (mapped to VDMS `IP`) uses `DEFAULT_SIMILARITY_THRESHOLD_COSINE`. | Float; tune per metric. For `COSINE`/`IP`, values such as `0.2–0.8` may be used. For `L2`, use a distance threshold appropriate to the embedding/model. |
+| `DEFAULT_SIMILARITY_THRESHOLD_L2` / `DEFAULT_SIMILARITY_THRESHOLD_COSINE` | Match-acceptance threshold defaults selected by `similarity_metric`: `L2` uses `DEFAULT_SIMILARITY_THRESHOLD_L2`, and `COSINE` (inner-product backend path) uses `DEFAULT_SIMILARITY_THRESHOLD_COSINE`. | Float; tune per metric. For `COSINE`/`IP`, values such as `0.2–0.8` may be used. For `L2`, use a distance threshold appropriate to the embedding/model. |
 | `DEFAULT_MINIMUM_BBOX_AREA`                                               | Minimum bounding box size to consider a valid feature.                                                                                                                                           | Pixel area (e.g., 400–1600)                                                                                                                             |
 | `DEFAULT_MINIMUM_FEATURE_COUNT`                                           | Minimum features needed before querying DB.                                                                                                                                                      | Integer (e.g., 5–20)                                                                                                                                    |
 | `DEFAULT_MAX_FEATURE_SLICE_SIZE`                                          | Proportion of features stored to improve DB performance.                                                                                                                                         | Float (e.g., 0.1–1.0)                                                                                                                                   |
@@ -236,18 +238,19 @@ docker compose --profile controller --profile vdms up --build
 ## Troubleshooting
 
 1. **Issue: ReID not working**
-   - **Cause**: Database container is not running or not linked.
+   - **Cause**: Database container is not running, not linked, or TLS/certs do not match the shared ReID defaults.
    - **Resolution** (VDMS):
      ```bash
      docker ps | grep vdms
      docker compose logs vdms
      ```
+     Confirm the service aliases include `reid.scenescape.intel.com` and mounts `scenescape-reid-s` server certs.
    - **Resolution** (Qdrant):
      ```bash
      docker ps | grep qdrant
      docker compose logs qdrant
      ```
-     Confirm `REID_DATABASE=QDRANT` on the `scene` service and that the `qdrant` container is healthy.
+     Confirm `REID_DATABASE=QDRANT` on the `scene` service, that the `qdrant` container is healthy on port `55555` with TLS, and that `scenescape-reid*` secrets exist.
 
 2. **Issue: Objects not re-identifying across scenes**
    - **Cause**: Insufficient visual features collected or poor lighting.

@@ -12,7 +12,7 @@ This document describes the implementation of 2-tier hybrid search for Re-ID (Re
 **Architecture**: TIER 1 (metadata filtering) + TIER 2 (vector similarity)
 
 ```text
-VDMS Query Flow:
+ReID Query Flow (VDMS or Qdrant):
 
   sscape_object with semantic metadata (age, gender, color, etc.)
     ↓
@@ -20,15 +20,14 @@ VDMS Query Flow:
     ↓
   sendSimilarityQuery() calls findMatches() with constraints
     ↓
-  TIER 1: VDMS applies metadata constraints (exact-match filtering)
+  TIER 1: Backend applies metadata constraints (exact-match filtering)
     "Find entries where type='Person' AND gender='Female' AND age='22'"
     ↓
-  TIER 2: VDMS performs vector similarity on filtered candidates
+  TIER 2: Backend performs vector similarity on filtered candidates
     "Compute configured similarity metric value between query vector and filtered candidates"
     ↓
   Return top-k matches with metadata
 ```
-
 ## Key Concepts
 
 ### Similarity Metric and Score Semantics
@@ -37,16 +36,16 @@ The Re-ID metric is configured through `reid-config.json` (`similarity_metric`) 
 
 When `similarity_metric` is `COSINE`, Re-ID embedding vectors are normalized to unit length before they are:
 
-- stored in VDMS (`AddDescriptor`)
-- used as query vectors in VDMS (`FindDescriptor`)
+- stored in the ReID vector database
+- used as query vectors for similarity search
 
-For `COSINE`, Scenescape uses VDMS `IP` internally with normalized vectors, so similarity scores are expected to stay in the range `[-1, 1]`.
+For `COSINE`, Scenescape uses an inner-product path with normalized vectors (VDMS `IP`; Qdrant DOT), so similarity scores are expected to stay in the range `[-1, 1]`.
 
 - `1.0`: identical direction (most similar)
 - `0.0`: orthogonal embeddings
 - `-1.0`: opposite direction
 
-The controller validates returned similarity scores for the normalized-cosine path (`COSINE` mapped to VDMS `IP`) and discards out-of-range values. For non-cosine distance metrics (for example `L2`), vectors are not force-normalized and this `[-1, 1]` check is not applied.
+The controller validates returned similarity scores for the normalized-cosine path (`COSINE` mapped to backend IP/DOT) and discards out-of-range values. For non-cosine distance metrics (for example `L2`), vectors are not force-normalized and this `[-1, 1]` check is not applied.
 
 ### Limitations
 
@@ -128,7 +127,7 @@ Result: "Find strong age-gender matches, refined by vector similarity"
 
 **Environment variables**:
 
-Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` selects which adapter runs.
+Shared `REID_*` settings configure any vector backend. Only `REID_DATABASE` selects which adapter runs. Hostname, port, TLS, and certificate paths are backend-agnostic (`reid.scenescape.intel.com:55555`, TLS on, `scenescape-reid*` / CA paths).
 
 | Variable                                                | Purpose                              | Default                                                             |
 | ------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
@@ -195,22 +194,22 @@ controller/config/reid-config.json
 
 | Parameter                           | Type   | Default                                                | Description                                                                                                                                                                                                      |
 | ----------------------------------- | ------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `similarity_metric`                 | string | `L2`                                                   | Similarity metric for ReID matching. `L2` is the default distance-style metric (lower-is-better). `COSINE` is implemented using normalized vectors with VDMS `IP` (higher-is-better).                            |
-| `stale_feature_timeout_secs`        | float  | 5.0                                                    | How long (seconds) to accumulate features in memory before flushing to VDMS. Features older than this threshold are persisted to the database for long-term storage.                                             |
-| `stale_feature_check_interval_secs` | float  | 1.0                                                    | How frequently (seconds) the background timer checks for stale features and flushes them to VDMS. More frequent checks ensure timely database updates.                                                           |
+| `similarity_metric`                 | string | `L2`                                                   | Similarity metric for ReID matching. `L2` is the default distance-style metric (lower-is-better). `COSINE` uses normalized vectors with an inner-product backend path (higher-is-better). |
+| `stale_feature_timeout_secs`        | float  | 5.0                                                    | How long (seconds) to accumulate features in memory before flushing to the ReID database. Features older than this threshold are persisted for long-term storage.                         |
+| `stale_feature_check_interval_secs` | float  | 1.0                                                    | How frequently (seconds) the background timer checks for stale features and flushes them to the ReID database. More frequent checks ensure timely database updates.                       |
 | `feature_accumulation_threshold`    | int    | 12                                                     | Minimum number of quality features required before initiating a similarity query against the database. More features = higher statistical confidence in matching.                                                |
 | `minimum_bbox_area`                 | int    | 5000                                                   | Minimum bounding-box area in pixels required before a detected object contributes a ReID embedding to quality feature accumulation.                                                                              |
-| `feature_slice_size`                | int    | 10                                                     | When persisting features to VDMS, sample every Nth feature vector from the accumulated set to reduce database bloat. Example: slice_size=10 stores every 10th vector.                                            |
+| `feature_slice_size`                | int    | 10                                                     | When persisting features to the ReID database, sample every Nth feature vector from the accumulated set to reduce database bloat. Example: slice_size=10 stores every 10th vector. |
 | `similarity_threshold`              | float  | metric-dependent (`40.0` for `L2`, `0.5` for `COSINE`) | Match acceptance threshold interpreted using the configured metric semantics: for `COSINE`, candidates **above** the threshold match; for `L2`-style distance metrics, candidates **below** the threshold match. |
 
-**Similarity range note**: For `COSINE` (implemented via VDMS `IP`), scores are validated against `[-1, 1]` because embeddings are normalized before storage and query. This range check is metric-specific and is not applied to non-cosine distance metrics.
+**Similarity range note**: For `COSINE` (normalized vectors with backend IP/DOT), scores are validated against `[-1, 1]` because embeddings are normalized before storage and query. This range check is metric-specific and is not applied to non-cosine distance metrics.
 
 ### Embedding Dimension Inference
 
 The controller automatically infers the ReID embedding dimension from the first vector it receives at runtime:
 
-- **Runtime inference only**: On the first decoded embedding the controller reads the vector length from the payload, creates the VDMS descriptor set schema with that dimension, and locks that dimension for the process lifetime. All subsequent embeddings are validated against that inferred length; mismatches are discarded with a warning.
-- **Switching ReID models**: Because the dimension is locked after the first embedding, switching to a model with a different output length requires restarting the controller. The VDMS descriptor set must also be recreated if the stored dimension differs (VDMS does not support in-place schema migration).
+- **Runtime inference only**: On the first decoded embedding the controller reads the vector length from the payload, creates the backend schema/collection with that dimension, and locks that dimension for the process lifetime. All subsequent embeddings are validated against that inferred length; mismatches are discarded with a warning.
+- **Switching ReID models**: Because the dimension is locked after the first embedding, switching to a model with a different output length requires restarting the controller. The backend schema/collection must also be recreated if the stored dimension differs (in-place schema migration is not supported).
 - **Base64 compatibility**: The controller decodes base64 embeddings using the payload byte length by default. Producers can also include an optional `embedding_dimensions` field alongside `embedding_vector`; if provided, it must match the packed float count.
 
 ### Using the Configuration File
@@ -277,4 +276,6 @@ Tests should verify:
 
 ## References
 
+- [How to enable re-identification](../../other-topics/how-to-enable-reidentification.md) (including VDMS ↔ Qdrant switch)
 - [VDMS Documentation](https://github.com/IntelLabs/vdms)
+- [Qdrant Documentation](https://qdrant.tech/documentation/)

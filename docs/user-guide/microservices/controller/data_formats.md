@@ -220,7 +220,7 @@ tracked object contains the following fields:
 | `keypoint_connections` | array of strings   | Flat list of keypoint-name pairs defining the skeleton edges (e.g. `["nose","eye_l","nose","eye_r",...]`); length is always `2 x number_of_connections`                                                                                                      |
 | `regions`              | object             | Map of region/sensor IDs to membership metadata. By default this is `{id: {entered: timestamp}}`. In region-scoped outputs, objects currently inside a region also include a live dwell time as `{id: {entered: timestamp, dwell: seconds}}`.                |
 | `sensors`              | object             | Map of sensor IDs to timestamped readings (`{id: [[timestamp, value], ...]}`)                                                                                                                                                                                |
-| `similarity`           | number or null     | Similarity/distance value to the matched ReID embedding in VDMS; higher-is-better for `COSINE`; lower is better for `L2`. `null` when ReID is still collecting embeddings, when no database match was found, or when ReID is disabled.                       |
+| `similarity`           | number or null     | Similarity/distance value to the matched ReID embedding in the configured vector database; higher-is-better for `COSINE`; lower is better for `L2`. `null` when ReID is still collecting embeddings, when no database match was found, or when ReID is disabled. |
 | `reid_state`           | string             | Re-ID processing state for the object. One of: `pending_collection`, `query_no_match`, `matched`, `reid_disabled`                                                                                                                                            |
 | `previous_ids_chain`   | array or absent    | History of UUID reassignments for this track. Each element is `{"id": "<uuid>", "timestamp": "<ISO 8601>", "similarity_score": <number or null>}`. Present only when the object has been re-identified at least once; omitted otherwise.                     |
 | `first_seen`           | string (ISO 8601)  | Timestamp when the track was first created                                                                                                                                                                                                                   |
@@ -238,9 +238,9 @@ tracked object contains the following fields:
 > optional pass-through fields from object detections. They are included in output
 > objects when present on the contributing detection data.
 
-> **Note on `similarity`**: This field holds the metric value returned by VDMS
-> in `_distance` and is evaluated by the controller using configured metric semantics.
-> For `COSINE` (implemented via VDMS `IP`), value must be above `similarity_threshold`; for distance-style metrics such as `L2`,
+> **Note on `similarity`**: This field holds the metric value returned by the ReID
+> backend in `_distance` and is evaluated by the controller using configured metric semantics.
+> For `COSINE` (normalized vectors with backend IP/DOT), value must be above `similarity_threshold`; for distance-style metrics such as `L2`,
 > value must be below `similarity_threshold`.
 > A value of `null` means either the ReID query has not been submitted yet
 > (`pending_collection`), the query found no match below the configured
