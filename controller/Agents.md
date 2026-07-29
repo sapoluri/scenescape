@@ -206,9 +206,11 @@ Use this when adding a third (or replacement) vector store besides VDMS and Qdra
 ### Contract
 
 1. **Subclass `controller.reid.ReIDDatabase`** and implement the abstract methods:
-   - `connect`, `addSchema`, `addEntry`, `getPersistedAttributes`, `findSchema`, `findMatches`
-2. **Call `super().__init__(similarity_metric=..., confidence_threshold=...)`** first — it sets the state the inherited helpers read.
-3. **Also implement `ensureSchema(dimensions)`** — required by `UUIDManager` even though it is not on the ABC today. Mirror VDMS/Qdrant: create-or-verify collection/schema for the configured metric and inferred embedding size.
+   - `connect`, `addSchema`, `addEntry`, `getPersistedAttributes`, `findMatches`
+   - Schema hooks: `_schemaResourceLabel`, `_tryCreateSchema`, `_readSchemaMarker`,
+     `_persistSchemaMarker`, `findSchemaMetadata`
+2. **Call `super().__init__(set_name=..., similarity_metric=..., dimensions=..., confidence_threshold=...)`** first — it sets shared state (including schema locks) that inherited helpers read.
+3. **Reuse the base schema lifecycle** — do not reimplement `ensureSchema` / `ensureSchemaInner` / `findSchema` / `findSchemaDetails` / `_writeSchemaMarker`. Override `_afterSchemaVerified` only when the backend needs post-verify work (Qdrant uses it for payload indexes).
 4. **Reuse shared helpers** from the base class — do not reimplement them:
    - `prepareReidDict` / `prepareReidVector` for embedding preparation
    - `_buildQueryConstraints` for TIER 1 metadata filters (wraps `controller.reid_constraints.build_query_constraints`)
@@ -232,7 +234,7 @@ available_databases = {
 - **`findMatches`**: Return a list (one entry per query vector) of entity dicts with at least `uuid`, `rvid`, and `_distance` (VDMS-compatible score semantics for the active metric). If the store's native score does not already follow that convention, convert it in the adapter — Qdrant's `_toSimilarityScore` is the reference example.
 - **`getPersistedAttributes`**: Return the latest persist payload for a UUID (by `persist_timestamp`), or `{}` if none.
 - **Metrics**: Controller config uses `L2` / `COSINE`; adapters map to store-native distance (e.g. Qdrant DOT for IP/COSINE path). Keep score validation consistent with `uuid_manager` thresholds.
-- **Schema markers / versioning**: Follow the existing create-first + marker/metadata verification pattern so multi-instance controllers do not silently diverge on dimensions/metric.
+- **Schema markers / versioning**: Implement the create/marker hooks so the shared `ensureSchemaInner` create-first + marker/metadata verification pattern keeps multi-instance controllers from silently diverging on dimensions/metric.
 
 ### Tests and deployment
 

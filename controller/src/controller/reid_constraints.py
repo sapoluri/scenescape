@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+from controller.reid_env import DEFAULT_CONFIDENCE_THRESHOLD
 from scene_common import log
-
-DEFAULT_CONFIDENCE_THRESHOLD = 0.8
 
 
 def build_query_constraints(object_type, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,

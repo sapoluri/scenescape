@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import threading
 import uuid
 
 from qdrant_client import QdrantClient
@@ -33,10 +32,10 @@ class QdrantDatabase(ReIDDatabase):
                hostname=None, port=None,
                api_key=None, use_tls=None, ca_cert=None):
     super().__init__(
+      set_name=set_name,
       similarity_metric=similarity_metric,
+      dimensions=dimensions,
       confidence_threshold=confidence_threshold)
-    self.set_name = set_name
-    self.dimensions = dimensions
     self.hostname = get_reid_hostname() if hostname is None else hostname
     resolved_port = get_reid_port() if port is None else port
     self.port = int(resolved_port)
@@ -45,10 +44,10 @@ class QdrantDatabase(ReIDDatabase):
     self.ca_cert = get_reid_ca_cert() if ca_cert is None else ca_cert
     self.client = None
     self.connected = False
-    self.lock = threading.Lock()
-    self._schema_lock = threading.Lock()
-    self._schema_ready = False
     return
+
+  def _schemaResourceLabel(self):
+    return "Qdrant collection"
 
   def _qdrantDistance(self, metric=None):
     """Map descriptor metric to Qdrant distance function."""
@@ -170,15 +169,14 @@ class QdrantDatabase(ReIDDatabase):
   def _markerPointId(self, set_name):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"reid-schema-marker:{set_name}"))
 
-  def _writeSchemaMarker(self, dimensions, metric, skip_exists_check=False):
-    self._ensureMarkerCollection()
-    if not skip_exists_check:
-      marker_exists, _, _ = self._readSchemaMarker()
-      if marker_exists:
-        log.debug(
-          f"_writeSchemaMarker: Marker already exists for '{self.set_name}', skipping write")
-        return
+  def _tryCreateSchema(self, dimensions, metric):
+    if self._collectionExists(self.set_name):
+      return False
+    self._createCollection(self.set_name, dimensions, metric)
+    return True
 
+  def _persistSchemaMarker(self, dimensions, metric):
+    self._ensureMarkerCollection()
     point_id = self._markerPointId(self.set_name)
     self.client.upsert(
       collection_name=SCHEMA_MARKER_COLLECTION,
@@ -227,6 +225,9 @@ class QdrantDatabase(ReIDDatabase):
       metric = str(metric)
     return True, dimensions, metric
 
+  def _afterSchemaVerified(self):
+    self._ensurePayloadIndexes(self.set_name)
+
   def addSchema(self, set_name, similarity_metric, dimensions):
     try:
       if self._collectionExists(set_name):
@@ -237,89 +238,6 @@ class QdrantDatabase(ReIDDatabase):
       log.warning(
         f"Failed to add collection '{set_name}' to Qdrant: {e}")
       return False
-
-  def ensureSchemaInner(self, requested_dimensions, expected_metric, caller):
-    """
-  Core attempt-first schema setup shared by connect() and ensureSchema().
-  Attempt collection creation first; verify against schema marker when the
-  collection already exists.
-    """
-    collection_exists = self._collectionExists(self.set_name)
-    if not collection_exists:
-      self._createCollection(self.set_name, requested_dimensions, expected_metric)
-      log.info(
-        f"{caller}: Created collection '{self.set_name}' "
-        f"({requested_dimensions}D, {expected_metric})")
-      self._writeSchemaMarker(requested_dimensions, expected_metric, skip_exists_check=True)
-      self.dimensions = requested_dimensions
-      return
-
-    log.debug(
-      f"{caller}: Collection '{self.set_name}' already exists; "
-      "verifying against schema marker.")
-    marker_exists, marker_dimensions, marker_metric = self._readSchemaMarker()
-
-    if not marker_exists:
-      schema_exists, schema_dimensions, schema_metric = self.findSchemaMetadata(self.set_name)
-      if not schema_exists or schema_dimensions is None or schema_metric is None:
-        raise RuntimeError(
-          f"{caller}: '{self.set_name}' exists but no schema marker found, and collection "
-          "metadata could not be read for verification. Recreate the collection to continue.")
-      if str(schema_metric).strip().upper() != expected_metric:
-        raise RuntimeError(
-          f"{caller}: '{self.set_name}' uses metric {schema_metric}, expected {expected_metric}. "
-          "Recreate the collection with matching metric.")
-      if schema_dimensions != requested_dimensions:
-        raise RuntimeError(
-          f"{caller}: '{self.set_name}' has {schema_dimensions} dimensions, "
-          f"expected {requested_dimensions}. "
-          "Recreate the collection with matching dimensions.")
-      log.warning(
-        f"{caller}: '{self.set_name}' exists but no schema marker found; "
-        "writing marker for future instances.")
-      self._writeSchemaMarker(requested_dimensions, expected_metric, skip_exists_check=True)
-      self._ensurePayloadIndexes(self.set_name)
-      self.dimensions = requested_dimensions
-      return
-
-    if marker_dimensions is None or marker_metric is None:
-      raise RuntimeError(
-        f"{caller}: '{self.set_name}' schema marker returned no dimensions "
-        f"for verification (dimensions={marker_dimensions}, metric={marker_metric}). "
-        "Cannot safely confirm compatibility.")
-
-    if str(marker_metric).strip().upper() != expected_metric:
-      raise RuntimeError(
-        f"{caller}: '{self.set_name}' uses metric {marker_metric}, "
-        f"expected {expected_metric}. "
-        "Recreate the collection with matching metric.")
-    if marker_dimensions != requested_dimensions:
-      raise RuntimeError(
-        f"{caller}: '{self.set_name}' has {marker_dimensions} dimensions, "
-        f"expected {requested_dimensions}. "
-        "Recreate the collection with matching dimensions.")
-
-    log.info(
-      f"{caller}: Verified existing collection '{self.set_name}' "
-      f"against schema marker ({marker_dimensions}D, {marker_metric})")
-    self._ensurePayloadIndexes(self.set_name)
-    self.dimensions = requested_dimensions
-
-  def ensureSchema(self, dimensions):
-    with self._schema_lock:
-      requested_dimensions = int(dimensions)
-      if self._schema_ready:
-        if int(self.dimensions) != requested_dimensions:
-          raise ValueError(
-            f"ReID schema already initialized with {self.dimensions} dimensions; "
-            f"incoming vector has {requested_dimensions} dimensions. "
-            "Restart the controller and flush the Qdrant collection to change dimensions.")
-        return
-      self.ensureSchemaInner(
-        requested_dimensions,
-        str(self.similarity_metric).strip().upper(),
-        "ensureSchema")
-      self._schema_ready = True
 
   def _buildPayload(self, uuid_value, rvid, object_type, persist=None, **metadata):
     properties = {
@@ -409,8 +327,7 @@ class QdrantDatabase(ReIDDatabase):
       point for point in points
       if isinstance(point.payload, dict) and
       isinstance(point.payload.get('persist'), str) and
-      point.payload.get('persist').strip() and
-      point.payload.get('persist') != 'Missing property'
+      point.payload.get('persist').strip()
     ]
 
     if not points_with_persist:
@@ -466,14 +383,6 @@ class QdrantDatabase(ReIDDatabase):
       return {}
 
     return self._latestPersistFromPoints(points, uuid_value)
-
-  def findSchema(self, set_name):
-    schema_exists, _ = self.findSchemaDetails(set_name)
-    return schema_exists
-
-  def findSchemaDetails(self, set_name):
-    schema_exists, schema_dimensions, _ = self.findSchemaMetadata(set_name)
-    return schema_exists, schema_dimensions
 
   def findSchemaMetadata(self, set_name):
     if not self._collectionExists(set_name):

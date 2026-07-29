@@ -9,7 +9,7 @@ import math
 import numpy as np
 
 from controller.qdrant_adapter import QdrantDatabase
-from controller.reid_constants import COSINE_SIMILARITY_TOLERANCE
+from controller.reid_constants import is_within_inner_product_range
 from controller.reid_env import get_reid_database
 from controller.vdms_adapter import VDMSDatabase
 from controller.moving_object import ReidState, MovingObject
@@ -27,8 +27,6 @@ DEFAULT_STALE_FEATURE_TIMEOUT_SECS = 5.0
 DEFAULT_STALE_FEATURE_CHECK_INTERVAL_SECS = 1.0
 DEFAULT_SIMILARITY_METRIC = "COSINE"
 SUPPORTED_SIMILARITY_METRICS = {"COSINE", "L2"}
-# Tolerance applied to the theoretical [-1, 1] IP score bounds to absorb
-# float32 rounding errors from VDMS normalization and inner-product computation.
 available_databases = {
   "VDMS": VDMSDatabase,
   "QDRANT": QdrantDatabase,
@@ -588,9 +586,7 @@ class UUIDManager:
       return False
 
     if self._isHigherBetterMetric():
-      # For IP metrics, scores must lie within [-1, 1] (normalized embeddings).
-      # Allow a small tolerance to absorb float32 rounding from VDMS computation.
-      if metric_value < -(1.0 + COSINE_SIMILARITY_TOLERANCE) or metric_value > (1.0 + COSINE_SIMILARITY_TOLERANCE):
+      if not is_within_inner_product_range(metric_value):
         return False
       return metric_value > threshold
     return metric_value < threshold
@@ -621,7 +617,7 @@ class UUIDManager:
         metric_value = entity.get('_distance')
         if metric_value is None or not math.isfinite(metric_value):
           continue
-        if is_higher_better and (metric_value < -(1.0 + COSINE_SIMILARITY_TOLERANCE) or metric_value > (1.0 + COSINE_SIMILARITY_TOLERANCE)):
+        if is_higher_better and not is_within_inner_product_range(metric_value):
           log.warning(
             f"Ignoring out-of-range IP similarity score {metric_value} "
             f"for uuid={entity.get('uuid')}")
