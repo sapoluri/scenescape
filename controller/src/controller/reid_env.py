@@ -12,6 +12,8 @@ raises at controller startup rather than degrading behaviour at query time.
 
 import os
 
+from scene_common import log
+
 DEFAULT_DATABASE = "VDMS"
 DEFAULT_HOSTNAME = "reid.scenescape.intel.com"
 DEFAULT_PORT = 55555
@@ -27,10 +29,31 @@ CONFIDENCE_THRESHOLD_RANGE = (0.0, 1.0)
 _TRUE_VALUES = ("1", "true", "yes", "on")
 _FALSE_VALUES = ("0", "false", "no", "off")
 
+# Kubernetes injects service-link variables for every Service in the namespace.
+# A Service named "reid" produces REID_PORT=tcp://<clusterIP>:<port>, which
+# lands in this module's namespace. Such a value is never operator config, so
+# treat it as unset instead of failing to parse it.
+_SERVICE_LINK_SCHEMES = ("tcp://", "udp://")
+
+_SERVICE_LINK_WARNED = set()
+
 
 def _parse_error(name, value, expected):
   """Build a ValueError naming the variable, its value, and the accepted form."""
   return ValueError(f"Invalid {name}='{value}': expected {expected}")
+
+
+def _is_service_link(name, value):
+  """Report whether value is a Kubernetes service-link URL rather than config."""
+  if not value.startswith(_SERVICE_LINK_SCHEMES):
+    return False
+  if name not in _SERVICE_LINK_WARNED:
+    _SERVICE_LINK_WARNED.add(name)
+    log.warning(
+      f"Ignoring {name}='{value}': this looks like a Kubernetes service-link "
+      f"variable, not ReID configuration. Set enableServiceLinks: false on the "
+      f"pod, or set {name} explicitly to override the default.")
+  return True
 
 
 def _env_value(name, default=None):
@@ -38,7 +61,10 @@ def _env_value(name, default=None):
   value = os.getenv(name)
   if value is None or str(value).strip() == "":
     return default
-  return str(value).strip()
+  value = str(value).strip()
+  if _is_service_link(name, value):
+    return default
+  return value
 
 
 def _env_int(name, default, value_range):

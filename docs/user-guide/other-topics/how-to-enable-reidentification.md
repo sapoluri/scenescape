@@ -172,6 +172,18 @@ make demo-k8s DEMO_K8S_MODE=all                      # ReID plus mapping and clu
 
 **Expected Result**: The Scene Controller connects to Qdrant, creates or verifies the ReID collection, and continues UUID assignment via visual similarity.
 
+#### Service-link environment variables
+
+The ReID Service is named `reid`, so Kubernetes injects `REID_PORT=tcp://<clusterIP>:<port>`
+into every pod in the namespace, which collides with the `REID_PORT` setting
+described above. The chart sets `enableServiceLinks: false` on the Scene
+Controller to suppress this; all of its dependencies are addressed by DNS.
+
+If you write your own manifests, either do the same or set `REID_PORT`
+explicitly, since values in `env` take precedence over service links. As a
+backstop, the controller ignores any `REID_*` value that looks like a service
+link (`tcp://…`) and logs a warning rather than failing to start.
+
 #### ReID pod filesystem
 
 The ReID container runs with `readOnlyRootFilesystem: true`. Each backend gets

@@ -26,7 +26,9 @@ def _isolate_env(monkeypatch):
   """Isolate from developer shell env so defaults are deterministic."""
   for name in _REID_ENV_NAMES + _RETIRED_ENV_NAMES:
     monkeypatch.delenv(name, raising=False)
+  reid_env._SERVICE_LINK_WARNED.clear()
   yield
+  reid_env._SERVICE_LINK_WARNED.clear()
 
 
 class TestReidEnvDefaults:
@@ -137,6 +139,36 @@ class TestStrictParsing:
   def test_false_spellings(self, monkeypatch, value):
     monkeypatch.setenv("REID_USE_TLS", value)
     assert reid_env.get_reid_use_tls() is False
+
+
+class TestKubernetesServiceLinks:
+  """A Service named "reid" injects REID_PORT=tcp://<ip>:<port> into the pod."""
+
+  def test_service_link_port_falls_back_to_default(self, monkeypatch):
+    monkeypatch.setenv("REID_PORT", "tcp://10.96.145.86:55555")
+    assert reid_env.get_reid_port() == 55555
+
+  def test_service_link_hostname_falls_back_to_default(self, monkeypatch):
+    monkeypatch.setenv("REID_HOSTNAME", "tcp://10.96.145.86:55555")
+    assert reid_env.get_reid_hostname() == "reid.scenescape.intel.com"
+
+  def test_service_link_is_warned_once_per_variable(self, monkeypatch):
+    monkeypatch.setenv("REID_PORT", "tcp://10.96.145.86:55555")
+    reid_env.get_reid_port()
+    reid_env.get_reid_port()
+    assert reid_env._SERVICE_LINK_WARNED == {"REID_PORT"}
+
+  def test_explicit_port_still_wins_over_service_link_shape(self, monkeypatch):
+    """An operator-set value is unaffected by the service-link guard."""
+    monkeypatch.setenv("REID_PORT", "6543")
+    assert reid_env.get_reid_port() == 6543
+    assert reid_env._SERVICE_LINK_WARNED == set()
+
+  def test_malformed_port_still_raises(self, monkeypatch):
+    """The guard must not swallow genuine typos."""
+    monkeypatch.setenv("REID_PORT", "tcp:/typo")
+    with pytest.raises(ValueError):
+      reid_env.get_reid_port()
 
 
 class TestRetiredBackendSpecificNames:

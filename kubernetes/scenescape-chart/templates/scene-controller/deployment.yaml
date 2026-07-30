@@ -22,6 +22,10 @@ spec:
       securityContext:
         runAsNonRoot: true
       shareProcessNamespace: true
+      # The "reid" Service would otherwise inject REID_PORT=tcp://<ip>:<port>,
+      # colliding with the controller's own REID_* settings. All dependencies
+      # are addressed by DNS, so the service-link variables are not needed.
+      enableServiceLinks: false
       initContainers:
       - name: wait-for-web-initcontainer
         image: {{ .Values.busyboxImage.repository }}/{{ .Values.busyboxImage.name }}:{{ .Values.busyboxImage.tag }}
