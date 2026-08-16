@@ -401,6 +401,11 @@ void MultipleObjectTracker::track(std::vector<std::vector<tracking::TrackedObjec
   mTrackManager.correct();
 
   // 4. - Group unmatched detections across cameras before creating tracks.
+  // Detection-to-detection clustering must use Euclidean meters: raw detections
+  // do not carry track predictedMeasurementCov, so PositionMahalanobis treats
+  // them as near-delta covariances and fails to fuse the same object seen by
+  // two cameras (duplicate frozen tracks). Track-to-detection association above
+  // still uses distanceType / distanceThreshold.
   std::vector<tracking::TrackedObject> newObjects;
   size_t totalUnassignedObjects = 0;
   for (auto &cameraObjects : objectsPerCamera)
@@ -420,8 +425,8 @@ void MultipleObjectTracker::track(std::vector<std::vector<tracking::TrackedObjec
     std::vector<std::pair<size_t, size_t>> assignments;
     std::vector<size_t> unassignedTracks;
     std::vector<size_t> unassignedObjects;
-    match(newObjects, cameraObjects, assignments, unassignedTracks, unassignedObjects, distanceType, distanceThreshold,
-          maxRadiusM);
+    match(newObjects, cameraObjects, assignments, unassignedTracks, unassignedObjects,
+          DistanceType::Euclidean, maxRadiusM, maxRadiusM);
 
     for (const auto &[newObjectIndex, cameraObjectIndex] : assignments)
     {

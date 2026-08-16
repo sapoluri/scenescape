@@ -144,13 +144,17 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 - [x] CI unit coverage for association wiring (controller hydrate + tracker config + robot_vision match)
 - [x] ADR-0012 status → `Accepted` for Phase 1 scope
 
-**Note:** Offline evaluation on Unity Controller-Immediate:
+**Note:** Offline evaluation (artifacts under `/tmp/phase1-signoff/` and prior `/tmp/phase1-eval*`):
 
-- **10 fps** (2026-08-15): `position_mahalanobis` matched or slightly improved AssA/LocA vs Euclidean and reduced jitter after association config reached category trackers.
+- **Unity Controller-Immediate 10 fps** (2026-08-15): `position_mahalanobis` matched or slightly improved AssA/LocA vs Euclidean and reduced jitter after association config reached category trackers.
 - **Covariance shaping** (2026-08-16): isotropic `Q`, broken UKF `Sxy`, and IMM/CTRV gate inflation produced near-round χ² ellipses (~14 m at 1 s coast) and false “over-association” under dropped frames. Fixes above make `S_pred` elongate along velocity (unit-tested).
-- **1 fps / dropped frames** (2026-08-16, post-fix): Euclidean and Mahalanobis essentially tied (HOTA ~65.8, AssA ~67.4, IDF1 91.6, IDSW 0); Mahalanobis no longer regresses vs Euclidean.
+- **Unity Controller-Immediate 1 fps** (2026-08-16, post-fix): Euclidean and Mahalanobis essentially tied (HOTA ~65.8, AssA ~67.4, IDF1 91.6, IDSW 0).
+- **Unity Tracker-Service 10 fps** (2026-08-16): essentially tied (HOTA 69.08 vs 69.02; AssA/LocA/IDF1 within ~0.1; IDSW 0; Mahalanobis lower jerk ratio).
+- **Unity Controller time-chunking 10 fps** (2026-08-16): mixed — Mahalanobis improves IDF1 (+15), MOTA (+25), AssA/LocA/jitter, but HOTA drops (−5) via DetA (more TP and more FP; tracks linger).
+- **Wildtrack Tracker-Service 2 fps** (2026-08-16): mild regression (HOTA −1.6, AssA −1.9, IDF1 −1.2, IDSW 157→166).
+- **Controller-TC vs Tracker-Service (both Mahalanobis, Unity 10 fps, aligned gates)** (2026-08-16): gap was Controller-TC-specific. Same association config → Tracker published 3 live tracks; Controller-TC published **4 IDs every frame**, of which **2 were frozen** `FW190D` (σ≈0, never updated) ~1.3 m apart — two cameras’ disagreeing projections of the same static plane never fused at birth. Root cause: batched `MultipleObjectTracker::track` used `PositionMahalanobis` for **detection↔detection** cross-camera clustering; raw detections lack track `predictedMeasurementCov`, so the χ² gate was near-delta and refused to merge. **Fix:** detection↔detection clustering uses Euclidean meters (`max_radius_m`); track↔detection association still uses the configured distance type. After fix (2026-08-16): Controller-TC publishes **3 IDs** (2 person + 1 `FW190D`, matching Tracker); HOTA 71.0 / DetA 64.6 / DetPr 73.5 (was 65.8 / 54.7 / 58.6); AssA remains ~79.5. IDF1/MOTA drop vs the buggy denser coverage (inflated by the ghost track).
 
-Keep default `euclidean` until broader datasets (Wildtrack / time-chunked / tracker-service) are signed off before any default flip.
+**Default flip:** keep `euclidean`. Tracker-service Unity is parity-OK, but Wildtrack regression remains. Controller-TC frozen dual-track bug is fixed; revisit default after Phase 2 measurement covariance and remaining Wildtrack review.
 
 ---
 

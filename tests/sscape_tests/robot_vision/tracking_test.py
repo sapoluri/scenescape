@@ -376,6 +376,59 @@ class TestMatchFunction(unittest.TestCase):
     d2_lateral = (2.0 ** 2) * s00 / (s00 * s11)
     self.assertLess(d2_ahead, d2_lateral)
 
+  def test_position_mahalanobis_fuses_multi_camera_detections(self):
+    """Cross-camera birth clustering must fuse in meters under PositionMahalanobis.
+
+    Raw detections lack track predictedMeasurementCov; Mahalanobis on detection-
+    detection matching would treat them as near-delta and fail to merge the same
+    object seen ~1.3 m apart by two cameras (duplicate frozen tracks).
+    """
+    tracker_config = tracking.TrackManagerConfig()
+    tracker_config.motion_models = [tracking.MotionModel.CV]
+    tracker_config.default_process_noise = 1e-4
+    tracker_config.default_measurement_noise = 0.2
+    tracker_config.init_state_covariance = 1.0
+
+    chi2_gate = tracking.chi2_threshold(0.99)
+    tracker = tracking.MultipleObjectTracker(
+      tracker_config, tracking.DistanceType.PositionMahalanobis, chi2_gate)
+    tracker.update_tracker_params(10)
+
+    cam0 = create_object_at_location(x=7.11, y=7.67)
+    cam0.length = cam0.width = cam0.height = 0.5
+    cam1 = create_object_at_location(x=7.91, y=6.69)
+    cam1.length = cam1.width = cam1.height = 0.5
+
+    tracker.track(
+      [[cam0], [cam1]],
+      datetime.now(),
+      tracking.DistanceType.PositionMahalanobis,
+      chi2_gate,
+      0.5,
+      10.0,
+    )
+    self.assertEqual(
+      len(tracker.get_tracks()),
+      1,
+      'cross-camera detections of one object must birth a single track',
+    )
+
+    # Boundary: farther than max_radius_m must still create two tracks.
+    tracker2 = tracking.MultipleObjectTracker(
+      tracker_config, tracking.DistanceType.PositionMahalanobis, chi2_gate)
+    tracker2.update_tracker_params(10)
+    far = create_object_at_location(x=7.11 + 12.0, y=7.67)
+    far.length = far.width = far.height = 0.5
+    tracker2.track(
+      [[cam0], [far]],
+      datetime.now(),
+      tracking.DistanceType.PositionMahalanobis,
+      chi2_gate,
+      0.5,
+      10.0,
+    )
+    self.assertEqual(len(tracker2.get_tracks()), 2)
+
 class TestClassification(unittest.TestCase):
   def test_classification_functions(self):
     classification_data = tracking.ClassificationData(['Car', 'Bike', 'Pedestrian'])
