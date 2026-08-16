@@ -21,10 +21,10 @@ enum class AssociationMethod { Euclidean, PositionMahalanobis };
  * @brief Data association configuration (ADR-0012 Phase 1).
  */
 struct AssociationConfig {
-    AssociationMethod method = AssociationMethod::Euclidean;
+    AssociationMethod method = AssociationMethod::PositionMahalanobis;
     double gate_probability = kDefaultAssociationGateProbability;
     /// Euclidean: association distance threshold (m). Mahalanobis: hard ceiling (m).
-    double max_radius_m = kDefaultAssociationMaxRadiusM;
+    double max_radius_m = kDefaultAssociationMaxRadiusCeilingM;
 
     [[nodiscard]] double chi2Threshold() const {
         return rv::chi2Threshold(gate_probability, 2);

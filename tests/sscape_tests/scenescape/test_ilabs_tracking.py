@@ -18,15 +18,15 @@ import robot_vision as rv
 def test_normalize_association_config_defaults():
   config = normalize_association_config()
   assert config == {
-    'method': 'euclidean',
+    'method': 'position_mahalanobis',
     'gate_probability': 0.99,
-    'max_radius_m': 2.0,
+    'max_radius_m': 10.0,
   }
 
 
 def test_normalize_association_config_rejects_unknown_method():
   config = normalize_association_config({'method': 'not-a-real-method', 'max_radius_m': 5.0})
-  assert config['method'] == 'euclidean'
+  assert config['method'] == 'position_mahalanobis'
   assert config['max_radius_m'] == pytest.approx(5.0)
 
 

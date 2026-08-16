@@ -262,9 +262,9 @@
           "properties": {
             "method": {
               "type": "string",
-              "description": "Association metric: euclidean (default) or position_mahalanobis (UKF predicted covariance gate).",
+              "description": "Association metric: position_mahalanobis (default, UKF predicted covariance gate) or euclidean (legacy meter gate).",
               "enum": ["euclidean", "position_mahalanobis"],
-              "default": "euclidean"
+              "default": "position_mahalanobis"
             },
             "gate_probability": {
               "type": "number",
@@ -275,8 +275,8 @@
             },
             "max_radius_m": {
               "type": "number",
-              "description": "Euclidean distance threshold (m) or hard Mahalanobis ceiling (m).",
-              "default": 2.0,
+              "description": "Euclidean distance threshold (m) or hard Mahalanobis ceiling (m). Default 10 m supports the position_mahalanobis chi-squared gate; use ~2 m when method is euclidean.",
+              "default": 10.0,
               "minimum": 0
             }
           },

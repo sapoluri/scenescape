@@ -29,9 +29,9 @@ DEFAULT_ASSOCIATION_MAX_RADIUS_M = DEFAULT_TRACKING_RADIUS
 RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M = 10.0
 
 DEFAULT_ASSOCIATION_CONFIG = {
-  "method": "euclidean",
+  "method": "position_mahalanobis",
   "gate_probability": DEFAULT_ASSOCIATION_GATE_PROBABILITY,
-  "max_radius_m": DEFAULT_ASSOCIATION_MAX_RADIUS_M,
+  "max_radius_m": RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M,
 }
 
 
@@ -41,14 +41,14 @@ def normalize_association_config(association_config=None):
   if association_config:
     config.update(association_config)
 
-  method = config.get("method", "euclidean")
+  method = config.get("method", "position_mahalanobis")
   if method not in VALID_ASSOCIATION_METHODS:
     log.error(
-      "Invalid association method %r (expected %s); using euclidean",
+      "Invalid association method %r (expected %s); using position_mahalanobis",
       method,
       ", ".join(sorted(VALID_ASSOCIATION_METHODS)),
     )
-    method = "euclidean"
+    method = "position_mahalanobis"
   config["method"] = method
 
   try:
@@ -256,7 +256,7 @@ class IntelLabsTracking(Tracking):
     return rv_object
 
   def _warn_deprecated_tracking_radius(self, objects):
-    if self.association_config.get("method", "euclidean") == "euclidean":
+    if self.association_config.get("method", "position_mahalanobis") == "euclidean":
       return
     for obj in objects:
       radius = getattr(obj, 'tracking_radius', DEFAULT_TRACKING_RADIUS)

@@ -36,18 +36,18 @@ Add to `tracker-config.json` and controller tracker config:
 ```json
 {
   "association": {
-    "method": "euclidean",
+    "method": "position_mahalanobis",
     "gate_probability": 0.99,
     "max_radius_m": 10.0
   }
 }
 ```
 
-| `method` value | Phase |
-|----------------|-------|
-| `euclidean` | Current behavior (default until Phase 1 validated) |
-| `position_mahalanobis` | Phase 1 |
-| `position_mahalanobis_combined` | Phase 2+ |
+| Method | Meaning |
+|--------|---------|
+| `euclidean` | Legacy meter gate (opt-out / rollback) |
+| `position_mahalanobis` | Phase 1 default — track-side S_pred gate |
+| `position_mahalanobis_combined` | Phase 2+ (S_pred + R_meas) |
 
 ---
 
@@ -139,22 +139,32 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 
 #### Exit criteria
 
-- [x] Feature flag defaults to `euclidean`; `position_mahalanobis` opt-in validated
+- [x] Feature flag ships; `position_mahalanobis` validated vs Euclidean on gated datasets
 - [x] Evaluation metrics within thresholds on metric test dataset (Unity black-box Controller-Immediate: HOTA/AssA/LocA/IDF1 same or better; jitter improved)
 - [x] CI unit coverage for association wiring (controller hydrate + tracker config + robot_vision match)
 - [x] ADR-0012 status → `Accepted` for Phase 1 scope
+- [x] **Default flip** → `position_mahalanobis` (Phase 1) after post-fix Controller-TC + Wildtrack re-signoff (equal-weight multi-cam geometry fusion accepted as stopgap until Phase 2 R)
 
-**Note:** Offline evaluation (artifacts under `/tmp/phase1-signoff/` and prior `/tmp/phase1-eval*`):
+**Note:** Offline evaluation (artifacts under `/tmp/phase1-signoff/`, `/tmp/phase1-tc-vs-tracker/`, and `/tmp/phase1-default-flip/`):
 
 - **Unity Controller-Immediate 10 fps** (2026-08-15): `position_mahalanobis` matched or slightly improved AssA/LocA vs Euclidean and reduced jitter after association config reached category trackers.
 - **Covariance shaping** (2026-08-16): isotropic `Q`, broken UKF `Sxy`, and IMM/CTRV gate inflation produced near-round χ² ellipses (~14 m at 1 s coast) and false “over-association” under dropped frames. Fixes above make `S_pred` elongate along velocity (unit-tested).
 - **Unity Controller-Immediate 1 fps** (2026-08-16, post-fix): Euclidean and Mahalanobis essentially tied (HOTA ~65.8, AssA ~67.4, IDF1 91.6, IDSW 0).
 - **Unity Tracker-Service 10 fps** (2026-08-16): essentially tied (HOTA 69.08 vs 69.02; AssA/LocA/IDF1 within ~0.1; IDSW 0; Mahalanobis lower jerk ratio).
-- **Unity Controller time-chunking 10 fps** (2026-08-16): mixed — Mahalanobis improves IDF1 (+15), MOTA (+25), AssA/LocA/jitter, but HOTA drops (−5) via DetA (more TP and more FP; tracks linger).
-- **Wildtrack Tracker-Service 2 fps** (2026-08-16): mild regression (HOTA −1.6, AssA −1.9, IDF1 −1.2, IDSW 157→166).
+- **Unity Controller time-chunking 10 fps** (2026-08-16): mixed — Mahalanobis improves IDF1 (+15), MOTA (+25), AssA/LocA/jitter, but HOTA drops (−5) via DetA (more TP and more FP; tracks linger). *Re-run after Fix 1+2 for default-flip gate.*
+- **Wildtrack Tracker-Service 2 fps** (2026-08-16): mild regression (HOTA −1.6, AssA −1.9, IDF1 −1.2, IDSW 157→166). *Re-run after shared robot_vision birth/geometry fixes for default-flip gate.*
 - **Controller-TC vs Tracker-Service (both Mahalanobis, Unity 10 fps, aligned gates)** (2026-08-16): gap was Controller-TC-specific. Same association config → Tracker published 3 live tracks; Controller-TC published **4 IDs every frame**, of which **2 were frozen** `FW190D` (σ≈0, never updated) ~1.3 m apart — two cameras’ disagreeing projections of the same static plane never fused at birth. Root cause: batched `MultipleObjectTracker::track` used `PositionMahalanobis` for **detection↔detection** cross-camera clustering; raw detections lack track `predictedMeasurementCov`, so the χ² gate was near-delta and refused to merge. **Fix 1:** detection↔detection clustering uses Euclidean meters (`max_radius_m`); track↔detection association still uses the configured distance type. After Fix 1: Controller-TC publishes **3 IDs**, but CLR still lagged Tracker because fused geometry used **last-camera wins** (~1.00 m from plane GT, mostly outside the 1 m TrackEval gate → FN/FP on GT id 2). **Fix 2:** average world geometry (x/y/z/size/yaw) across multi-camera matches at birth and track update. After Fix 2 (2026-08-16): plane at midpoint (~0.65 m from GT, 100% in-gate); CLR_FN **711→63**, CLR_FP **648→0**, MOTA **43→97**, HOTA **71→77**, IDF1 **71→99** (3 IDs). Persons were already near-parity; plane LocA-at-threshold drove the CLR gap.
 
-**Default flip:** keep `euclidean`. Tracker-service Unity is parity-OK, but Wildtrack regression remains. Controller-TC dual-track + last-camera geometry bugs are fixed; revisit default after Phase 2 measurement covariance and remaining Wildtrack review.
+**Default-flip re-signoff** (artifacts `/tmp/phase1-default-flip/`, 2026-08-16, Fix 1+2 in controller+tracker images):
+
+| Suite | HOTA Δ | AssA Δ | LocA Δ | IDSW Δ | Gate (HOTA/AssA/LocA) |
+|-------|--------|--------|--------|--------|------------------------|
+| Unity Controller-TC 10 fps | −0.03 | −0.04 | −0.01 | 0 | **PASS** (tied) |
+| Wildtrack Tracker-Service 2 fps | **+0.69** | **+0.92** | **+0.51** | +23 (164→187) | **PASS** primary; IDSW above +5% budget |
+
+Residual: Controller-TC `rms_jerk_ratio` +17% vs +10% budget (1.66→1.95); Wildtrack IDSW. Accepted for Phase 1 default flip; revisit with Phase 2 R.
+
+**Default flip (Phase 1):** production default is `position_mahalanobis` with `max_radius_m: 10`. `euclidean` remains supported rollback. Equal-weight multi-cam geometry averaging is an explicit stopgap until Phase 2 geometry-derived R.
 
 ---
 
@@ -348,8 +358,8 @@ gantt
     final evaluation + default flip      :p3c, after p3b, 5d
 ```
 
-1. **Phase 1** ships with flag default `euclidean`; ops opt in via config.
-2. **Phase 2** ships with flag default `position_mahalanobis`; combined opt in.
+1. **Phase 1** ships `position_mahalanobis` as the production default after gated eval sign-off; `euclidean` remains a supported rollback. Equal-weight multi-cam geometry fusion is an accepted stopgap until Phase 2 R.
+2. **Phase 2** adds geometry-derived R and `position_mahalanobis_combined` (opt-in); default stays `position_mahalanobis` until combined is signed off.
 3. **Phase 3** flips default to `position_mahalanobis_combined` after evaluation sign-off.
 
 ---

@@ -142,9 +142,9 @@ class CacheManager:
                                       self.tracker_config_data["suspended_track_timeout_secs"]]
         scene_data["persist_attributes"] = self.tracker_config_data.get("persist_attributes", {})
         scene_data["association_config"] = self.tracker_config_data.get("association", {
-          "method": "euclidean",
+          "method": "position_mahalanobis",
           "gate_probability": 0.99,
-          "max_radius_m": 2.0,
+          "max_radius_m": 10.0,
         })
       if self.reid_config_data:
         scene_data["reid_config_data"] = self.reid_config_data

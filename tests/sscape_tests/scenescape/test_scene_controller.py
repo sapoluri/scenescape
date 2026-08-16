@@ -39,7 +39,7 @@ class TestSceneControllerExtractTrackerConfigAssociation:
     scene_controller.extractTrackerConfigData(str(config_path))
 
     association = scene_controller.tracker_config_data['association']
-    assert association['method'] == 'euclidean'
+    assert association['method'] == 'position_mahalanobis'
     assert association['gate_probability'] == pytest.approx(0.95)
     assert association['max_radius_m'] == pytest.approx(7.0)
 

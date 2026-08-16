@@ -727,9 +727,9 @@ TEST(ConfigLoaderTest, TrackingEnvOverrides_EmptyTreatedAsUnset) {
 TEST(ConfigLoaderTest, AssociationDefaults) {
     TempFile config_file(MINIMAL_CONFIG());
     auto config = load_config(config_file.path(), get_schema_path());
-    EXPECT_EQ(config.tracking.association.method, AssociationMethod::Euclidean);
+    EXPECT_EQ(config.tracking.association.method, AssociationMethod::PositionMahalanobis);
     EXPECT_DOUBLE_EQ(config.tracking.association.gate_probability, 0.99);
-    EXPECT_DOUBLE_EQ(config.tracking.association.max_radius_m, 2.0);
+    EXPECT_DOUBLE_EQ(config.tracking.association.max_radius_m, 10.0);
 }
 
 TEST(ConfigLoaderTest, AssociationFromJsonAndEnv) {
