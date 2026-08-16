@@ -185,6 +185,9 @@ class IntelLabsTracking(Tracking):
     """Update association settings used by subsequent track()/match calls."""
     self.association_config = normalize_association_config(association_config)
     log.info("Association config updated: {}".format(self.association_config))
+    for tracker in getattr(self, 'trackers', {}).values():
+      if hasattr(tracker, 'applyAssociationConfig'):
+        tracker.applyAssociationConfig(self.association_config)
     return
 
   def check_valid_time_parameters(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static):

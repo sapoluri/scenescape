@@ -157,8 +157,6 @@ class TimeChunkedIntelLabsTracking(IntelLabsTracking):
   def applyAssociationConfig(self, association_config):
     """Update association on this manager and any already-created category trackers."""
     super().applyAssociationConfig(association_config)
-    for tracker in getattr(self, 'trackers', {}).values():
-      tracker.applyAssociationConfig(self.association_config)
     return
 
   def trackObjects(self, objects, already_tracked_objects, when, categories,

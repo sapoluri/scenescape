@@ -54,6 +54,7 @@ def test_association_match_params_mahalanobis_uses_chi2_gate():
 def test_apply_association_config_updates_tracker():
   tracker = IntelLabsTracking.__new__(IntelLabsTracking)
   tracker.association_config = normalize_association_config()
+  tracker.trackers = {}
   tracker.applyAssociationConfig({
     'method': 'position_mahalanobis',
     'gate_probability': 0.95,
@@ -61,6 +62,37 @@ def test_apply_association_config_updates_tracker():
   })
   assert tracker.association_config['method'] == 'position_mahalanobis'
   assert tracker.association_config['gate_probability'] == pytest.approx(0.95)
+
+
+def test_create_trackers_propagates_association_config(monkeypatch):
+  """Category workers created by Tracking._createTrackers inherit association."""
+  from controller.tracking import Tracking
+
+  parent = IntelLabsTracking.__new__(IntelLabsTracking)
+  parent.reid_config_data = {}
+  parent.association_config = normalize_association_config({
+    'method': 'position_mahalanobis',
+    'gate_probability': 0.99,
+    'max_radius_m': 10.0,
+  })
+  parent.trackers = {}
+  parent.uuid_manager = SimpleNamespace(scene_id='scene')
+
+  captured = {}
+
+  def fake_init(self, *args, **kwargs):
+    captured['kwargs'] = kwargs
+    self.uuid_manager = SimpleNamespace(scene_id=None)
+    self.queue = SimpleNamespace()
+
+  monkeypatch.setattr(IntelLabsTracking, '__init__', fake_init)
+  monkeypatch.setattr(IntelLabsTracking, 'start', lambda self: None)
+  # Ensure __class__ resolves to IntelLabsTracking for construction
+  parent.__class__ = IntelLabsTracking
+  Tracking._createTrackers(parent, ['person'], 1.0, 0.8, 1.6, 10)
+
+  assert captured['kwargs']['association_config']['method'] == 'position_mahalanobis'
+  assert 'person' in parent.trackers
 
 
 @pytest.mark.parametrize("yaw", [
