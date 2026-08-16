@@ -62,7 +62,9 @@ Add to `tracker-config.json` and controller tracker config:
 | Add `DistanceType::PositionMahalanobis` | `ObjectMatching.hpp/.cpp` | 2×2 block on (x,y); innovation = z_xy − ŷ_xy |
 | Chi-squared gate helper | `ObjectMatching.cpp` or `Utils.hpp` | `threshold = chi2_inv(gate_probability, df=2)` |
 | Keep `max_radius_m` as hard ceiling | `ObjectMatching.cpp` | Reject pair if Euclidean xy > max_radius_m regardless of Mahalanobis |
-| Unit tests | `TrackingTests.cpp`, `tracking_test.py` | Stationary vs fast mover: gate widens with Δt |
+| Velocity-aligned kinematic process noise | `MultiModelKalmanEstimator.cpp` | Δt-scaled along-track ≫ cross-track Q; no direct position Q |
+| UKF / IMM association covariance fixes | `UnscentedKalmanFilter.cpp`, `MultiModelKalmanEstimator.cpp` | Correct Sxy sigma points; fix IMM state apply; association uses top-model S; tighten yaw-rate init |
+| Unit tests | `TrackingTests.cpp`, `tracking_test.py` | Equal Euclidean distance: match prefers along-track detection |
 | Python binding | `tracking.cpp` | Expose new enum value |
 
 **Association cost:**
@@ -142,7 +144,13 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 - [x] CI unit coverage for association wiring (controller hydrate + tracker config + robot_vision match)
 - [x] ADR-0012 status → `Accepted` for Phase 1 scope
 
-**Note:** Offline evaluation on Unity Controller-Immediate (2026-08-15) confirmed `position_mahalanobis` matches or slightly improves association/localization vs Euclidean and reduces jitter. Keep default `euclidean` until broader datasets (Wildtrack / time-chunked / tracker-service) are signed off before any default flip.
+**Note:** Offline evaluation on Unity Controller-Immediate:
+
+- **10 fps** (2026-08-15): `position_mahalanobis` matched or slightly improved AssA/LocA vs Euclidean and reduced jitter after association config reached category trackers.
+- **Covariance shaping** (2026-08-16): isotropic `Q`, broken UKF `Sxy`, and IMM/CTRV gate inflation produced near-round χ² ellipses (~14 m at 1 s coast) and false “over-association” under dropped frames. Fixes above make `S_pred` elongate along velocity (unit-tested).
+- **1 fps / dropped frames** (2026-08-16, post-fix): Euclidean and Mahalanobis essentially tied (HOTA ~65.8, AssA ~67.4, IDF1 91.6, IDSW 0); Mahalanobis no longer regresses vs Euclidean.
+
+Keep default `euclidean` until broader datasets (Wildtrack / time-chunked / tracker-service) are signed off before any default flip.
 
 ---
 

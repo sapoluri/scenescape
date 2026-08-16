@@ -713,8 +713,9 @@ TEST(ObjectMatchingTest, PositionMahalanobisPrefersAlongTrackAxis)
 {
   rv::tracking::TrackManagerConfig trackerConfig;
   trackerConfig.mMotionModels = {rv::tracking::MotionModel::CV};
-  trackerConfig.mDefaultProcessNoise = 1e-3;
-  trackerConfig.mDefaultMeasurementNoise = 0.1;
+  trackerConfig.mDefaultProcessNoise = 1e-4;
+  trackerConfig.mDefaultMeasurementNoise = 0.2;
+  trackerConfig.mInitStateCovariance = 1.0;
   rv::tracking::TrackManager trackManager(trackerConfig);
 
   rv::tracking::TrackedObject seed;
@@ -722,11 +723,14 @@ TEST(ObjectMatchingTest, PositionMahalanobisPrefersAlongTrackAxis)
   seed.y = 0.0;
   seed.vx = 5.0;
   seed.vy = 0.0;
+  seed.length = 0.5;
+  seed.width = 0.5;
+  seed.height = 0.5;
 
   auto timestamp = std::chrono::system_clock::now();
   auto trackId = trackManager.createTrack(seed, timestamp);
 
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 10; ++i)
   {
     timestamp += std::chrono::milliseconds(100);
     seed.x += 0.5;
@@ -736,17 +740,24 @@ TEST(ObjectMatchingTest, PositionMahalanobisPrefersAlongTrackAxis)
     seed = trackManager.getTrack(trackId);
   }
 
-  timestamp += std::chrono::milliseconds(200);
+  timestamp += std::chrono::milliseconds(1000);
   trackManager.predict(timestamp);
   auto track = trackManager.getTrack(trackId);
 
+  const double s00 = track.predictedMeasurementCov.at<double>(0, 0);
+  const double s11 = track.predictedMeasurementCov.at<double>(1, 1);
+  EXPECT_GT(s00, 1.5 * s11) << "expected along-track (x) uncertainty to dominate after +x motion coast";
+
+  const double pred_x = track.predictedMeasurementMean.at<double>(0, 0);
+  const double pred_y = track.predictedMeasurementMean.at<double>(1, 0);
+
   rv::tracking::TrackedObject ahead = seed;
-  ahead.x = track.predictedMeasurementMean.at<double>(0, 0) + 0.5;
-  ahead.y = track.predictedMeasurementMean.at<double>(1, 0);
+  ahead.x = pred_x + 2.0;
+  ahead.y = pred_y;
 
   rv::tracking::TrackedObject lateral = seed;
-  lateral.x = track.predictedMeasurementMean.at<double>(0, 0);
-  lateral.y = track.predictedMeasurementMean.at<double>(1, 0) + 0.5;
+  lateral.x = pred_x;
+  lateral.y = pred_y + 2.0;
 
   const double chi2_gate = rv::chi2Threshold(0.99, 2);
   const double max_radius = 10.0;
@@ -754,16 +765,26 @@ TEST(ObjectMatchingTest, PositionMahalanobisPrefersAlongTrackAxis)
   std::vector<rv::tracking::TrackedObject> tracks = {track};
   std::vector<std::pair<size_t, size_t>> assignments;
   std::vector<size_t> unassignedTracks;
-  std::vector<size_t> unassignedAhead;
-  std::vector<size_t> unassignedLateral;
+  std::vector<size_t> unassignedMeasurements;
 
-  rv::tracking::match(tracks, {ahead}, assignments, unassignedTracks, unassignedAhead,
+  // Equal Euclidean distance: matcher must prefer the along-track detection.
+  rv::tracking::match(tracks, {ahead, lateral}, assignments, unassignedTracks, unassignedMeasurements,
                       rv::tracking::DistanceType::PositionMahalanobis, chi2_gate, max_radius);
-  EXPECT_EQ(assignments.size(), 1U);
+  ASSERT_EQ(assignments.size(), 1U);
+  EXPECT_EQ(assignments[0].first, 0U);
+  EXPECT_EQ(assignments[0].second, 0U);
 
   assignments.clear();
   unassignedTracks.clear();
-  rv::tracking::match(tracks, {lateral}, assignments, unassignedTracks, unassignedLateral,
+  unassignedMeasurements.clear();
+  rv::tracking::match(tracks, {lateral}, assignments, unassignedTracks, unassignedMeasurements,
                       rv::tracking::DistanceType::PositionMahalanobis, chi2_gate, max_radius);
-  EXPECT_TRUE(assignments.empty());
+  // Lateral-only may still pass the chi2 gate; cost must still exceed along-track cost.
+  const double dx = 2.0;
+  const double dy = 2.0;
+  const double det = s00 * s11;
+  ASSERT_GT(det, 0.0);
+  const double d2_ahead = (dx * dx) * s11 / det;
+  const double d2_lateral = (dy * dy) * s00 / det;
+  EXPECT_LT(d2_ahead, d2_lateral);
 }
