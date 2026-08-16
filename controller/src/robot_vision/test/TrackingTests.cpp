@@ -827,4 +827,54 @@ TEST(MultipleObjectTrackerTest, PositionMahalanobisFusesMultiCameraDetectionsInt
 
   auto tracks = objectTracker.getTracks();
   ASSERT_EQ(tracks.size(), 1U) << "cross-camera detections of one object must birth a single track";
+  EXPECT_NEAR(tracks[0].x, 0.5 * (cam0.x + cam1.x), 1e-6);
+  EXPECT_NEAR(tracks[0].y, 0.5 * (cam0.y + cam1.y), 1e-6);
+}
+
+TEST(MultipleObjectTrackerTest, MultiCameraTrackUpdateAveragesWorldPosition)
+{
+  // Continuing tracks must not keep last-camera geometry when both cameras match.
+  rv::tracking::TrackManagerConfig trackerConfig;
+  trackerConfig.mMotionModels = {rv::tracking::MotionModel::CV};
+  trackerConfig.mDefaultProcessNoise = 1e-4;
+  trackerConfig.mDefaultMeasurementNoise = 0.2;
+  trackerConfig.mInitStateCovariance = 1.0;
+  trackerConfig.mMaxUnreliableTime = 0.0;
+  trackerConfig.mMaxNumberOfUnreliableFrames = 0;
+
+  rv::tracking::MultipleObjectTracker objectTracker(trackerConfig, rv::tracking::DistanceType::Euclidean, 5.0);
+  objectTracker.updateTrackerParams(10);
+
+  rv::tracking::TrackedObject cam0;
+  cam0.x = 7.11;
+  cam0.y = 7.67;
+  cam0.width = cam0.length = cam0.height = 0.5;
+
+  rv::tracking::TrackedObject cam1 = cam0;
+  cam1.x = 7.91;
+  cam1.y = 6.69;
+
+  const double midX = 0.5 * (cam0.x + cam1.x);
+  const double midY = 0.5 * (cam0.y + cam1.y);
+  auto timestamp = std::chrono::system_clock::now();
+  objectTracker.track(std::vector<std::vector<rv::tracking::TrackedObject>>{{cam0}, {cam1}},
+                      timestamp,
+                      rv::tracking::DistanceType::Euclidean,
+                      5.0,
+                      0.5,
+                      10.0);
+
+  timestamp += std::chrono::milliseconds(100);
+  objectTracker.track(std::vector<std::vector<rv::tracking::TrackedObject>>{{cam0}, {cam1}},
+                      timestamp,
+                      rv::tracking::DistanceType::Euclidean,
+                      5.0,
+                      0.5,
+                      10.0);
+
+  auto tracks = objectTracker.getTracks();
+  ASSERT_EQ(tracks.size(), 1U);
+  // After a correct step the filter should sit near the averaged measurement, not last-camera.
+  EXPECT_NEAR(tracks[0].x, midX, 0.15);
+  EXPECT_NEAR(tracks[0].y, midY, 0.15);
 }

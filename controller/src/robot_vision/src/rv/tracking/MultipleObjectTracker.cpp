@@ -56,6 +56,54 @@ void clearMetadataAttributes(TrackedObject &object)
   }
 }
 
+/**
+ * @brief Average world geometry across multi-camera matches into measurement.
+ *
+ * Last-camera-wins for x/y biases static objects when cameras disagree on the
+ * ground-plane projection. Equal-weight averaging is the Phase-1 fix; per-detection
+ * R weighting belongs with Phase 2 measurement covariance.
+ */
+void fuseGeometry(const std::vector<std::pair<size_t, size_t>> &matches,
+                  const std::vector<std::vector<TrackedObject>> &objectsPerCamera,
+                  TrackedObject &measurement)
+{
+  if (matches.size() <= 1)
+  {
+    return;
+  }
+
+  double sumX = 0.0;
+  double sumY = 0.0;
+  double sumZ = 0.0;
+  double sumLength = 0.0;
+  double sumWidth = 0.0;
+  double sumHeight = 0.0;
+  double sumSinYaw = 0.0;
+  double sumCosYaw = 0.0;
+
+  for (const auto &[cameraIndex, objectIndex] : matches)
+  {
+    const auto &object = objectsPerCamera[cameraIndex][objectIndex];
+    sumX += object.x;
+    sumY += object.y;
+    sumZ += object.z;
+    sumLength += object.length;
+    sumWidth += object.width;
+    sumHeight += object.height;
+    sumSinYaw += std::sin(object.yaw);
+    sumCosYaw += std::cos(object.yaw);
+  }
+
+  const double n = static_cast<double>(matches.size());
+  measurement.x = sumX / n;
+  measurement.y = sumY / n;
+  measurement.z = sumZ / n;
+  measurement.length = sumLength / n;
+  measurement.width = sumWidth / n;
+  measurement.height = sumHeight / n;
+  measurement.yaw = std::atan2(sumSinYaw / n, sumCosYaw / n);
+}
+
 void fuseMetadata(const std::vector<std::pair<size_t, size_t>> &matches,
                   const std::vector<std::vector<TrackedObject>> &objectsPerCamera,
                   TrackedObject &measurement)
@@ -317,9 +365,11 @@ MultipleObjectTracker::matchAndAssignMeasurements(const std::vector<tracking::Tr
       continue;
     }
 
-    // Keep geometry/measurement from the latest matched camera for compatibility.
+    // Seed from the latest matched camera, then average geometry across all cameras
+    // that matched this track (metadata still uses confidence / camera-order policy).
     const auto &lastMatch = matches.back();
     auto fusedObject = objectsPerCamera[lastMatch.first][lastMatch.second];
+    fuseGeometry(matches, objectsPerCamera, fusedObject);
     fuseMetadata(matches, objectsPerCamera, fusedObject);
     mergeHistoricalMetadata(tracks[trackIdx], fusedObject);
 
@@ -430,9 +480,11 @@ void MultipleObjectTracker::track(std::vector<std::vector<tracking::TrackedObjec
 
     for (const auto &[newObjectIndex, cameraObjectIndex] : assignments)
     {
-      auto fusedObject = cameraObjects[cameraObjectIndex];
-      const std::vector<std::vector<TrackedObject>> candidates = {{newObjects[newObjectIndex]}, {fusedObject}};
+      auto fusedObject = newObjects[newObjectIndex];
+      const std::vector<std::vector<TrackedObject>> candidates
+        = {{newObjects[newObjectIndex]}, {cameraObjects[cameraObjectIndex]}};
       const std::vector<std::pair<size_t, size_t>> matches = {{0, 0}, {1, 0}};
+      fuseGeometry(matches, candidates, fusedObject);
       fuseMetadata(matches, candidates, fusedObject);
       newObjects[newObjectIndex] = std::move(fusedObject);
     }
