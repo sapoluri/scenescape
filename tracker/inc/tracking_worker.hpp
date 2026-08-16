@@ -109,6 +109,11 @@ public:
      */
     [[nodiscard]] int dropped_count() const { return dropped_count_.load(); }
 
+    /**
+     * @brief Association settings applied to RobotVision match()/track().
+     */
+    [[nodiscard]] const AssociationConfig& associationConfig() const { return association_config_; }
+
 private:
     /**
      * @brief Worker thread main loop.

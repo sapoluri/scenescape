@@ -139,12 +139,27 @@ class TimeChunkedIntelLabsTracking(IntelLabsTracking):
 
   EMPTY_FRAME_CAMERA_ID = "__empty_frame__"
 
-  def __init__(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, time_chunking_rate_fps, suspended_track_timeout_secs=DEFAULT_SUSPENDED_TRACK_TIMEOUT_SECS, reid_config_data=None):
+  def __init__(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, time_chunking_rate_fps, suspended_track_timeout_secs=DEFAULT_SUSPENDED_TRACK_TIMEOUT_SECS, reid_config_data=None, association_config=None):
     # Call parent constructor to initialize IntelLabsTracking
-    super().__init__(max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static, time_chunking_rate_fps, suspended_track_timeout_secs, reid_config_data)
+    super().__init__(
+      max_unreliable_time,
+      non_measurement_time_dynamic,
+      non_measurement_time_static,
+      time_chunking_rate_fps,
+      suspended_track_timeout_secs,
+      reid_config_data,
+      association_config=association_config,
+    )
     self.time_chunking_rate_fps = time_chunking_rate_fps
     self.suspended_track_timeout_secs = suspended_track_timeout_secs
     log.info(f"Initialized TimeChunkedIntelLabsTracking {self.__str__()} with chunking rate: {self.time_chunking_rate_fps} fps")
+
+  def applyAssociationConfig(self, association_config):
+    """Update association on this manager and any already-created category trackers."""
+    super().applyAssociationConfig(association_config)
+    for tracker in getattr(self, 'trackers', {}).values():
+      tracker.applyAssociationConfig(self.association_config)
+    return
 
   def trackObjects(self, objects, already_tracked_objects, when, categories,
                    ref_camera_frame_rate, max_unreliable_time,

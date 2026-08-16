@@ -20,19 +20,83 @@ from scene_common import log
 from scene_common.geometry import Point
 from scene_common.timestamp import get_epoch_time
 
+VALID_ASSOCIATION_METHODS = frozenset({"euclidean", "position_mahalanobis"})
+DEFAULT_ASSOCIATION_GATE_PROBABILITY = 0.99
+# Euclidean association distance (m). Also the hard ceiling when Mahalanobis is
+# enabled without an explicit larger max_radius_m — operators should raise it
+# (ADR-0012 suggests ~10 m) so the chi-squared gate can widen with uncertainty.
+DEFAULT_ASSOCIATION_MAX_RADIUS_M = DEFAULT_TRACKING_RADIUS
+RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M = 10.0
+
 DEFAULT_ASSOCIATION_CONFIG = {
   "method": "euclidean",
-  "gate_probability": 0.99,
-  "max_radius_m": DEFAULT_TRACKING_RADIUS,
+  "gate_probability": DEFAULT_ASSOCIATION_GATE_PROBABILITY,
+  "max_radius_m": DEFAULT_ASSOCIATION_MAX_RADIUS_M,
 }
+
+
+def normalize_association_config(association_config=None):
+  """Return a validated association config dict with defaults filled in."""
+  config = DEFAULT_ASSOCIATION_CONFIG.copy()
+  if association_config:
+    config.update(association_config)
+
+  method = config.get("method", "euclidean")
+  if method not in VALID_ASSOCIATION_METHODS:
+    log.error(
+      "Invalid association method %r (expected %s); using euclidean",
+      method,
+      ", ".join(sorted(VALID_ASSOCIATION_METHODS)),
+    )
+    method = "euclidean"
+  config["method"] = method
+
+  try:
+    gate_probability = float(config.get("gate_probability", DEFAULT_ASSOCIATION_GATE_PROBABILITY))
+  except (TypeError, ValueError):
+    log.error("Invalid association gate_probability %r; using %s",
+              config.get("gate_probability"), DEFAULT_ASSOCIATION_GATE_PROBABILITY)
+    gate_probability = DEFAULT_ASSOCIATION_GATE_PROBABILITY
+  if not 0.0 < gate_probability <= 1.0:
+    log.error(
+      "Association gate_probability %s out of range (0, 1]; using %s",
+      gate_probability,
+      DEFAULT_ASSOCIATION_GATE_PROBABILITY,
+    )
+    gate_probability = DEFAULT_ASSOCIATION_GATE_PROBABILITY
+  config["gate_probability"] = gate_probability
+
+  try:
+    max_radius_m = float(config.get("max_radius_m", DEFAULT_ASSOCIATION_MAX_RADIUS_M))
+  except (TypeError, ValueError):
+    log.error("Invalid association max_radius_m %r; using %s",
+              config.get("max_radius_m"), DEFAULT_ASSOCIATION_MAX_RADIUS_M)
+    max_radius_m = DEFAULT_ASSOCIATION_MAX_RADIUS_M
+  if max_radius_m < 0.0:
+    log.error("Association max_radius_m %s must be >= 0; using %s",
+              max_radius_m, DEFAULT_ASSOCIATION_MAX_RADIUS_M)
+    max_radius_m = DEFAULT_ASSOCIATION_MAX_RADIUS_M
+  config["max_radius_m"] = max_radius_m
+
+  if (method == "position_mahalanobis"
+      and max_radius_m <= DEFAULT_ASSOCIATION_MAX_RADIUS_M + 1e-6):
+    log.warning(
+      "association.method is position_mahalanobis with max_radius_m=%s; "
+      "ADR-0012 recommends raising max_radius_m (e.g. %s) so the chi-squared "
+      "gate can widen with predicted uncertainty",
+      max_radius_m,
+      RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M,
+    )
+
+  return config
 
 
 def association_match_params(association_config=None):
   """Map association config to robot_vision match() parameters."""
-  config = association_config or DEFAULT_ASSOCIATION_CONFIG
-  method = config.get("method", "euclidean")
-  gate_probability = config.get("gate_probability", 0.99)
-  max_radius_m = config.get("max_radius_m", DEFAULT_TRACKING_RADIUS)
+  config = normalize_association_config(association_config)
+  method = config["method"]
+  gate_probability = config["gate_probability"]
+  max_radius_m = config["max_radius_m"]
 
   if method == "position_mahalanobis":
     return (
@@ -85,7 +149,7 @@ class IntelLabsTracking(Tracking):
     """Initialize the tracker with tracker configuration parameters"""
     super().__init__(reid_config_data=reid_config_data)
     self.name = name if name is not None else "IntelLabsTracking"
-    self.association_config = association_config or DEFAULT_ASSOCIATION_CONFIG.copy()
+    self.association_config = normalize_association_config(association_config)
     # ref_camera_frame_rate is used to determine the frame-based param values
     self.ref_camera_frame_rate = effective_object_update_rate
     tracker_config = rv.tracking.TrackManagerConfig()
@@ -115,6 +179,12 @@ class IntelLabsTracking(Tracking):
     log.info("Tracker config: {}".format(tracker_config))
     log.info("Association config: {}".format(self.association_config))
     self.tracker.update_tracker_params(self.ref_camera_frame_rate)
+    return
+
+  def applyAssociationConfig(self, association_config):
+    """Update association settings used by subsequent track()/match calls."""
+    self.association_config = normalize_association_config(association_config)
+    log.info("Association config updated: {}".format(self.association_config))
     return
 
   def check_valid_time_parameters(self, max_unreliable_time, non_measurement_time_dynamic, non_measurement_time_static):

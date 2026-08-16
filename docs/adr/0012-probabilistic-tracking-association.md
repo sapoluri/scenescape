@@ -5,7 +5,7 @@
 
 - **Author(s)**: [Sarat Poluri](https://github.com/spoluri)
 - **Date**: 2026-06-06
-- **Status**: `Proposed`
+- **Status**: `Accepted` (Phase 1 scope)
 - **Related**: [ADR-0007](./0007-tracker-service.md), [ADR-0009](./0009-tracking-evaluation.md)
 
 ## TLDR
@@ -60,9 +60,9 @@ Adopt a phased migration to probabilistic association and measurement noise, doc
 ### Phase 1 — Track-side position Mahalanobis (quick win)
 
 - Add a **position-only** Mahalanobis distance type in `robot_vision` (2×2 block on x, y innovation; exclude size and yaw from the gate).
-- Replace meter `distance_threshold` with a **chi-squared gate** (`gate_probability`, default 0.99 → χ²(2) ≈ 9.21).
-- Switch tracker service and controller to the new distance type.
-- Keep an optional **`max_association_radius_m`** safety ceiling for badly calibrated covariances.
+- Replace meter `distance_threshold` with a **chi-squared gate** (`gate_probability`, default 0.99 → χ²(2) ≈ 9.21) when Mahalanobis is selected.
+- Wire tracker service and controller to select distance type via `association.method` (**default remains `euclidean`**; `position_mahalanobis` is opt-in).
+- Keep an optional **`max_radius_m`** safety ceiling for badly calibrated covariances (raise above 2 m when enabling Mahalanobis; ~10 m recommended).
 - **Do not expose** per-object `tracking_radius` for association; deprecate it for tracking (retain for UI/object metadata during transition).
 
 ### Phase 2 — Geometry-derived measurement covariance

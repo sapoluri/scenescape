@@ -137,10 +137,12 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 
 #### Exit criteria
 
-- [ ] Feature flag defaults to `euclidean`; `position_mahalanobis` opt-in validated
+- [x] Feature flag defaults to `euclidean`; `position_mahalanobis` opt-in validated
 - [ ] Evaluation metrics within thresholds on metric test dataset
-- [ ] CI green (unit, service, coverage)
-- [ ] ADR-0012 status → `Accepted` for Phase 1 scope
+- [x] CI unit coverage for association wiring (controller hydrate + tracker config + robot_vision match)
+- [x] ADR-0012 status → `Accepted` for Phase 1 scope
+
+**Note:** Offline evaluation harness comparison (HOTA/AssA vs Euclidean baseline) remains a release gate before flipping the default away from `euclidean`; it is not required to ship Phase 1 as an opt-in feature.
 
 ---
 

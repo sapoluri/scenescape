@@ -7,8 +7,60 @@ from types import SimpleNamespace
 import pytest
 
 from controller.ilabs_tracking import (IntelLabsTracking, _quaternion_to_yaw,
-                                       _yaw_to_quaternion)
+                                       _yaw_to_quaternion,
+                                       association_match_params,
+                                       normalize_association_config)
 from scene_common.geometry import Point
+
+import robot_vision as rv
+
+
+def test_normalize_association_config_defaults():
+  config = normalize_association_config()
+  assert config == {
+    'method': 'euclidean',
+    'gate_probability': 0.99,
+    'max_radius_m': 2.0,
+  }
+
+
+def test_normalize_association_config_rejects_unknown_method():
+  config = normalize_association_config({'method': 'not-a-real-method', 'max_radius_m': 5.0})
+  assert config['method'] == 'euclidean'
+  assert config['max_radius_m'] == pytest.approx(5.0)
+
+
+def test_association_match_params_euclidean_uses_max_radius_as_threshold():
+  distance_type, distance_threshold, max_radius_m = association_match_params({
+    'method': 'euclidean',
+    'max_radius_m': 3.5,
+  })
+  assert distance_type == rv.tracking.DistanceType.Euclidean
+  assert distance_threshold == pytest.approx(3.5)
+  assert max_radius_m == pytest.approx(3.5)
+
+
+def test_association_match_params_mahalanobis_uses_chi2_gate():
+  distance_type, distance_threshold, max_radius_m = association_match_params({
+    'method': 'position_mahalanobis',
+    'gate_probability': 0.99,
+    'max_radius_m': 10.0,
+  })
+  assert distance_type == rv.tracking.DistanceType.PositionMahalanobis
+  assert distance_threshold == pytest.approx(rv.tracking.chi2_threshold(0.99))
+  assert max_radius_m == pytest.approx(10.0)
+
+
+def test_apply_association_config_updates_tracker():
+  tracker = IntelLabsTracking.__new__(IntelLabsTracking)
+  tracker.association_config = normalize_association_config()
+  tracker.applyAssociationConfig({
+    'method': 'position_mahalanobis',
+    'gate_probability': 0.95,
+    'max_radius_m': 10.0,
+  })
+  assert tracker.association_config['method'] == 'position_mahalanobis'
+  assert tracker.association_config['gate_probability'] == pytest.approx(0.95)
 
 
 @pytest.mark.parametrize("yaw", [
