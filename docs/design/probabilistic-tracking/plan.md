@@ -153,7 +153,7 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 - **Unity Tracker-Service 10 fps** (2026-08-16): essentially tied (HOTA 69.08 vs 69.02; AssA/LocA/IDF1 within ~0.1; IDSW 0; Mahalanobis lower jerk ratio).
 - **Unity Controller time-chunking 10 fps** (2026-08-16): mixed — Mahalanobis improves IDF1 (+15), MOTA (+25), AssA/LocA/jitter, but HOTA drops (−5) via DetA (more TP and more FP; tracks linger). *Re-run after Fix 1+2 for default-flip gate.*
 - **Wildtrack Tracker-Service 2 fps** (2026-08-16): mild regression (HOTA −1.6, AssA −1.9, IDF1 −1.2, IDSW 157→166). *Re-run after shared robot_vision birth/geometry fixes for default-flip gate.*
-- **Controller-TC vs Tracker-Service (both Mahalanobis, Unity 10 fps, aligned gates)** (2026-08-16): gap was Controller-TC-specific. Same association config → Tracker published 3 live tracks; Controller-TC published **4 IDs every frame**, of which **2 were frozen** `FW190D` (σ≈0, never updated) ~1.3 m apart — two cameras’ disagreeing projections of the same static plane never fused at birth. Root cause: batched `MultipleObjectTracker::track` used `PositionMahalanobis` for **detection↔detection** cross-camera clustering; raw detections lack track `predictedMeasurementCov`, so the χ² gate was near-delta and refused to merge. **Fix 1:** detection↔detection clustering uses Euclidean meters (`max_radius_m`); track↔detection association still uses the configured distance type. After Fix 1: Controller-TC publishes **3 IDs**, but CLR still lagged Tracker because fused geometry used **last-camera wins** (~1.00 m from plane GT, mostly outside the 1 m TrackEval gate → FN/FP on GT id 2). **Fix 2:** average world geometry (x/y/z/size/yaw) across multi-camera matches at birth and track update. After Fix 2 (2026-08-16): plane at midpoint (~0.65 m from GT, 100% in-gate); CLR_FN **711→63**, CLR_FP **648→0**, MOTA **43→97**, HOTA **71→77**, IDF1 **71→99** (3 IDs). Persons were already near-parity; plane LocA-at-threshold drove the CLR gap.
+- **Controller-TC vs Tracker-Service (both Mahalanobis, Unity 10 fps, aligned gates)** (2026-08-16): gap was Controller-TC-specific. Same association config → Tracker published 3 live tracks; Controller-TC published **4 IDs every frame**, of which **2 were frozen** `FW190D` (σ≈0, never updated) ~1.3 m apart — two cameras’ disagreeing projections of the same static plane never fused at birth. Root cause: batched `MultipleObjectTracker::track` used `PositionMahalanobis` for **detection↔detection** cross-camera clustering; raw detections lack track `predictedMeasurementCov`, so the χ² gate was near-delta and refused to merge. **Fix 1:** detection↔detection clustering uses Euclidean meters at a fixed legacy **~2 m** birth radius (`kDefaultBirthClusterRadiusM`); track↔detection association still uses the configured distance type and `max_radius_m` ceiling. After Fix 1: Controller-TC publishes **3 IDs**, but CLR still lagged Tracker because fused geometry used **last-camera wins** (~1.00 m from plane GT, mostly outside the 1 m TrackEval gate → FN/FP on GT id 2). **Fix 2:** average world geometry (x/y/z/size/yaw) across multi-camera matches at birth and track update. After Fix 2 (2026-08-16): plane at midpoint (~0.65 m from GT, 100% in-gate); CLR_FN **711→63**, CLR_FP **648→0**, MOTA **43→97**, HOTA **71→77**, IDF1 **71→99** (3 IDs). Persons were already near-parity; plane LocA-at-threshold drove the CLR gap.
 
 **Default-flip re-signoff** (artifacts `/tmp/phase1-default-flip/`, 2026-08-16, Fix 1+2 in controller+tracker images):
 
@@ -164,7 +164,7 @@ Compare HOTA, AssA, LocA, IDF1, jitter vs baseline. Phase 1 passes if associatio
 
 Residual: Controller-TC `rms_jerk_ratio` +17% vs +10% budget (1.66→1.95); Wildtrack IDSW. Accepted for Phase 1 default flip; revisit with Phase 2 R.
 
-**Default flip (Phase 1):** production default is `position_mahalanobis` with `max_radius_m: 10`. `euclidean` remains supported rollback. Equal-weight multi-cam geometry averaging is an explicit stopgap until Phase 2 geometry-derived R.
+**Default flip (Phase 1):** production default is `position_mahalanobis` with `max_radius_m: 10`. Cross-camera birth clustering stays at a fixed ~2 m Euclidean radius (independent of that ceiling). `euclidean` remains supported rollback. Equal-weight multi-cam geometry averaging is an explicit stopgap until Phase 2 geometry-derived R.
 
 ---
 
@@ -296,6 +296,7 @@ Focus metrics:
 | Set measurement covariance on `TrackedObject` before `setMeasurement` | `tracking_worker.cpp`, `ilabs_tracking.py` |
 | Global `filter.process_noise`, `filter.base_measurement_noise` in config | schema, config loader |
 | Remove fixed hardcoded noise in `build_tracker_config` | `tracking_worker.cpp` |
+| (Later / Phase 3–4) Fuse classification/confidence across multi-cam matches instead of seed-camera wins | `MultipleObjectTracker::fuseMetadata` |
 
 ### 3.3 Object library cleanup
 

@@ -35,21 +35,31 @@ DEFAULT_ASSOCIATION_CONFIG = {
 }
 
 
+def _default_max_radius_for_method(method):
+  """Fallback max_radius_m when the configured value is missing or invalid."""
+  if method == "position_mahalanobis":
+    return RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M
+  return DEFAULT_ASSOCIATION_MAX_RADIUS_M
+
+
 def normalize_association_config(association_config=None):
-  """Return a validated association config dict with defaults filled in."""
+  """Return a validated association config dict with defaults filled in.
+
+  Raises:
+    ValueError: If ``method`` is present and not a supported association method.
+  """
   config = DEFAULT_ASSOCIATION_CONFIG.copy()
   if association_config:
     config.update(association_config)
 
   method = config.get("method", "position_mahalanobis")
   if method not in VALID_ASSOCIATION_METHODS:
-    log.error(
-      "Invalid association method %r (expected %s); using position_mahalanobis",
-      method,
-      ", ".join(sorted(VALID_ASSOCIATION_METHODS)),
+    raise ValueError(
+      "Invalid association method {!r} (expected {})".format(
+        method, ", ".join(sorted(VALID_ASSOCIATION_METHODS)))
     )
-    method = "position_mahalanobis"
   config["method"] = method
+  default_max_radius_m = _default_max_radius_for_method(method)
 
   try:
     gate_probability = float(config.get("gate_probability", DEFAULT_ASSOCIATION_GATE_PROBABILITY))
@@ -67,15 +77,15 @@ def normalize_association_config(association_config=None):
   config["gate_probability"] = gate_probability
 
   try:
-    max_radius_m = float(config.get("max_radius_m", DEFAULT_ASSOCIATION_MAX_RADIUS_M))
+    max_radius_m = float(config.get("max_radius_m", default_max_radius_m))
   except (TypeError, ValueError):
     log.error("Invalid association max_radius_m %r; using %s",
-              config.get("max_radius_m"), DEFAULT_ASSOCIATION_MAX_RADIUS_M)
-    max_radius_m = DEFAULT_ASSOCIATION_MAX_RADIUS_M
+              config.get("max_radius_m"), default_max_radius_m)
+    max_radius_m = default_max_radius_m
   if max_radius_m < 0.0:
     log.error("Association max_radius_m %s must be >= 0; using %s",
-              max_radius_m, DEFAULT_ASSOCIATION_MAX_RADIUS_M)
-    max_radius_m = DEFAULT_ASSOCIATION_MAX_RADIUS_M
+              max_radius_m, default_max_radius_m)
+    max_radius_m = default_max_radius_m
   config["max_radius_m"] = max_radius_m
 
   if (method == "position_mahalanobis"

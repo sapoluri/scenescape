@@ -12,7 +12,9 @@
 namespace tracker {
 
 constexpr double kDefaultAssociationGateProbability = 0.99;
+/// Legacy Euclidean association / birth-cluster meter gate (rollback).
 constexpr double kDefaultAssociationMaxRadiusM = 2.0;
+/// Default when association.max_radius_m is omitted (Mahalanobis ceiling).
 constexpr double kDefaultAssociationMaxRadiusCeilingM = 10.0;
 
 enum class AssociationMethod { Euclidean, PositionMahalanobis };

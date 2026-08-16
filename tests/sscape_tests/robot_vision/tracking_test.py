@@ -382,6 +382,10 @@ class TestMatchFunction(unittest.TestCase):
     Raw detections lack track predictedMeasurementCov; Mahalanobis on detection-
     detection matching would treat them as near-delta and fail to merge the same
     object seen ~1.3 m apart by two cameras (duplicate frozen tracks).
+
+    Birth clustering uses a fixed ~2 m Euclidean radius (legacy scale), not the
+    Mahalanobis max_radius_m ceiling, so a 10 m association ceiling does not
+    over-merge nearby people at birth.
     """
     tracker_config = tracking.TrackManagerConfig()
     tracker_config.motion_models = [tracking.MotionModel.CV]
@@ -416,21 +420,26 @@ class TestMatchFunction(unittest.TestCase):
     self.assertAlmostEqual(track.x, 0.5 * (cam0.x + cam1.x), places=5)
     self.assertAlmostEqual(track.y, 0.5 * (cam0.y + cam1.y), places=5)
 
-    # Boundary: farther than max_radius_m must still create two tracks.
+    # Beyond the fixed birth radius (~2 m) must not fuse even when max_radius_m
+    # is a wide Mahalanobis ceiling (10 m).
     tracker2 = tracking.MultipleObjectTracker(
       tracker_config, tracking.DistanceType.PositionMahalanobis, chi2_gate)
     tracker2.update_tracker_params(10)
-    far = create_object_at_location(x=7.11 + 12.0, y=7.67)
-    far.length = far.width = far.height = 0.5
+    beyond_birth = create_object_at_location(x=7.11 + 3.0, y=7.67)
+    beyond_birth.length = beyond_birth.width = beyond_birth.height = 0.5
     tracker2.track(
-      [[cam0], [far]],
+      [[cam0], [beyond_birth]],
       datetime.now(),
       tracking.DistanceType.PositionMahalanobis,
       chi2_gate,
       0.5,
       10.0,
     )
-    self.assertEqual(len(tracker2.get_tracks()), 2)
+    self.assertEqual(
+      len(tracker2.get_tracks()),
+      2,
+      'birth clustering must stay at ~2 m, not follow max_radius_m=10',
+    )
 
   def test_multi_camera_track_update_averages_world_position(self):
     """Track updates must average geometry across cameras, not last-camera wins."""

@@ -62,7 +62,7 @@ Adopt a phased migration to probabilistic association and measurement noise, doc
 - Add a **position-only** Mahalanobis distance type in `robot_vision` (2×2 block on x, y innovation; exclude size and yaw from the gate).
 - Replace meter `distance_threshold` with a **chi-squared gate** (`gate_probability`, default 0.99 → χ²(2) ≈ 9.21) when Mahalanobis is selected.
 - Wire tracker service and controller to select distance type via `association.method` (**Phase 1 production default becomes `position_mahalanobis` after gated eval sign-off**; `euclidean` remains supported rollback). Equal-weight multi-cam geometry averaging is an accepted stopgap until Phase 2 measurement R.
-- Keep an optional **`max_radius_m`** safety ceiling for badly calibrated covariances (raise above 2 m when enabling Mahalanobis; ~10 m recommended).
+- Keep an optional **`max_radius_m`** safety ceiling for badly calibrated covariances (raise above 2 m when enabling Mahalanobis; ~10 m recommended). Cross-camera **detection↔detection birth clustering** stays Euclidean at a fixed legacy **~2 m** radius and does not follow that ceiling.
 - **Do not expose** per-object `tracking_radius` for association; deprecate it for tracking (retain for UI/object metadata during transition).
 
 ### Phase 2 — Geometry-derived measurement covariance

@@ -324,7 +324,7 @@ ServiceConfig load_config(const std::filesystem::path& config_path,
             .GetDouble();
     config.tracking.association.max_radius_m =
         GetValueByPointerWithDefault(config_doc, json::TRACKING_ASSOCIATION_MAX_RADIUS_M,
-                                     kDefaultAssociationMaxRadiusM)
+                                     kDefaultAssociationMaxRadiusCeilingM)
             .GetDouble();
 
     // NTP configuration (optional; server empty/missing = use OS clock)

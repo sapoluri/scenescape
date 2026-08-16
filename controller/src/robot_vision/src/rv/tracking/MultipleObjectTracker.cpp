@@ -454,8 +454,10 @@ void MultipleObjectTracker::track(std::vector<std::vector<tracking::TrackedObjec
   // Detection-to-detection clustering must use Euclidean meters: raw detections
   // do not carry track predictedMeasurementCov, so PositionMahalanobis treats
   // them as near-delta covariances and fails to fuse the same object seen by
-  // two cameras (duplicate frozen tracks). Track-to-detection association above
-  // still uses distanceType / distanceThreshold.
+  // two cameras (duplicate frozen tracks). Use the legacy ~2 m birth radius —
+  // not maxRadiusM — so a Mahalanobis association ceiling (e.g. 10 m) does not
+  // over-merge nearby people at birth. Track-to-detection association above
+  // still uses distanceType / distanceThreshold / maxRadiusM.
   std::vector<tracking::TrackedObject> newObjects;
   size_t totalUnassignedObjects = 0;
   for (auto &cameraObjects : objectsPerCamera)
@@ -476,7 +478,7 @@ void MultipleObjectTracker::track(std::vector<std::vector<tracking::TrackedObjec
     std::vector<size_t> unassignedTracks;
     std::vector<size_t> unassignedObjects;
     match(newObjects, cameraObjects, assignments, unassignedTracks, unassignedObjects,
-          DistanceType::Euclidean, maxRadiusM, maxRadiusM);
+          DistanceType::Euclidean, kDefaultBirthClusterRadiusM, kDefaultBirthClusterRadiusM);
 
     for (const auto &[newObjectIndex, cameraObjectIndex] : assignments)
     {

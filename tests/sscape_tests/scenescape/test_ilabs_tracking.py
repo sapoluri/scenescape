@@ -25,9 +25,38 @@ def test_normalize_association_config_defaults():
 
 
 def test_normalize_association_config_rejects_unknown_method():
-  config = normalize_association_config({'method': 'not-a-real-method', 'max_radius_m': 5.0})
-  assert config['method'] == 'position_mahalanobis'
-  assert config['max_radius_m'] == pytest.approx(5.0)
+  with pytest.raises(ValueError, match='Invalid association method'):
+    normalize_association_config({'method': 'not-a-real-method', 'max_radius_m': 5.0})
+
+
+def test_normalize_association_config_invalid_max_radius_uses_method_default():
+  mahal = normalize_association_config({
+    'method': 'position_mahalanobis',
+    'max_radius_m': 'bad',
+  })
+  assert mahal['max_radius_m'] == pytest.approx(10.0)
+
+  euclid = normalize_association_config({
+    'method': 'euclidean',
+    'max_radius_m': -1.0,
+  })
+  assert euclid['max_radius_m'] == pytest.approx(2.0)
+
+
+def test_normalize_association_config_warns_on_tight_mahalanobis_ceiling(monkeypatch):
+  warnings = []
+
+  def capture_warning(*args):
+    warnings.append(args)
+
+  monkeypatch.setattr('controller.ilabs_tracking.log.warning', capture_warning)
+  config = normalize_association_config({
+    'method': 'position_mahalanobis',
+    'max_radius_m': 2.0,
+  })
+  assert config['max_radius_m'] == pytest.approx(2.0)
+  assert warnings
+  assert 'position_mahalanobis with max_radius_m' in warnings[0][0]
 
 
 def test_association_match_params_euclidean_uses_max_radius_as_threshold():
@@ -54,7 +83,13 @@ def test_association_match_params_mahalanobis_uses_chi2_gate():
 def test_apply_association_config_updates_tracker():
   tracker = IntelLabsTracking.__new__(IntelLabsTracking)
   tracker.association_config = normalize_association_config()
-  tracker.trackers = {}
+  child = IntelLabsTracking.__new__(IntelLabsTracking)
+  child.association_config = normalize_association_config({
+    'method': 'euclidean',
+    'max_radius_m': 2.0,
+  })
+  child.trackers = {}
+  tracker.trackers = {'person': child}
   tracker.applyAssociationConfig({
     'method': 'position_mahalanobis',
     'gate_probability': 0.95,
@@ -62,6 +97,9 @@ def test_apply_association_config_updates_tracker():
   })
   assert tracker.association_config['method'] == 'position_mahalanobis'
   assert tracker.association_config['gate_probability'] == pytest.approx(0.95)
+  assert child.association_config['method'] == 'position_mahalanobis'
+  assert child.association_config['gate_probability'] == pytest.approx(0.95)
+  assert child.association_config['max_radius_m'] == pytest.approx(10.0)
 
 
 def test_create_trackers_propagates_association_config(monkeypatch):
