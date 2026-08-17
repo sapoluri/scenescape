@@ -15,6 +15,17 @@
 
 This plan implements the three phases defined in ADR-0012. Each phase is independently shippable behind a feature flag, validated against the existing tracker evaluation pipeline before the next phase begins.
 
+### Problem ownership (what each phase is for)
+
+| Problem | Phase | Notes |
+| --- | --- | --- |
+| Association should adapt to **object motion / coast** (not a fixed meter disk) | **1** | `position_mahalanobis` on `S_pred` + χ²; `max_radius_m` = safety ceiling only |
+| **Cameras disagree** on world pose; LocA under multi-view projection bias | **2** | Geometry-derived **R_meas**; `S_pred + R`; not Phase 1 gating |
+| UKF **correct** still uses fixed R while association is probabilistic | **3** | Per-measurement R in the filter update |
+| Detector confidence / multi-cam class fusion in probabilistic pipeline | **3–4** (later) | See Phase 3 integration notes |
+
+Stopgaps until Phase 2: equal-weight multi-cam geometry average; Euclidean ~2 m birth clustering for detection↔detection (no track `S_pred` on raw detections).
+
 ### Success criteria (all phases)
 
 | Metric | Tool | Regression threshold (initial) |
@@ -53,7 +64,7 @@ Add to `tracker-config.json` and controller tracker config:
 
 ## Phase 1 — Track-side position Mahalanobis
 
-**Goal:** Use UKF predicted covariance for association; replace meter thresholds with chi-squared gating. No measurement covariance yet.
+**Goal:** Use UKF predicted covariance for association so gates scale with **motion and coast**; replace fixed meter thresholds with chi-squared gating. No measurement covariance yet. **Out of scope for Phase 1:** fixing multi-camera world-position disagreement (Phase 2 R).
 
 ### 1.1 robot_vision changes
 
@@ -170,7 +181,7 @@ Residual: Controller-TC `rms_jerk_ratio` +17% vs +10% budget (1.66→1.95); Wild
 
 ## Phase 2 — Geometry-derived measurement covariance
 
-**Goal:** Propagate bbox pixel uncertainty to world-space R_meas; use S_pred + R_meas for association.
+**Goal:** Propagate bbox pixel uncertainty to world-space R_meas; use S_pred + R_meas for association. This is the phase that addresses **multi-camera / viewpoint localization disagreement** and range-dependent measurement noise—not Phase 1 Mahalanobis alone.
 
 ### 2.1 Uncertainty model
 

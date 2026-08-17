@@ -12,6 +12,17 @@
 
 Replace Euclidean association gated by per-object `tracking_radius` with **covariance-aware Mahalanobis gating** in three phases: (1) track-side predicted uncertainty only, (2) geometry-derived per-detection measurement covariance from existing camera calibration, (3) per-measurement noise in the UKF update. Association gates become **chi-squared statistical thresholds** instead of user-defined meter radii.
 
+### Problem ownership by phase
+
+| Problem | Phase that addresses it | What we do *not* use for that problem |
+| --- | --- | --- |
+| Association ignores **motion / coast** (fixed meter disk too tight for movers, too loose for static) | **Phase 1** — `position_mahalanobis` on UKF `S_pred` + χ² gate; `max_radius_m` is only a safety ceiling for bad Σ | Widening the Euclidean disk to “absorb” multi-cam pose error |
+| **Cameras disagree** on world position (foot-point / viewpoint bias); last-camera or equal-weight fusion is a stopgap | **Phase 2** — geometry-derived measurement **R**; association uses `S_pred + R_meas` | TYPE_2 heuristics; treating Phase 1 Mahalanobis as a multi-cam localization fix |
+| Filter correct still uses fixed R while association uses better uncertainty | **Phase 3** — per-measurement R in UKF update | — |
+| Detector **confidence** / multi-cam class fusion unused in gating | **Later (Phase 3–4 scope)** — fold confidence into R / metadata fusion | Phase 1 association method |
+
+Cross-camera **detection↔detection birth clustering** remains a separate Euclidean ~2 m fuse (raw detections lack track `S_pred`). That is an implementation necessity for batched multi-cam ingest, not a substitute for Phase 2 R.
+
 ## Context
 
 SceneScape tracking uses the `robot_vision` library's `MultipleObjectTracker`, which performs predict → associate (Hungarian) → correct each frame. Today:
@@ -59,13 +70,19 @@ Adopt a phased migration to probabilistic association and measurement noise, doc
 
 ### Phase 1 — Track-side position Mahalanobis (quick win)
 
+**Addresses:** motion- and coast-aware data association (problem 1 in Context). **Does not address:** multi-camera world-position disagreement (Phase 2).
+
 - Add a **position-only** Mahalanobis distance type in `robot_vision` (2×2 block on x, y innovation; exclude size and yaw from the gate).
 - Replace meter `distance_threshold` with a **chi-squared gate** (`gate_probability`, default 0.99 → χ²(2) ≈ 9.21) when Mahalanobis is selected.
-- Wire tracker service and controller to select distance type via `association.method` (**Phase 1 production default becomes `position_mahalanobis` after gated eval sign-off**; `euclidean` remains supported rollback). Equal-weight multi-cam geometry averaging is an accepted stopgap until Phase 2 measurement R.
-- Keep an optional **`max_radius_m`** safety ceiling for badly calibrated covariances (raise above 2 m when enabling Mahalanobis; ~10 m recommended). Cross-camera **detection↔detection birth clustering** stays Euclidean at a fixed legacy **~2 m** radius and does not follow that ceiling.
+- Wire tracker service and controller to select distance type via `association.method` (**Phase 1 production default becomes `position_mahalanobis` after gated eval sign-off**; `euclidean` remains supported rollback).
+- Keep an optional **`max_radius_m`** safety ceiling so a mis-scaled covariance cannot associate arbitrarily far (raise above 2 m when enabling Mahalanobis; ~10 m recommended so the χ² gate is not clipped for long coast / fast motion). This ceiling is **not** a multi-cam localization tolerance.
+- Equal-weight multi-cam geometry averaging is an accepted **stopgap** for fused pose until Phase 2 measurement R.
+- Cross-camera **detection↔detection birth clustering** stays Euclidean at a fixed legacy **~2 m** radius (independent of `max_radius_m`).
 - **Do not expose** per-object `tracking_radius` for association; deprecate it for tracking (retain for UI/object metadata during transition).
 
 ### Phase 2 — Geometry-derived measurement covariance
+
+**Addresses:** viewpoint / calibration / range-dependent **measurement** uncertainty and the resulting multi-camera world-position disagreement (Context problem 4; multi-cam LocA). Builds on Phase 1 `S_pred` gating.
 
 - Extend `CoordinateTransformer` to compute **world-space position covariance** Σ_xy per detection using:
   - Pixel uncertainty from bbox height and detector confidence (calibrated heuristic).
@@ -74,8 +91,11 @@ Adopt a phased migration to probabilistic association and measurement noise, doc
 - Store Σ_xy on `Detection` / `TrackedObject`.
 - Association uses **combined innovation covariance**: S_assoc = S_pred[xy] + R_meas[xy].
 - Gate with chi-squared threshold (same global config as Phase 1).
+- Prefer this path over TYPE_2 / ad-hoc multi-cam pose heuristics for disagreement.
 
 ### Phase 3 — Full probabilistic filter update
+
+**Addresses:** inconsistency between association noise and UKF correction noise (Context: fixed R in correct). May also start folding detector confidence into R (Context problem 5); richer class/confidence fusion can continue in later work.
 
 - Extend `robot_vision` to accept **per-measurement R** in the UKF correct step (not only fixed R at track initialization).
 - Thread geometry-derived R through `TrackManager::setMeasurement` → `MultiModelKalmanEstimator::correct`.

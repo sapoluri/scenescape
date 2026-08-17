@@ -270,7 +270,7 @@ under `tracking.association` in the Tracker service `tracker.json`:
 | --- | --- | --- |
 | `method` | `position_mahalanobis` (UKF predicted covariance + χ² gate) or `euclidean` (legacy meter gate) | `position_mahalanobis` |
 | `gate_probability` | χ² gate probability for Mahalanobis (2 DOF). Ignored for Euclidean. | `0.99` |
-| `max_radius_m` | Euclidean: track↔detection association distance (m). Mahalanobis: hard Euclidean ceiling (m) so a bad covariance cannot associate arbitrarily far. Does **not** set cross-camera birth clustering radius (that stays at a fixed ~2 m legacy scale). | `10.0` |
+| `max_radius_m` | Euclidean: track↔detection association distance (m). Mahalanobis: hard Euclidean **safety ceiling** (m) so a bad track covariance cannot associate arbitrarily far (also keeps the χ² gate from being clipped under long coast). Does **not** set cross-camera birth clustering radius (fixed ~2 m). Does **not** model multi-camera pose disagreement—that is Phase 2 measurement R (see ADR-0012). | `10.0` |
 
 **Rollback to Euclidean:** set `"method": "euclidean"` and typically `"max_radius_m": 2.0`, then
 restart the Scene Controller or Tracker service.
