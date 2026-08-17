@@ -258,7 +258,7 @@
         },
         "association": {
           "type": "object",
-          "description": "Detection-to-track data association settings (ADR-0012).",
+          "description": "Detection-to-track data association settings (ADR-0017).",
           "properties": {
             "method": {
               "type": "string",

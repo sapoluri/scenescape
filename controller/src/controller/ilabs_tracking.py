@@ -24,7 +24,7 @@ VALID_ASSOCIATION_METHODS = frozenset({"euclidean", "position_mahalanobis"})
 DEFAULT_ASSOCIATION_GATE_PROBABILITY = 0.99
 # Euclidean association distance (m). Also the hard ceiling when Mahalanobis is
 # enabled without an explicit larger max_radius_m — operators should raise it
-# (ADR-0012 suggests ~10 m) so the chi-squared gate can widen with uncertainty.
+# (ADR-0017 suggests ~10 m) so the chi-squared gate can widen with uncertainty.
 DEFAULT_ASSOCIATION_MAX_RADIUS_M = DEFAULT_TRACKING_RADIUS
 RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M = 10.0
 
@@ -92,7 +92,7 @@ def normalize_association_config(association_config=None):
       and max_radius_m <= DEFAULT_ASSOCIATION_MAX_RADIUS_M + 1e-6):
     log.warning(
       "association.method is position_mahalanobis with max_radius_m=%s; "
-      "ADR-0012 recommends raising max_radius_m (e.g. %s) so the chi-squared "
+      "ADR-0017 recommends raising max_radius_m (e.g. %s) so the chi-squared "
       "gate can widen with predicted uncertainty",
       max_radius_m,
       RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M,

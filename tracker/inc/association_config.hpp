@@ -20,7 +20,7 @@ constexpr double kDefaultAssociationMaxRadiusCeilingM = 10.0;
 enum class AssociationMethod { Euclidean, PositionMahalanobis };
 
 /**
- * @brief Data association configuration (ADR-0012 Phase 1).
+ * @brief Data association configuration (ADR-0017 Phase 1).
  */
 struct AssociationConfig {
     AssociationMethod method = AssociationMethod::PositionMahalanobis;
