@@ -22,11 +22,11 @@ sudo apt-get install -y cmake build-essential libbenchmark-dev
 
 Harness flags (parsed before Google Benchmark flags):
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--people N[,N...]` | `50` | Object counts to sweep |
-| `--cameras N[,N...]` | `1,2` | Camera counts (detections split round-robin) |
-| `--association-config path.json` | unset | If omitted, uses default `track(objects, ts, score)` path. JSON: `method`, `gate_probability`, `max_radius_m` |
+| Flag                             | Default | Meaning                                                                                                       |
+| -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `--people N[,N...]`              | `50`    | Object counts to sweep                                                                                        |
+| `--cameras N[,N...]`             | `1,2`   | Camera counts (detections split round-robin)                                                                  |
+| `--association-config path.json` | unset   | If omitted, uses default `track(objects, ts, score)` path. JSON: `method`, `gate_probability`, `max_radius_m` |
 
 Example production association config: `configs/association_production.json`.
 

@@ -40,12 +40,12 @@ This document specifies how [ADR-0017](../adr/0017-probabilistic-tracking-associ
 
 ### Problem ownership by phase
 
-| Problem | Phase | Notes |
-| --- | --- | --- |
-| Association should adapt to **object motion / coast** (not a fixed meter disk) | **1** | `position_mahalanobis` on `S_pred` + χ²; `max_radius_m` = safety ceiling only |
-| **Cameras disagree** on world pose; LocA under multi-view projection bias | **2** | Geometry-derived **R_meas**; `S_pred + R`; not Phase 1 gating |
-| UKF **correct** still uses fixed R while association is probabilistic | **3** | Per-measurement R in the filter update |
-| Detector confidence / multi-cam class fusion in probabilistic pipeline | **3–4** (later) | Fold into R / metadata fusion |
+| Problem                                                                        | Phase           | Notes                                                                         |
+| ------------------------------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------- |
+| Association should adapt to **object motion / coast** (not a fixed meter disk) | **1**           | `position_mahalanobis` on `S_pred` + χ²; `max_radius_m` = safety ceiling only |
+| **Cameras disagree** on world pose; LocA under multi-view projection bias      | **2**           | Geometry-derived **R_meas**; `S_pred + R`; not Phase 1 gating                 |
+| UKF **correct** still uses fixed R while association is probabilistic          | **3**           | Per-measurement R in the filter update                                        |
+| Detector confidence / multi-cam class fusion in probabilistic pipeline         | **3–4** (later) | Fold into R / metadata fusion                                                 |
 
 ### Legacy association data flow
 
@@ -102,24 +102,24 @@ d² = (z_xy − ŷ_xy)ᵀ S_pred[0:2,0:2]⁻¹ (z_xy − ŷ_xy)
 valid if d² ≤ χ²(p, 2) and ||z_xy − ŷ_xy|| ≤ max_radius_m
 ```
 
-| Element | Design choice |
-| --- | --- |
-| Distance type | `DistanceType::PositionMahalanobis` — 2×2 on (x, y); exclude size and yaw |
-| Gate | `chi2_inv(gate_probability, df=2)`; default `gate_probability=0.99` → χ² ≈ 9.21 |
-| Safety ceiling | `max_radius_m` (production default **10**); rejects pairs regardless of Mahalanobis; **not** a multi-cam tolerance |
-| Process noise shaping | Velocity-aligned kinematic Q (Δt-scaled along-track ≫ cross-track); no direct position Q |
-| Association covariance | Top IMM model `S_pred`; correct UKF/IMM Sxy handling so coast ellipses elongate along velocity |
-| Birth clustering | Detection↔detection remains Euclidean at fixed **`kDefaultBirthClusterRadiusM` ≈ 2 m** (independent of `max_radius_m`) |
-| Multi-cam geometry | Equal-weight average of matched cameras' world geometry (stopgap until Phase 2 R) |
-| Config | `association.method`, `gate_probability`, `max_radius_m` on tracker + controller |
+| Element                | Design choice                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Distance type          | `DistanceType::PositionMahalanobis` — 2×2 on (x, y); exclude size and yaw                                              |
+| Gate                   | `chi2_inv(gate_probability, df=2)`; default `gate_probability=0.99` → χ² ≈ 9.21                                        |
+| Safety ceiling         | `max_radius_m` (production default **10**); rejects pairs regardless of Mahalanobis; **not** a multi-cam tolerance     |
+| Process noise shaping  | Velocity-aligned kinematic Q (Δt-scaled along-track ≫ cross-track); no direct position Q                               |
+| Association covariance | Top IMM model `S_pred`; correct UKF/IMM Sxy handling so coast ellipses elongate along velocity                         |
+| Birth clustering       | Detection↔detection remains Euclidean at fixed **`kDefaultBirthClusterRadiusM` ≈ 2 m** (independent of `max_radius_m`) |
+| Multi-cam geometry     | Equal-weight average of matched cameras' world geometry (stopgap until Phase 2 R)                                      |
+| Config                 | `association.method`, `gate_probability`, `max_radius_m` on tracker + controller                                       |
 
 **Methods:**
 
-| Method | Meaning |
-| --- | --- |
-| `euclidean` | Legacy meter gate (rollback) |
-| `position_mahalanobis` | Phase 1 — track-side `S_pred` (production default) |
-| `position_mahalanobis_combined` | Phase 2+ — `S_pred + R_meas` |
+| Method                          | Meaning                                            |
+| ------------------------------- | -------------------------------------------------- |
+| `euclidean`                     | Legacy meter gate (rollback)                       |
+| `position_mahalanobis`          | Phase 1 — track-side `S_pred` (production default) |
+| `position_mahalanobis_combined` | Phase 2+ — `S_pred + R_meas`                       |
 
 ### 5.3 Phase 2 — Geometry-derived measurement covariance
 
@@ -137,21 +137,21 @@ Optional: Σ_xy *= (1 / cos(θ))²   # θ = ray vs ground normal
 
 Calibrate **α** offline from evaluation datasets (grid search maximizing AssA subject to LocA ≥ baseline).
 
-| Element | Design choice |
-| --- | --- |
-| Owner | `CoordinateTransformer` populates `position_covariance_xy` on `Detection` |
-| Association | `DistanceType::PositionMahalanobisCombined`; `S_assoc = S_pred[xy] + R_meas[xy]` |
-| Fallback | Missing `R_meas` → Phase 1 behavior |
-| Config | `measurement_uncertainty.*` (pixel fraction, confidence scaling, min sigma, incidence scaling) |
+| Element     | Design choice                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| Owner       | `CoordinateTransformer` populates `position_covariance_xy` on `Detection`                      |
+| Association | `DistanceType::PositionMahalanobisCombined`; `S_assoc = S_pred[xy] + R_meas[xy]`               |
+| Fallback    | Missing `R_meas` → Phase 1 behavior                                                            |
+| Config      | `measurement_uncertainty.*` (pixel fraction, confidence scaling, min sigma, incidence scaling) |
 
 ### 5.4 Phase 3 — Per-measurement UKF update
 
-| Element | Design choice |
-| --- | --- |
-| API | `MultiModelKalmanEstimator::correct(measurement, R_optional)`; default R from `TrackManagerConfig` when omitted |
-| Integration | Set measurement covariance on `TrackedObject` before `setMeasurement` in tracker worker / controller |
-| Filter knobs | Global `filter.process_noise`, `filter.base_measurement_noise` in tracker config |
-| Later | Fuse classification/confidence across multi-cam matches; deprecate `tracking_radius` in manager API/docs |
+| Element      | Design choice                                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------------------- |
+| API          | `MultiModelKalmanEstimator::correct(measurement, R_optional)`; default R from `TrackManagerConfig` when omitted |
+| Integration  | Set measurement covariance on `TrackedObject` before `setMeasurement` in tracker worker / controller            |
+| Filter knobs | Global `filter.process_noise`, `filter.base_measurement_noise` in tracker config                                |
+| Later        | Fuse classification/confidence across multi-cam matches; deprecate `tracking_radius` in manager API/docs        |
 
 ### 5.5 Configuration model (target after Phase 3)
 
@@ -180,11 +180,11 @@ Phase 1 production default: `method: position_mahalanobis`, `max_radius_m: 10.0`
 ### 5.6 Chi-squared gate reference
 
 | gate_probability | χ² threshold (2 DOF) |
-| --- | --- |
-| 0.90 | 4.605 |
-| 0.95 | 5.991 |
-| 0.99 | 9.210 |
-| 0.999 | 13.816 |
+| ---------------- | -------------------- |
+| 0.90             | 4.605                |
+| 0.95             | 5.991                |
+| 0.99             | 9.210                |
+| 0.999            | 13.816               |
 
 Default recommendation: **0.99**.
 
@@ -197,13 +197,13 @@ See [ADR-0017 §Alternatives](../adr/0017-probabilistic-tracking-association.md#
 
 ## 7. Risks and Mitigations
 
-| Risk | Mitigation |
-| --- | --- |
-| Misspecified Σ_xy causes wrong merges | `max_radius_m` ceiling; offline α calibration; Phase 1 fallback |
-| Chi-squared gate opaque to operators | Document `gate_probability`; expose AssA/LocA in evaluation dashboards |
-| Controller / tracker divergence | Shared config schema; same `robot_vision`; cross-service evaluation |
-| Jacobian / covariance cost | Analytic J; foot-point only; load tests (`make test-load`) |
-| Confidence ≠ calibrated uncertainty | Monotonic scale via α; do not claim Bayesian calibration in user docs |
+| Risk                                  | Mitigation                                                             |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| Misspecified Σ_xy causes wrong merges | `max_radius_m` ceiling; offline α calibration; Phase 1 fallback        |
+| Chi-squared gate opaque to operators  | Document `gate_probability`; expose AssA/LocA in evaluation dashboards |
+| Controller / tracker divergence       | Shared config schema; same `robot_vision`; cross-service evaluation    |
+| Jacobian / covariance cost            | Analytic J; foot-point only; load tests (`make test-load`)             |
+| Confidence ≠ calibrated uncertainty   | Monotonic scale via α; do not claim Bayesian calibration in user docs  |
 
 ## 8. Rollout / Migration Plan
 
@@ -217,14 +217,14 @@ Detailed tasks, dates, and exit checkboxes: [implementation plan](../../.github/
 
 ### Success criteria (all phases)
 
-| Metric | Tool | Regression threshold (initial) |
-| --- | --- | --- |
-| HOTA | TrackEval | ≥ baseline − 2% |
-| AssA | TrackEval | ≥ baseline − 3% |
-| LocA | TrackEval | ≥ baseline − 2% |
-| ID switches | TrackEval | ≤ baseline + 5% |
-| RMS jerk / jitter | DiagnosticEvaluator | ≤ baseline + 10% |
-| Unit / service tests | `make test-unit`, `make test-service` | All pass |
+| Metric               | Tool                                  | Regression threshold (initial) |
+| -------------------- | ------------------------------------- | ------------------------------ |
+| HOTA                 | TrackEval                             | ≥ baseline − 2%                |
+| AssA                 | TrackEval                             | ≥ baseline − 3%                |
+| LocA                 | TrackEval                             | ≥ baseline − 2%                |
+| ID switches          | TrackEval                             | ≤ baseline + 5%                |
+| RMS jerk / jitter    | DiagnosticEvaluator                   | ≤ baseline + 10%               |
+| Unit / service tests | `make test-unit`, `make test-service` | All pass                       |
 
 Capture baseline metrics on `main` (Euclidean) before each phase merge. Prefer metric-test + Wildtrack (multi-cam) suites via the [evaluation pipeline](./tracker-evaluation-pipeline.md).
 
