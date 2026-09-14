@@ -810,6 +810,31 @@ TEST(ConfigLoaderTest, AssociationMahalanobisCostThresholdUsesChi2) {
     EXPECT_EQ(association.distanceType(), rv::tracking::DistanceType::PositionMahalanobis);
 }
 
+TEST(ConfigLoaderTest, AssociationGateProbabilityEnvOverride_OutOfRange) {
+    TempFile config_file(MINIMAL_CONFIG());
+
+    // std::stod throws std::out_of_range for extreme magnitudes; must map to runtime_error.
+    ScopedEnv env(tracker::env::ASSOCIATION_GATE_PROBABILITY, "1e99999");
+    EXPECT_THROW(load_config(config_file.path(), get_schema_path()), std::runtime_error);
+}
+
+TEST(ConfigLoaderTest, AssociationGateProbabilityEnvOverride_InvalidAndDomain) {
+    TempFile config_file(MINIMAL_CONFIG());
+
+    {
+        ScopedEnv env(tracker::env::ASSOCIATION_GATE_PROBABILITY, "not_a_number");
+        EXPECT_THROW(load_config(config_file.path(), get_schema_path()), std::runtime_error);
+    }
+    {
+        ScopedEnv env(tracker::env::ASSOCIATION_GATE_PROBABILITY, "0");
+        EXPECT_THROW(load_config(config_file.path(), get_schema_path()), std::runtime_error);
+    }
+    {
+        ScopedEnv env(tracker::env::ASSOCIATION_GATE_PROBABILITY, "1.5");
+        EXPECT_THROW(load_config(config_file.path(), get_schema_path()), std::runtime_error);
+    }
+}
+
 //
 // TLS config from JSON file tests (covers lines 193-210)
 //
