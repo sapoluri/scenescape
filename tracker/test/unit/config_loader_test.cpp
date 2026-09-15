@@ -744,7 +744,8 @@ TEST(ConfigLoaderTest, AssociationOmittedBlockUsesProductionDefaults) {
       },
       "scenes": {
         "source": "file",
-        "file_path": ")" + empty_scenes_path() + R"("
+        "file_path": ")" + empty_scenes_path() +
+                             R"("
       }
     })";
     TempFile config_file(json);
@@ -767,7 +768,8 @@ TEST(ConfigLoaderTest, AssociationInvalidMethodThrows) {
       },
       "scenes": {
         "source": "file",
-        "file_path": ")" + empty_scenes_path() + R"("
+        "file_path": ")" + empty_scenes_path() +
+                             R"("
       }
     })";
     TempFile config_file(json);
@@ -788,7 +790,8 @@ TEST(ConfigLoaderTest, AssociationFromJsonAndEnv) {
       },
       "scenes": {
         "source": "file",
-        "file_path": ")" + empty_scenes_path() + R"("
+        "file_path": ")" + empty_scenes_path() +
+                             R"("
       }
     })";
     TempFile config_file(json);

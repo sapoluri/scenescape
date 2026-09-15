@@ -210,10 +210,9 @@ CoordinateTransformer::transformDetections(std::span<const Detection> detections
             }
             const auto& foot = world[base];
             const auto& bbox = detections[i].bounding_box_px;
-            const double base_len =
-                std::sqrt((foot.x - cam_x) * (foot.x - cam_x) + (foot.y - cam_y) * (foot.y - cam_y));
-            const double base_angle_deg =
-                std::atan2(cam_z, base_len) * (180.0 / std::numbers::pi);
+            const double base_len = std::sqrt((foot.x - cam_x) * (foot.x - cam_x) +
+                                              (foot.y - cam_y) * (foot.y - cam_y));
+            const double base_angle_deg = std::atan2(cam_z, base_len) * (180.0 / std::numbers::pi);
             type2_indices.push_back(i);
             type2_feet.push_back(
                 {bbox.x + bbox.width / 2.0f,

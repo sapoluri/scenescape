@@ -6,8 +6,8 @@
 #include "logger.hpp"
 #include "tracking_worker.hpp"
 
-#include <rv/Utils.hpp>
 #include <rv/tracking/ObjectMatching.hpp>
+#include <rv/Utils.hpp>
 
 #include <chrono>
 #include <condition_variable>

@@ -46,8 +46,7 @@ public:
      */
     TimeChunkScheduler(TimeChunkBuffer& buffer, const SceneRegistry& registry,
                        const TrackingConfig& config, PublishCallback publish_callback,
-                       ClockFn clock_fn = makeSystemClock(),
-                       ObjectClassMap object_classes = {});
+                       ClockFn clock_fn = makeSystemClock(), ObjectClassMap object_classes = {});
 
     /// Destructor stops scheduler and all workers
     ~TimeChunkScheduler();

@@ -43,9 +43,10 @@ private:
 // ---------------------------------------------------------------------------
 // Helper: create a mock client factory returning a pre-configured mock
 // ---------------------------------------------------------------------------
-ManagerClientFactory make_mock_factory(const std::string& scenes_response,
-                                       const std::string& assets_response =
-                                           R"({"count":0,"next":null,"previous":null,"results":[]})") {
+ManagerClientFactory
+make_mock_factory(const std::string& scenes_response,
+                  const std::string& assets_response =
+                      R"({"count":0,"next":null,"previous":null,"results":[]})") {
     return [scenes_response,
             assets_response](const ManagerConfig&) -> std::unique_ptr<IManagerRestClient> {
         auto mock = std::make_unique<test::MockManagerRestClient>();

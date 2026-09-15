@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <rv/Utils.hpp>
 #include <rv/tracking/ObjectMatching.hpp>
+#include <rv/Utils.hpp>
 
 #include <stdexcept>
 #include <string>
@@ -17,7 +17,10 @@ constexpr double kDefaultAssociationMaxRadiusM = 2.0;
 /// Default when association.max_radius_m is omitted (Mahalanobis ceiling).
 constexpr double kDefaultAssociationMaxRadiusCeilingM = 10.0;
 
-enum class AssociationMethod { Euclidean, PositionMahalanobis };
+enum class AssociationMethod {
+    Euclidean,
+    PositionMahalanobis
+};
 
 /**
  * @brief Data association configuration (ADR-0017 Phase 1).
@@ -28,17 +31,15 @@ struct AssociationConfig {
     /// Euclidean: association distance threshold (m). Mahalanobis: hard ceiling (m).
     double max_radius_m = kDefaultAssociationMaxRadiusCeilingM;
 
-    [[nodiscard]] double chi2Threshold() const {
-        return rv::chi2Threshold(gate_probability, 2);
-    }
+    [[nodiscard]] double chi2Threshold() const { return rv::chi2Threshold(gate_probability, 2); }
 
     [[nodiscard]] rv::tracking::DistanceType distanceType() const {
         switch (method) {
-        case AssociationMethod::PositionMahalanobis:
-            return rv::tracking::DistanceType::PositionMahalanobis;
-        case AssociationMethod::Euclidean:
-        default:
-            return rv::tracking::DistanceType::Euclidean;
+            case AssociationMethod::PositionMahalanobis:
+                return rv::tracking::DistanceType::PositionMahalanobis;
+            case AssociationMethod::Euclidean:
+            default:
+                return rv::tracking::DistanceType::Euclidean;
         }
     }
 

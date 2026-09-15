@@ -421,7 +421,8 @@ ServiceConfig load_config(const std::filesystem::path& config_path,
     if (auto val = get_env(tracker::env::ASSOCIATION_METHOD); val.has_value()) {
         config.tracking.association.method = parseAssociationMethod(val.value());
     }
-    apply_env(config.tracking.association.gate_probability, tracker::env::ASSOCIATION_GATE_PROBABILITY,
+    apply_env(config.tracking.association.gate_probability,
+              tracker::env::ASSOCIATION_GATE_PROBABILITY,
               [](const std::string& v, const std::string& s) {
                   try {
                       double probability = std::stod(v);
