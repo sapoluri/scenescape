@@ -520,10 +520,10 @@ TEST(CoordinateTransformerTest, Type2ShiftTypeIsStored) {
     extrinsics.rotation = {-45.0, 0.0, 0.0};
     extrinsics.scale = {1.0, 1.0, 1.0};
 
-    CoordinateTransformer type1(intrinsics, extrinsics, CoordinateTransformer::kShiftType1);
-    CoordinateTransformer type2(intrinsics, extrinsics, CoordinateTransformer::kShiftType2);
-    EXPECT_EQ(type1.shiftType(), CoordinateTransformer::kShiftType1);
-    EXPECT_EQ(type2.shiftType(), CoordinateTransformer::kShiftType2);
+    CoordinateTransformer type1(intrinsics, extrinsics, ObjectClassConfig::kShiftType1);
+    CoordinateTransformer type2(intrinsics, extrinsics, ObjectClassConfig::kShiftType2);
+    EXPECT_EQ(type1.shiftType(), ObjectClassConfig::kShiftType1);
+    EXPECT_EQ(type2.shiftType(), ObjectClassConfig::kShiftType2);
 }
 
 TEST(CoordinateTransformerTest, FixedFootprintHalfOverridesProjectedWidthOffset) {
@@ -538,7 +538,7 @@ TEST(CoordinateTransformerTest, FixedFootprintHalfOverridesProjectedWidthOffset)
     extrinsics.scale = {1.0, 1.0, 1.0};
 
     CoordinateTransformer projected(intrinsics, extrinsics);
-    CoordinateTransformer fixed(intrinsics, extrinsics, CoordinateTransformer::kShiftType1, 0.25);
+    CoordinateTransformer fixed(intrinsics, extrinsics, ObjectClassConfig::kShiftType1, 0.25);
 
     std::vector<Detection> detections = {make_detection(280.0f, 100.0f, 80.0f, 200.0f)};
     auto r_proj = projected.transformDetections(detections);

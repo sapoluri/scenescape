@@ -13,6 +13,7 @@
 #include <opencv2/core.hpp>
 #include <rv/tracking/TrackedObject.hpp>
 
+#include "object_class.hpp"
 #include "scene_loader.hpp"
 #include "tracking_types.hpp"
 
@@ -39,8 +40,9 @@ namespace tracker {
  * 5. Assemble TrackedObjects: position from foot, size from corners
  *
  * Projection modes (shift_type), matching Controller MovingObject.camLoc:
- * - TYPE_1 (1, default): bottom-center of the bbox
- * - TYPE_2 (2): shift foot upward by (height/2)*(baseAngle/90) before projecting
+ * - ObjectClassConfig::kShiftType1 (default): bottom-center of the bbox
+ * - ObjectClassConfig::kShiftType2: shift foot upward by (height/2)*(baseAngle/90)
+ *   before projecting
  *
  * Euler angle convention:
  * - XYZ INTRINSIC rotation order, angles in DEGREES
@@ -49,21 +51,19 @@ namespace tracker {
  */
 class CoordinateTransformer {
 public:
-    static constexpr int kShiftType1 = 1;
-    static constexpr int kShiftType2 = 2;
-
     /**
      * @brief Construct transformer with camera calibration data.
      *
      * @param intrinsics Camera intrinsic parameters (fx, fy, cx, cy, distortion)
      * @param extrinsics Camera extrinsic parameters (translation, rotation, scale)
-     * @param shift_type Projection mode: 1 = TYPE_1 (default), 2 = TYPE_2
+     * @param shift_type Projection mode: ObjectClassConfig::kShiftType1 (default) or
+     *        ObjectClassConfig::kShiftType2
      * @param footprint_half_m Optional camloc size offset (metres). When set,
      *        uses this instead of half the projected bbox width — matching
      *        Controller MovingObject.mapObjectDetectionToWorld asset sizes.
      */
     CoordinateTransformer(const CameraIntrinsics& intrinsics, const CameraExtrinsics& extrinsics,
-                          int shift_type = kShiftType1,
+                          int shift_type = ObjectClassConfig::kShiftType1,
                           std::optional<double> footprint_half_m = std::nullopt);
 
     /**
