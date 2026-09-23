@@ -48,9 +48,9 @@
     "non_measurement_time_dynamic_s": 0.8,
     "non_measurement_time_static_s": 1.6,
     "association": {
-      "method": "euclidean",
+      "method": "position_mahalanobis",
       "gate_probability": 0.99,
-      "max_radius_m": 2.0
+      "max_radius_m": 10.0
     }
   },
   "scenes": {
