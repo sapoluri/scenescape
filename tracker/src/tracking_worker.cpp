@@ -295,6 +295,8 @@ TrackingWorker::convert_tracks(std::vector<rv::tracking::TrackedObject>&& rv_tra
             }
         }
 
+        track.association_window = buildAssociationWindow(association_config_, rv_track);
+
         tracks.push_back(std::move(track));
     }
 

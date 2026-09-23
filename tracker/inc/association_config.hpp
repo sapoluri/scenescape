@@ -62,4 +62,14 @@ inline AssociationMethod parseAssociationMethod(const std::string& method) {
                              " (expected 'euclidean' or 'position_mahalanobis')");
 }
 
+inline std::string associationMethodToString(AssociationMethod method) {
+    switch (method) {
+        case AssociationMethod::Euclidean:
+            return "euclidean";
+        case AssociationMethod::PositionMahalanobis:
+        default:
+            return "position_mahalanobis";
+    }
+}
+
 } // namespace tracker

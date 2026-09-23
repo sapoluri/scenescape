@@ -4,11 +4,13 @@
 import math
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from controller.ilabs_tracking import (IntelLabsTracking, _quaternion_to_yaw,
                                        _yaw_to_quaternion,
                                        association_match_params,
+                                       build_association_window,
                                        normalize_association_config)
 from scene_common.geometry import Point
 
@@ -199,6 +201,7 @@ def _make_tracked_object(uuid_value, yaw=0.0):
     vx=0.1, vy=0.2,
     yaw=yaw,
     id=42,
+    measurement_covariance=np.eye(7) * 0.25,
   )
 
 
@@ -210,7 +213,35 @@ def _make_sscape_object(uuid_value, has_detection_rotation, rotation=None):
     rotation=rotation if rotation is not None else [0.0, 0.0, 0.0, 1.0],
     velocity=None,
     setGID=lambda gid: None,
+    metadata={},
   )
+
+
+def test_build_association_window_euclidean_is_circle():
+  window = build_association_window({
+    'method': 'euclidean',
+    'max_radius_m': 2.5,
+  })
+  assert window == {
+    'method': 'euclidean',
+    'shape': 'circle',
+    'radius_m': 2.5,
+  }
+
+
+def test_build_association_window_mahalanobis_is_ellipse():
+  # Diagonal covariance → axis-aligned ellipse; χ²(0.99,2) ≈ 9.21
+  cov = np.diag([1.0, 0.25, 1.0, 1.0, 1.0, 1.0, 1.0])
+  window = build_association_window({
+    'method': 'position_mahalanobis',
+    'gate_probability': 0.99,
+    'max_radius_m': 10.0,
+  }, cov)
+  assert window['method'] == 'position_mahalanobis'
+  assert window['shape'] == 'ellipse'
+  assert window['semi_major_m'] == pytest.approx(math.sqrt(9.21034037198 * 1.0), rel=1e-4)
+  assert window['semi_minor_m'] == pytest.approx(math.sqrt(9.21034037198 * 0.25), rel=1e-4)
+  assert window['angle_rad'] == pytest.approx(0.0, abs=1e-6)
 
 
 def test_from_tracked_object_overwrites_rotation_when_detection_rotation_present():
@@ -221,10 +252,13 @@ def test_from_tracked_object_overwrites_rotation_when_detection_rotation_present
   tracker = IntelLabsTracking.__new__(IntelLabsTracking)
   tracker.all_tracker_objects = []
   tracker.uuid_manager = SimpleNamespace(assignID=lambda obj: None)
+  tracker.association_config = normalize_association_config({'method': 'euclidean', 'max_radius_m': 2.0})
 
   result = tracker.from_tracked_object(tracked_object, [sscape_object])
 
   assert result.rotation == pytest.approx(_yaw_to_quaternion(yaw))
+  assert result.association_window['shape'] == 'circle'
+  assert result.association_window['radius_m'] == pytest.approx(2.0)
 
 
 def test_from_tracked_object_does_not_overwrite_rotation_for_velocity_inferred_rotation():
@@ -236,7 +270,9 @@ def test_from_tracked_object_does_not_overwrite_rotation_for_velocity_inferred_r
   tracker = IntelLabsTracking.__new__(IntelLabsTracking)
   tracker.all_tracker_objects = []
   tracker.uuid_manager = SimpleNamespace(assignID=lambda obj: None)
+  tracker.association_config = normalize_association_config()
 
   result = tracker.from_tracked_object(tracked_object, [sscape_object])
 
   assert result.rotation == original_rotation
+  assert result.association_window['shape'] == 'ellipse'

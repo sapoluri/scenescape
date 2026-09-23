@@ -122,6 +122,66 @@ def association_match_params(association_config=None):
   )
 
 
+def build_association_window(association_config, measurement_covariance=None):
+  """Build MQTT ``association_window`` geometry for UI visualization.
+
+  Euclidean association is a circle of radius ``max_radius_m``. Position
+  Mahalanobis is the χ² ellipse of the 2×2 XY block of ``S_pred``.
+  """
+  config = normalize_association_config(association_config)
+  method = config["method"]
+  max_radius_m = float(config["max_radius_m"])
+
+  if method == "euclidean":
+    return {
+      "method": method,
+      "shape": "circle",
+      "radius_m": max_radius_m,
+    }
+
+  chi2 = float(rv.tracking.chi2_threshold(config["gate_probability"]))
+  if measurement_covariance is None:
+    return {
+      "method": method,
+      "shape": "circle",
+      "radius_m": max_radius_m,
+    }
+
+  cov = np.asarray(measurement_covariance, dtype=float)
+  if cov.ndim != 2 or cov.shape[0] < 2 or cov.shape[1] < 2:
+    return {
+      "method": method,
+      "shape": "circle",
+      "radius_m": max_radius_m,
+    }
+
+  s_xy = 0.5 * (cov[:2, :2] + cov[:2, :2].T)
+  try:
+    eigenvalues, eigenvectors = np.linalg.eigh(s_xy)
+  except np.linalg.LinAlgError:
+    return {
+      "method": method,
+      "shape": "circle",
+      "radius_m": max_radius_m,
+    }
+
+  # eigh returns ascending eigenvalues; major axis uses the larger one.
+  major_idx = 1 if eigenvalues[1] >= eigenvalues[0] else 0
+  minor_idx = 1 - major_idx
+  lambda_major = max(float(eigenvalues[major_idx]), 0.0)
+  lambda_minor = max(float(eigenvalues[minor_idx]), 0.0)
+  axis = eigenvectors[:, major_idx]
+  angle_rad = float(math.atan2(axis[1], axis[0]))
+
+  return {
+    "method": method,
+    "shape": "ellipse",
+    "semi_major_m": math.sqrt(chi2 * lambda_major),
+    "semi_minor_m": math.sqrt(chi2 * lambda_minor),
+    "angle_rad": angle_rad,
+  }
+
+
 def _quaternion_to_yaw(rotation):
   """Return Z-axis yaw in radians from an ``[x, y, z, w]`` quaternion.
 
@@ -307,6 +367,10 @@ class IntelLabsTracking(Tracking):
     if not sscape_object:
       for obj in self.all_tracker_objects:
         if object_uuid == obj.uuid:
+          obj.association_window = build_association_window(
+            self.association_config,
+            getattr(tracked_object, "measurement_covariance", None),
+          )
           return obj
 
     sscape_object.metadata = self.metadata_from_attributes(tracked_object.attributes)
@@ -335,6 +399,11 @@ class IntelLabsTracking(Tracking):
       sscape_object.setGID(object_uuid)
 
     self.uuid_manager.assignID(sscape_object)
+
+    sscape_object.association_window = build_association_window(
+      self.association_config,
+      getattr(tracked_object, "measurement_covariance", None),
+    )
 
     return sscape_object
 
