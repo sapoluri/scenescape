@@ -15,6 +15,7 @@ from controller.external_source import ExternalSourcePoseCache, IdentityClaimReg
 from controller.ilabs_tracking import normalize_association_config
 from controller.scene import Scene
 from scene_common import log
+from scene_common.association import DEFAULT_ASSOCIATION_CONFIG
 from scene_common.geometry import Point, Region, Tripwire
 from scene_common.mqtt import PubSub
 from scene_common.schema import SchemaValidation
@@ -167,9 +168,8 @@ class SceneController:
 
       association = tracker_config.get("association", {})
       association_input = {
-        "method": association.get("method", "position_mahalanobis"),
-        "gate_probability": association.get("gate_probability", 0.99),
-        "max_radius_m": association.get("max_radius_m", 10.0),
+        **DEFAULT_ASSOCIATION_CONFIG,
+        **association,
       }
       try:
         self.tracker_config_data["association"] = normalize_association_config(

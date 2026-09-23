@@ -17,29 +17,28 @@ from controller.tracking import (MAX_UNRELIABLE_TIME,
                                  DEFAULT_SUSPENDED_TRACK_TIMEOUT_SECS,
                                  Tracking)
 from scene_common import log
+from scene_common.association import (
+  ASSOCIATION_METHOD_EUCLIDEAN,
+  ASSOCIATION_METHOD_POSITION_MAHALANOBIS,
+  DEFAULT_ASSOCIATION_CONFIG,
+  DEFAULT_ASSOCIATION_EUCLIDEAN_MAX_RADIUS_M,
+  DEFAULT_ASSOCIATION_GATE_PROBABILITY,
+  DEFAULT_ASSOCIATION_MAHALANOBIS_MAX_RADIUS_M,
+  VALID_ASSOCIATION_METHODS,
+)
 from scene_common.geometry import Point
 from scene_common.timestamp import get_epoch_time
 
-VALID_ASSOCIATION_METHODS = frozenset({"euclidean", "position_mahalanobis"})
-DEFAULT_ASSOCIATION_GATE_PROBABILITY = 0.99
-# Euclidean association distance (m). Also the hard ceiling when Mahalanobis is
-# enabled without an explicit larger max_radius_m — operators should raise it
-# (ADR-0017 suggests ~10 m) so the chi-squared gate can widen with uncertainty.
-DEFAULT_ASSOCIATION_MAX_RADIUS_M = DEFAULT_TRACKING_RADIUS
-RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M = 10.0
-
-DEFAULT_ASSOCIATION_CONFIG = {
-  "method": "position_mahalanobis",
-  "gate_probability": DEFAULT_ASSOCIATION_GATE_PROBABILITY,
-  "max_radius_m": RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M,
-}
+# Backward-compatible aliases (historical names used by tests/callers).
+DEFAULT_ASSOCIATION_MAX_RADIUS_M = DEFAULT_ASSOCIATION_EUCLIDEAN_MAX_RADIUS_M
+RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M = DEFAULT_ASSOCIATION_MAHALANOBIS_MAX_RADIUS_M
 
 
 def _default_max_radius_for_method(method):
   """Fallback max_radius_m when the configured value is missing or invalid."""
-  if method == "position_mahalanobis":
-    return RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M
-  return DEFAULT_ASSOCIATION_MAX_RADIUS_M
+  if method == ASSOCIATION_METHOD_POSITION_MAHALANOBIS:
+    return DEFAULT_ASSOCIATION_MAHALANOBIS_MAX_RADIUS_M
+  return DEFAULT_ASSOCIATION_EUCLIDEAN_MAX_RADIUS_M
 
 
 def normalize_association_config(association_config=None):
@@ -52,7 +51,7 @@ def normalize_association_config(association_config=None):
   if association_config:
     config.update(association_config)
 
-  method = config.get("method", "position_mahalanobis")
+  method = config.get("method", ASSOCIATION_METHOD_POSITION_MAHALANOBIS)
   if method not in VALID_ASSOCIATION_METHODS:
     raise ValueError(
       "Invalid association method {!r} (expected {})".format(
@@ -88,14 +87,14 @@ def normalize_association_config(association_config=None):
     max_radius_m = default_max_radius_m
   config["max_radius_m"] = max_radius_m
 
-  if (method == "position_mahalanobis"
-      and max_radius_m <= DEFAULT_ASSOCIATION_MAX_RADIUS_M + 1e-6):
+  if (method == ASSOCIATION_METHOD_POSITION_MAHALANOBIS
+      and max_radius_m <= DEFAULT_ASSOCIATION_EUCLIDEAN_MAX_RADIUS_M + 1e-6):
     log.warning(
       "association.method is position_mahalanobis with max_radius_m=%s; "
       "ADR-0017 recommends raising max_radius_m (e.g. %s) so the chi-squared "
       "gate can widen with predicted uncertainty",
       max_radius_m,
-      RECOMMENDED_MAHALANOBIS_MAX_RADIUS_M,
+      DEFAULT_ASSOCIATION_MAHALANOBIS_MAX_RADIUS_M,
     )
 
   return config
@@ -108,7 +107,7 @@ def association_match_params(association_config=None):
   gate_probability = config["gate_probability"]
   max_radius_m = config["max_radius_m"]
 
-  if method == "position_mahalanobis":
+  if method == ASSOCIATION_METHOD_POSITION_MAHALANOBIS:
     return (
       rv.tracking.DistanceType.PositionMahalanobis,
       rv.tracking.chi2_threshold(gate_probability),
@@ -132,7 +131,7 @@ def build_association_window(association_config, measurement_covariance=None):
   method = config["method"]
   max_radius_m = float(config["max_radius_m"])
 
-  if method == "euclidean":
+  if method == ASSOCIATION_METHOD_EUCLIDEAN:
     return {
       "method": method,
       "shape": "circle",
@@ -330,7 +329,7 @@ class IntelLabsTracking(Tracking):
     return rv_object
 
   def _warn_deprecated_tracking_radius(self, objects):
-    if self.association_config.get("method", "position_mahalanobis") == "euclidean":
+    if self.association_config.get("method", ASSOCIATION_METHOD_POSITION_MAHALANOBIS) == ASSOCIATION_METHOD_EUCLIDEAN:
       return
     for obj in objects:
       radius = getattr(obj, 'tracking_radius', DEFAULT_TRACKING_RADIUS)
