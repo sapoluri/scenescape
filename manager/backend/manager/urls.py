@@ -124,6 +124,16 @@ urlpatterns += [
   path("api/v1/import-scene/", api.SceneImportAPIView.as_view()),
   path("api/v1/childscene/preview-geospatial-transform/",
        api.PreviewGeospatialChildTransform.as_view()),
+  path(
+    "api/v1/scene/<uuid:pk>/generate-mesh/",
+    api.GenerateSceneMesh.as_view(),
+    name="api_generate_mesh",
+  ),
+  path(
+    "api/v1/scene/<uuid:pk>/generate-mesh-status/",
+    api.GenerateSceneMeshStatus.as_view(),
+    name="api_generate_mesh_status",
+  ),
 
 ]
 

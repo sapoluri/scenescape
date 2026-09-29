@@ -1228,55 +1228,9 @@ def generate_camera_pipeline(request, sensor_id):
 def generate_mesh_status(request, pk):
   scene = get_object_or_404(Scene, pk=pk)
   request_id = request.GET.get("request_id")
-  if not request_id:
-    return JsonResponse({"success": False, "error": "missing request_id"}, status=400)
-
-  try:
-    from .mesh_generator import MeshGenerator
-    mesh_generator = MeshGenerator()
-
-    status_data = mesh_generator.mapping_client.getReconstructionStatus(request_id)
-
-    # If mapping service couldn't find it / errored, just return it
-    if not status_data.get("success"):
-      return JsonResponse(status_data, status=200)
-
-    state = status_data.get("state")
-
-    if state != "complete":
-      return JsonResponse(status_data, status=200)
-
-    with transaction.atomic():
-      scene = Scene.objects.select_for_update().get(pk=scene.pk)
-
-      if hasattr(scene, "mesh_state") and scene.mesh_state == "complete":
-        status_data["finalized"] = True
-        return JsonResponse(status_data, status=200)
-      finalize_result = mesh_generator.finalizeMeshFromStatus(scene, request_id)
-
-      if not finalize_result.get("success"):
-        if hasattr(scene, "mesh_state"):
-          scene.mesh_state = "failed"
-          scene.save(update_fields=["mesh_state"])
-        return JsonResponse(finalize_result, status=500)
-
-      if hasattr(scene, "mesh_state"):
-        scene.mesh_state = "complete"
-        scene.save(update_fields=["mesh_state"])
-
-    status_data["finalized"] = True
-    # Include any warnings from finalization (e.g., unanchored cameras)
-    if finalize_result.get("unanchored_cameras"):
-      status_data["unanchored_cameras"] = finalize_result["unanchored_cameras"]
-    return JsonResponse(status_data, status=200)
-
-  except Exception as e:
-    log.error(f"Mesh status error: {e}")
-    log.error(f"Traceback: {traceback.format_exc()}")
-    return JsonResponse({
-      "success": False,
-      "error": "An internal error occurred while getting mesh status",
-    }, status=500)
+  from manager.mesh_http import mesh_generation_status_payload
+  payload, code = mesh_generation_status_payload(scene, request_id)
+  return JsonResponse(payload, status=code)
 
 @superuser_required
 def generate_mesh(request, pk):
@@ -1284,41 +1238,14 @@ def generate_mesh(request, pk):
   if request.method != 'POST':
     return JsonResponse({"error": "Only POST method allowed"}, status=405)
 
-  try:
-    from .mesh_generator import MeshGenerator
-
-    # Get scene object
-    scene = get_object_or_404(Scene, pk=pk)
-
-    # Initialize mesh generator
-    mesh_type = request.POST.get("mesh_type", "mesh")
-    uploaded_map = request.FILES.get("map", None)
-    mesh_generator = MeshGenerator()
-
-    # Generate mesh
-    result = mesh_generator.startMeshGeneration(scene, mesh_type, uploaded_map=uploaded_map)
-    if result.get("success"):
-      return JsonResponse({
-        "success": True,
-        "message": "Mesh generated successfully",
-        "request_id": result["request_id"],
-        "processing_time": result.get("processing_time", 0),
-      })
-
-    return JsonResponse({
-      "success": False,
-      "error": result.get("error", "Unknown error occurred while generating mesh"),
-      "processing_time": result.get("processing_time", 0),
-    }, status=400)
-
-  except Exception as e:
-    log.error(f"Mesh generation error: {e}")
-    import traceback
-    log.error(f"Traceback: {traceback.format_exc()}")
-    return JsonResponse({
-      "success": False,
-      "error": "An internal error occurred while generating mesh",
-    }, status=500)
+  scene = get_object_or_404(Scene, pk=pk)
+  mesh_type = request.POST.get("mesh_type", "mesh")
+  uploaded_map = request.FILES.get("map", None)
+  from manager.mesh_http import start_mesh_generation_payload
+  payload, code = start_mesh_generation_payload(
+    scene, mesh_type, uploaded_map=uploaded_map
+  )
+  return JsonResponse(payload, status=code)
 
 @superuser_required
 def check_mapping_service_status(request):

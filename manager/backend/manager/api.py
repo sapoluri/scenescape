@@ -584,3 +584,42 @@ class ACLCheck(APIView):
         return Response({'result': 'deny'}, status=status.HTTP_403_FORBIDDEN)
     else:
       return Response({'result': 'deny'}, status=status.HTTP_403_FORBIDDEN)
+
+
+class GenerateSceneMesh(APIView):
+  """POST /api/v1/scene/<uuid>/generate-mesh/ — Token auth (superuser)."""
+  authentication_classes = [authentication.TokenAuthentication]
+  permission_classes = [permissions.IsAdminUser]
+
+  def post(self, request, pk):
+    scene = Scene.objects.filter(pk=pk).first()
+    if scene is None:
+      return Response(
+        {"success": False, "error": "Scene not found"},
+        status=status.HTTP_404_NOT_FOUND,
+      )
+    mesh_type = request.data.get("mesh_type", "mesh")
+    uploaded_map = request.FILES.get("map", None)
+    from manager.mesh_http import start_mesh_generation_payload
+    payload, code = start_mesh_generation_payload(
+      scene, mesh_type, uploaded_map=uploaded_map
+    )
+    return Response(payload, status=code)
+
+
+class GenerateSceneMeshStatus(APIView):
+  """GET /api/v1/scene/<uuid>/generate-mesh-status/?request_id= — Token auth."""
+  authentication_classes = [authentication.TokenAuthentication]
+  permission_classes = [permissions.IsAdminUser]
+
+  def get(self, request, pk):
+    scene = Scene.objects.filter(pk=pk).first()
+    if scene is None:
+      return Response(
+        {"success": False, "error": "Scene not found"},
+        status=status.HTTP_404_NOT_FOUND,
+      )
+    request_id = request.query_params.get("request_id")
+    from manager.mesh_http import mesh_generation_status_payload
+    payload, code = mesh_generation_status_payload(scene, request_id)
+    return Response(payload, status=code)

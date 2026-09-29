@@ -26,18 +26,19 @@ remains host. Do **not** start a framework swap.
 | 2. Scene-detail DOM decoupling | Template = root + bootstrap; `ensureSceneDetailDom` builds map host |
 | 3. Portable auth (deletes) | `ss-auth-bootstrap`, `lib/session` / `lib/restDelete`; Token DELETE for scene/cam/sensor/child/asset |
 | 4a. Token model-directory | `ModelDirectory` + `modelDirectoryApi.ts` use Token auth |
+| 4b. Token mesh generate/status | `/api/v1/scene/<uuid>/generate-mesh[-status]/`; shared `mesh_http.py` |
 
-Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token deletes).
+Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token deletes),
+`25d201950` (model-directory).
 
 ### Left (ordered)
 
 | # | Item | Notes |
 | --- | --- | --- |
-| **B** | Token **mesh** generate/status | Still `/scene/generate-mesh…` + CSRF |
 | **C** | Thin **domain service layer** | Map upload/align/thumbnail callable without Django views importing models into UI path |
 | **D** | Shrink **`window.ss*` / hybrid `sscape.js`** | Runtime hard contracts remain until React owns MQTT/map fully |
 | **E** | **`base.html` shell** (nav/about/login) | Optional; not blocking API swap if SPA is separate later |
-| **F** | **Host independence** (serve SPA off Django) | Only after B–D are green enough |
+| **F** | **Host independence** (serve SPA off Django) | Only after C–D are green enough |
 | **G** | **Framework swap** (e.g. FastAPI) | Explicitly deferred — optional after F |
 
 ### Progress table
@@ -46,8 +47,8 @@ Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token delet
 | --- | --- |
 | 1. Freeze the contract | ✅ Done |
 | 2. Retire template/DOM coupling (scene detail) | ✅ Done (nav/`window.ss*` debt remains) |
-| 3. Auth as a portable session | ✅ Token CRUD + deletes + model-directory; mesh still CSRF |
-| 4. Extract domain behind HTTP | 🔶 **Next** — B → C above |
+| 3. Auth as a portable session | ✅ Token CRUD + deletes + model-directory + mesh |
+| 4. Extract domain behind HTTP | 🔶 **Next** — C (service layer); CSRF callers cleared for UI |
 | 5. Host independence / framework swap | ⬜ Deferred (F → G) |
 
 ### What still binds us to Django
@@ -55,7 +56,8 @@ Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token delet
 - `base.html` nav/about, session login, static serving.
 - Runtime hard DOM / `window.ss*` for hybrid `sscape.js`.
 - Domain logic in Django models/views (no backend-agnostic service layer).
-- CSRF session calls: mesh generate/status.
+- Legacy `/scene/generate-mesh…` session URLs remain for compatibility; UI
+  uses Token `/api/v1/…`.
 
 Gate: UI BAT and manager functional tests green against the frozen contract;
 hard-contract table in the manager-ui skill shrinks as IDs move behind React

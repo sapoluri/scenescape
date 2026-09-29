@@ -1,16 +1,26 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { sessionFetch, tokenAuthHeaders } from "./session";
+import { tokenAuthHeaders } from "./session";
 
-export async function startMeshGeneration(sceneId: string): Promise<string> {
-  const resp = await sessionFetch(`/scene/generate-mesh/${sceneId}/`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
+const API_BASE = "/api/v1";
+
+export async function startMeshGeneration(
+  authToken: string,
+  sceneId: string,
+): Promise<string> {
+  const resp = await fetch(
+    `${API_BASE}/scene/${encodeURIComponent(sceneId)}/generate-mesh/`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        ...tokenAuthHeaders(authToken),
+      },
+      body: new FormData(),
     },
-    body: new FormData(),
-  });
+  );
   const data = (await resp.json().catch(() => ({}))) as {
     success?: boolean;
     request_id?: string;
@@ -30,6 +40,7 @@ export type MeshStatusResult = {
 };
 
 export async function pollMeshStatus(
+  authToken: string,
   sceneId: string,
   requestId: string,
   opts?: { timeoutMs?: number; intervalMs?: number },
@@ -41,9 +52,15 @@ export async function pollMeshStatus(
     if (Date.now() - start > timeout) {
       throw new Error("Timed out waiting for mesh generation.");
     }
-    const resp = await sessionFetch(
-      `/scene/generate-mesh-status/${sceneId}/?request_id=${encodeURIComponent(requestId)}`,
-      { headers: { Accept: "application/json" } },
+    const resp = await fetch(
+      `${API_BASE}/scene/${encodeURIComponent(sceneId)}/generate-mesh-status/?request_id=${encodeURIComponent(requestId)}`,
+      {
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          ...tokenAuthHeaders(authToken),
+        },
+      },
     );
     const data = (await resp.json().catch(() => ({}))) as {
       success?: boolean;
