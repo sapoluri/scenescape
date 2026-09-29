@@ -11,6 +11,7 @@ import { SensorSheet } from "./sheets/SensorSheet";
 import { AssetSheet } from "./sheets/AssetSheet";
 import { CameraCalibratePanel } from "./sheets/CameraCalibratePanel";
 import { SensorCalibratePanel } from "./sheets/SensorCalibratePanel";
+import { readBootstrapJson } from "./lib/bootstrap";
 import type { SheetAction } from "./lib/sheetQuery";
 import "./tokens/tokens.css";
 
@@ -179,15 +180,7 @@ function ListSheetsApp({ bootstrap }: { bootstrap: ListBootstrap }) {
 }
 
 function readBootstrap(): ListBootstrap | null {
-  const el = document.getElementById("ss-list-sheets-bootstrap");
-  if (!el?.textContent) {
-    return null;
-  }
-  try {
-    return JSON.parse(el.textContent) as ListBootstrap;
-  } catch {
-    return null;
-  }
+  return readBootstrapJson<ListBootstrap>("ss-list-sheets-bootstrap");
 }
 
 const bootstrap = readBootstrap();

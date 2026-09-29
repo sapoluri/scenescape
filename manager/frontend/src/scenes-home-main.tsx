@@ -3,26 +3,16 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { readBootstrapJson } from "./lib/bootstrap";
 import {
   ScenesHomeApp,
   type ScenesHomeBootstrap,
 } from "./scenes/ScenesHomeApp";
 import "./tokens/tokens.css";
 
-function readBootstrap(): ScenesHomeBootstrap | null {
-  const el = document.getElementById("ss-scenes-home-bootstrap");
-  if (!el?.textContent) {
-    return null;
-  }
-  try {
-    return JSON.parse(el.textContent) as ScenesHomeBootstrap;
-  } catch {
-    console.error("Failed to parse scenes home bootstrap JSON");
-    return null;
-  }
-}
-
-const bootstrap = readBootstrap();
+const bootstrap = readBootstrapJson<ScenesHomeBootstrap>(
+  "ss-scenes-home-bootstrap",
+);
 const host =
   document.getElementById("ss-scenes-home-app") ||
   (() => {

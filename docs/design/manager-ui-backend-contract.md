@@ -1,0 +1,227 @@
+<!--
+SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Design Document: Manager UI backend contract
+
+- **Author(s)**: SceneScape maintainers
+- **Date**: 2026-09-29
+- **Status**: `Accepted`
+- **Related**: [`.github/plans/manager-ui.md`](../../.github/plans/manager-ui.md)
+  §2 (swappable backend), [`.github/skills/manager-ui/SKILL.md`](../../.github/skills/manager-ui/SKILL.md)
+
+---
+
+## 1. Overview
+
+Freeze the wire contract the Manager React islands need so the UI can evolve
+against documented HTTP, bootstrap JSON, and MQTT shapes. Django remains the
+current host; a future API host (for example FastAPI) must satisfy this
+contract. Hard DOM / `window.ss*` bridges are **debt to retire**, not the
+long-term boundary.
+
+## 2. Goals
+
+- Document bootstrap payloads, REST paths the islands call, auth modes, and
+  MQTT topic patterns the 2D UI depends on.
+- Give UI tests and backend implementers one source of truth for compatibility.
+- Separate portable surfaces (Token REST, MQTT) from transitional ones
+  (session CSRF deletes, template DOM parking).
+
+## 3. Non-Goals
+
+- Replacing Django in this document.
+- Rewriting Scene Controller, tracker, or MQTT broker semantics.
+- Freezing legacy 3D (`base_3d.html` / `scenescape3d.js`) beyond shared auth
+  and topic families — that is the separate 3D epic.
+
+## 4. Background / Context
+
+Islands already prefer `json_script` bootstrap + `/api/v1` Token auth over
+server-rendered forms. Template sibling DOM and CSRF DeleteViews still bind
+the UI to Django’s request cycle. OpenAPI at
+[`docs/user-guide/api-docs/api.yaml`](../user-guide/api-docs/api.yaml) covers
+entity CRUD; it does not define island bootstrap or MQTT UI topics.
+
+## 5. Proposed Design
+
+### 5.1 Islands and bootstrap scripts
+
+| Island | Mount | Bootstrap `id` |
+| --- | --- | --- |
+| Scenes home | `#ss-scenes-home-app` | `ss-scenes-home-bootstrap` |
+| Scene detail | `#ss-scene-detail-root` | `ss-scene-detail-bootstrap` |
+| Admin lists | `#ss-admin-list-root` | `ss-admin-list-bootstrap` |
+| List sheets | (query-driven; no dedicated root) | `ss-list-sheets-bootstrap` |
+| Models directory | `#ss-models-directory-root` | `ss-models-directory-bootstrap` |
+| Destructive actions | creates `#ss-destructive-actions-root` | none |
+
+Scene detail also exposes `google-maps-api-key` and `mapbox-api-key`
+`json_script` nodes (string scalars).
+
+Canonical TypeScript shapes live under `manager/frontend/src/`
+(`scene/types.ts`, `scenes/ScenesHomeApp.tsx`, list entry modules). Hosts
+must keep field names below stable or update islands + this doc together.
+
+#### Scenes home (`ss-scenes-home-bootstrap`)
+
+- `authToken` (string) — DRF Token key
+- `isSuperuser` (boolean)
+- `scenes[]`: `id`, `name`, `georeferenced`, `thumbnailUrl`, `mapUrl`,
+  `detailUrl`, `detail3dUrl`, `manageUrl`, `deleteUrl` (nullable),
+  `counts` `{ sensors, regions, tripwires }`
+
+#### Scene detail (`ss-scene-detail-bootstrap`)
+
+- `scene`: `id`, `name`, `scale`, `mapUrl`, `thumbnailUrl`, `wssConnection?`,
+  `outputLla?`, `georeferenced?`
+- `cameras[]`: `id`, `sensorId`, `name`, `calibrateHref`, `cmdTopic`,
+  `deleteUrl`
+- `sensors[]`: `id`, `sensorId`, `name`, `iconUrl`, `areaJson`,
+  `calibrateHref`, `editHref`, `deleteUrl`
+- `children[]`: `id`, `name`, `childType`, `remoteChildId`, `detailUrl`,
+  `thumbnailUrl`, `mapUrl`, `restUid`, `editHref`, `deleteUrl`
+- `regions`, `tripwires` — geometry JSON arrays
+- `assetMarkColors` — map of asset name → mark color
+- `counts` `{ sensors, regions, tripwires, children }`
+- `urls` `{ scenesHome, camList?, sensorList?, scene3d, sceneEdit,
+  sceneDelete, camCreate }`
+- `authToken`, `isSuperuser`, `isKubernetes`
+- `appVersion`, `appGitCommit?`
+- `googleMapsApiKey?`, `mapboxApiKey?`
+- `deleteImpact?` `{ sensors, regions, tripwires }`
+- `scenes[]` for pickers: `id`, `name`, `georeferenced?`, `mapUrl?`
+
+#### Admin list (`ss-admin-list-bootstrap`)
+
+- `title`, `breadcrumbs[]`, `primaryAction?` `{ label, href, id? }`
+- `columns[]`, `rows[]` (`id`, `cells[]`, `actions[]`), `emptyMessage`,
+  `isSuperuser`
+- No `authToken` (sheets bootstrap carries Token)
+
+#### List sheets (`ss-list-sheets-bootstrap`)
+
+- `authToken`, `isSuperuser`, `kind` (`cam` | `sensor` | `asset`)
+- `defaultSceneId`, `isKubernetes`
+- `cameras?` / `sensors?`: `id`, `sensorId`, `name`, `sceneId?`
+- `scenes[]`: `id`, `name` (empty for assets)
+
+#### Models directory (`ss-models-directory-bootstrap`)
+
+- `isSuperuser` only — tree loaded via session API
+
+#### Sheet deep links
+
+Query `?ss=<action>&id=<optional>` — see
+`manager/frontend/src/lib/sheetQuery.ts`. Actions include
+`cam-create|cam-edit|sensor-create|sensor-edit|child-create|child-edit|
+scene-create|scene-edit|scene-manage|scene-import|asset-create|asset-edit|
+calibrate-cam|calibrate-sensor`.
+
+### 5.2 Auth (portable vs transitional)
+
+| Mode | How | Used for | Portable? |
+| --- | --- | --- | --- |
+| Token | `Authorization: Token <authToken>` from bootstrap | `/api/v1` CRUD via `lib/rest.ts` | **Yes** — long-term |
+| Session + CSRF | cookie + `X-CSRFToken` / form field via `lib/session.ts` | Django DeleteViews, mesh generate, model-directory | **No** — replace with Token REST |
+| Session cookie | `credentials: "same-origin"` | Page shell, media, static | Host concern |
+
+Login today is Django session (`sign_in/`); Token is issued for the signed-in
+user and injected into bootstrap. `POST /api/v1/auth` exists for API clients
+but islands do not call it yet. New island code must use `lib/rest.ts` and
+`lib/session.ts` — do not parse CSRF cookies or assume `#ss-csrf-form` in
+feature modules.
+
+### 5.3 REST the UI calls
+
+Base: `/api/v1`. Client: `manager/frontend/src/lib/rest.ts`.
+
+| Area | Methods / paths |
+| --- | --- |
+| Camera | `POST /camera`, `GET|PUT /camera/{uid}` |
+| Sensor | `POST /sensor`, `GET|PUT|DELETE /sensor/{uid}` |
+| Child | `POST /child`, `GET|PUT /child/{uid}`, `POST /childscene/preview-geospatial-transform/` |
+| Scene | `POST /scene`, `GET|PUT /scene/{uid}`, `GET /scenes`, `POST /import-scene/` |
+| Region | `GET /regions?scene=`, `POST /region`, `PUT|DELETE /region/{uid}` |
+| Tripwire | `GET /tripwires?scene=`, `POST /tripwire`, `PUT|DELETE /tripwire/{uid}` |
+| Asset | `POST /asset`, `GET|PUT /asset/{uid}` |
+
+**Transitional (not Token CRUD yet):**
+
+| Call | Path | Auth |
+| --- | --- | --- |
+| Model directory | `/api/v1/model-directory/` | Session + CSRF |
+| Mesh generate / status | `/scene/generate-mesh/{uuid}/`, `/scene/generate-mesh-status/{uuid}/` | Session + CSRF |
+| Mapping status | `/mapping-service/status/` | Token |
+| Deletes | bootstrap `deleteUrl` → Django DeleteView POST | Session + CSRF |
+| Media | `thumbnailUrl` / `mapUrl` / `/media/…` | Session |
+
+OpenAPI details: [`api.yaml`](../user-guide/api-docs/api.yaml). Breaking path
+or payload changes require island + OpenAPI + this doc updates in the same
+change.
+
+### 5.4 MQTT (2D UI)
+
+Transport: WSS broker URL (`scene.wssConnection` / `wss://{host}/mqtt`).
+App prefix: `scenescape`. Live client today is legacy `window.ssMqttClient`
+(`sscape.js`); React MQTT module is not yet the transport owner.
+
+| Direction | Pattern | Role |
+| --- | --- | --- |
+| Sub | `scenescape/regulated/scene/{sceneId}` | Scene telemetry |
+| Sub | `scenescape/event/+/` + `{sceneId}` + `/+/+` | Region / tripwire events |
+| Sub | `scenescape/sys/child/status/+` | Remote child connectivity |
+| Sub | `scenescape/image/camera/+` | Live camera strip |
+| Sub | `scenescape/image/calibration/camera/{sensorId}` | Calibrate |
+| Pub | `scenescape/cmd/camera/{sensorId}` | `getimage` / calibration cmds |
+| Pub | `scenescape/sys/child/status/{remoteId}` | `isConnected` probe |
+
+New ROI / tripwire topics created in UI:
+
+- `scenescape/event/region/{sceneId}/{uuid}/count`
+- `scenescape/event/tripwire/{sceneId}/{uuid}/objects`
+
+### 5.5 DOM / window debt (retire, do not extend)
+
+Until slice 2 of the plan lands, scene detail still requires Django-parked
+siblings (for example `#ss-map-host`, `#map-controls`, hidden `#id_rois` /
+`#tripwires`) and hybrid `window.ss*` bridges. Full freeze tables live in the
+manager-ui skill. **New UI must not add** required template sibling ids or
+new `window.ss*` APIs; prefer bootstrap + fetch + React-owned mounts.
+
+Long-term host shape: a single root per page + bootstrap JSON (or equivalent
+config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
+
+## 6. Alternatives Considered
+
+- **OpenAPI only** — Rejected as sole freeze; bootstrap and MQTT UI topics are
+  out of scope for `api.yaml`.
+- **DOM ids as the contract** — Rejected as destination; kept as transitional
+  debt while hybrid legacy JS remains.
+- **Immediate FastAPI swap** — Rejected until this contract is green under
+  Django and template DOM coupling is retired.
+
+## 7. Risks and Mitigations
+
+- **Drift** — Treat TS bootstrap types + this doc + OpenAPI as one change set
+  when fields move.
+- **Partial auth portability** — Deletes / mesh / models still CSRF; track as
+  explicit debt until Token REST replacements exist.
+- **MQTT still on `window.ssMqttClient`** — Document topics now; move ownership
+  to React in a later slice without changing topic strings.
+
+## 8. Rollout / Migration Plan
+
+1. Land this doc + `lib/session.ts` / `lib/bootstrap.ts` helpers (done with
+   first implementation PR).
+2. Shrink skill hard-contract tables as React owns chrome.
+3. Replace CSRF callers with Token REST when endpoints exist.
+4. Only then: serve SPA from a non-Django host pointed at the same contract.
+
+## 9. Open Questions
+
+- Prefer a single `GET /api/v1/ui-bootstrap/?page=…` instead of per-page
+  `json_script` once shells are React-only?
+- Should deletes move to existing ManageThing DELETE where missing (scenes,
+  cameras, children, assets) before any host swap?

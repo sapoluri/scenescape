@@ -1,24 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-function csrfToken(): string {
-  const input = document.querySelector(
-    'input[name="csrfmiddlewaretoken"]',
-  ) as HTMLInputElement | null;
-  if (input?.value) {
-    return input.value;
-  }
-  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : "";
-}
+import { sessionFetch, tokenAuthHeaders } from "./session";
 
 export async function startMeshGeneration(sceneId: string): Promise<string> {
-  const resp = await fetch(`/scene/generate-mesh/${sceneId}/`, {
+  const resp = await sessionFetch(`/scene/generate-mesh/${sceneId}/`, {
     method: "POST",
-    credentials: "same-origin",
     headers: {
       Accept: "application/json",
-      "X-CSRFToken": csrfToken(),
     },
     body: new FormData(),
   });
@@ -52,9 +41,9 @@ export async function pollMeshStatus(
     if (Date.now() - start > timeout) {
       throw new Error("Timed out waiting for mesh generation.");
     }
-    const resp = await fetch(
+    const resp = await sessionFetch(
       `/scene/generate-mesh-status/${sceneId}/?request_id=${encodeURIComponent(requestId)}`,
-      { credentials: "same-origin", headers: { Accept: "application/json" } },
+      { headers: { Accept: "application/json" } },
     );
     const data = (await resp.json().catch(() => ({}))) as {
       success?: boolean;
@@ -89,9 +78,10 @@ export async function checkMappingServiceAvailable(
   try {
     const resp = await fetch("/mapping-service/status/", {
       method: "GET",
+      credentials: "same-origin",
       headers: {
         Accept: "application/json",
-        Authorization: `Token ${authToken}`,
+        ...tokenAuthHeaders(authToken),
       },
     });
     if (!resp.ok) {

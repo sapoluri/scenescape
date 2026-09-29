@@ -3,25 +3,15 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { readBootstrapJson } from "./lib/bootstrap";
 import { SceneDetailApp } from "./scene/SceneDetailApp";
 import type { SceneDetailBootstrap } from "./scene/types";
 import "./tokens/tokens.css";
 import "./scene-detail.css";
 
-function readBootstrap(): SceneDetailBootstrap | null {
-  const el = document.getElementById("ss-scene-detail-bootstrap");
-  if (!el?.textContent) {
-    return null;
-  }
-  try {
-    return JSON.parse(el.textContent) as SceneDetailBootstrap;
-  } catch {
-    console.error("Failed to parse scene detail bootstrap JSON");
-    return null;
-  }
-}
-
-const bootstrap = readBootstrap();
+const bootstrap = readBootstrapJson<SceneDetailBootstrap>(
+  "ss-scene-detail-bootstrap",
+);
 const rootEl = document.getElementById("ss-scene-detail-root");
 
 if (bootstrap && rootEl) {

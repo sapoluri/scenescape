@@ -21,6 +21,8 @@ SPDX-License-Identifier: Apache-2.0
 - Build: `make -C manager ui-build` (or `SKIP_UI=1`). Details:
   `manager/frontend/README.md`
 - Remaining epics: `.github/plans/manager-ui.md`
+- UI↔backend contract (bootstrap / REST / auth / MQTT):
+  `docs/design/manager-ui-backend-contract.md`
 
 Do **not** reopen Snap / calibrate iframe work. Do **not** stretch the scene
 map (`slice` / cover); keep `meet` aspect.
@@ -93,6 +95,12 @@ Do not re-merge workspace strip rules into Django CSS without an audit.
 Stable DOM ids, `window` APIs, and events that UI tests and hybrid bridges
 depend on. Change only with matching test updates in the same PR. Do not
 rename `#ss-admin-list-root`, table action hrefs, or map ids below.
+
+**Long-term boundary:** HTTP + bootstrap JSON + MQTT — see
+[`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
+Tables below are **transitional debt**; do not add new required template
+sibling ids or `window.ss*` APIs. Prefer `lib/rest.ts`, `lib/session.ts`, and
+`lib/bootstrap.ts`.
 
 ### Map host
 

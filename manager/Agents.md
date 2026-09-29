@@ -60,6 +60,9 @@ The **Manager** service is the Django-based web UI and REST API gateway for Scen
 
 **Base URL**: `https://manager:8000/api/v1/`
 
+**UI contract** (bootstrap JSON, auth modes, MQTT topics the React islands
+need): [`docs/design/manager-ui-backend-contract.md`](../docs/design/manager-ui-backend-contract.md).
+
 **Authentication**:
 
 - Session-based for web UI

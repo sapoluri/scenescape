@@ -43,14 +43,14 @@ legacy globals; UI BAT green for scene 3D view when that suite exists.
 
 ## 2. Path to a swappable backend (epic)
 
-**Status:** Moderately positioned for a gradual API-backed frontend — **not**
-ready for a clean Django drop-in replacement.
+**Status:** Intermediate step in progress — contract frozen; Django remains
+host. Do **not** start a framework swap.
 
 The React islands already prefer REST + bootstrap JSON (`authToken`, scene
-payloads) over pure server-rendered forms. That is the right direction: grow
-the UI against a documented HTTP/MQTT contract, then put a different server
-behind that contract. Swapping Django today would still be a cut-over of host
-+ API + auth + realtime, not just an ORM change.
+payloads) over pure server-rendered forms. Grow the UI against the frozen
+HTTP/MQTT contract
+([`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md)),
+then optionally put a different server behind that contract later.
 
 ### What already helps
 
@@ -58,6 +58,9 @@ behind that contract. Swapping Django today would still be a cut-over of host
   chrome each release.
 - Bootstrap `json_script` + REST tokens reduce template form coupling.
 - MQTT and auth patterns are reusable if the wire contract is frozen.
+- **Frozen contract doc** (bootstrap, REST, auth modes, MQTT, DOM debt).
+- Portable client helpers: `manager/frontend/src/lib/session.ts`,
+  `lib/bootstrap.ts`, Token CRUD via `lib/rest.ts`.
 
 ### What still binds us to Django
 
@@ -68,22 +71,22 @@ behind that contract. Swapping Django today would still be a cut-over of host
   to a stable API alone. See the manager-ui skill hard-contract tables.
 - Domain logic (scene map/GLB upload, serializers, permissions, MQTT wiring)
   lives in Django models/views without a backend-agnostic service boundary.
-- Dual-run leftovers (map parking, Bootstrap widgets, mixed CSS barrels)
-  keep the UI host tied to the Django request cycle.
+- Dual-run leftovers (map parking, mixed CSS barrels) and CSRF deletes /
+  mesh / model-directory keep the UI host tied to the Django request cycle.
 
 ### Suggested slices (order matters)
 
-1. **Freeze the contract.** Document REST + MQTT + bootstrap JSON shapes the
-   UI actually needs (auth, scenes, cameras/sensors, map assets, delete
-   impact). Treat skill hard contracts as debt to retire, not as the long-term
-   boundary.
+1. **Freeze the contract.** ✅ Documented in
+   [`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
+   Keep TS bootstrap types + OpenAPI + that doc in sync. Treat skill hard
+   contracts as debt to retire, not as the long-term boundary.
 2. **Retire template/DOM coupling.** Move remaining Django-owned chrome
    (map toggles parking, nav/about host, list shells) into React mounts so
    islands boot from bootstrap + fetch only — no required sibling DOM from
    Django templates beyond a single root.
-3. **Auth as a portable session.** Abstract login/CSRF/token issuance behind
-   the same client helpers the islands already use; stop assuming Django
-   session cookies in new code.
+3. **Auth as a portable session.** ✅ Helpers landed (`lib/session.ts`);
+   Token path is primary. Still replace CSRF DeleteViews / mesh /
+   model-directory with Token REST before calling auth “done.”
 4. **Extract domain behind HTTP.** Scene map upload/align/thumbnail, CRUD,
    and permissions callable without importing Django models from the UI path.
    Prefer thin API handlers over template views for anything the React app

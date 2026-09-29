@@ -11,6 +11,8 @@ static assets.
 Conventions, layout shells, and hard DOM contracts:
 [`.github/skills/manager-ui/SKILL.md`](../../.github/skills/manager-ui/SKILL.md).
 Remaining epics: [`.github/plans/manager-ui.md`](../../.github/plans/manager-ui.md).
+Frozen UI↔backend contract (bootstrap, REST, auth, MQTT):
+[`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
 
 ## Setup
 

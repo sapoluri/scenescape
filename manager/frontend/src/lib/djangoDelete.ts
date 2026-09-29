@@ -1,16 +1,9 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-export function getCsrfToken(): string {
-  const input = document.querySelector(
-    'input[name="csrfmiddlewaretoken"]',
-  ) as HTMLInputElement | null;
-  if (input?.value) {
-    return input.value;
-  }
-  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : "";
-}
+import { getCsrfToken, sessionFetch } from "./session";
+
+export { getCsrfToken } from "./session";
 
 /** POST to a Django DeleteView URL, then navigate to the redirect Location or fallback. */
 export async function postDjangoDelete(
@@ -22,14 +15,12 @@ export async function postDjangoDelete(
   if (csrf) {
     body.set("csrfmiddlewaretoken", csrf);
   }
-  const resp = await fetch(url, {
+  const resp = await sessionFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      "X-CSRFToken": csrf,
     },
     body,
-    credentials: "same-origin",
     redirect: "follow",
   });
   if (resp.redirected && resp.url) {

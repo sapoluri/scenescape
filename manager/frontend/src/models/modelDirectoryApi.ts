@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { getCsrfToken } from "../lib/djangoDelete";
+import { sessionFetch } from "../lib/session";
 
 export type TreeNode = { [name: string]: TreeNode | null };
 
@@ -31,11 +31,9 @@ async function request(
   query: string,
   body?: FormData,
 ): Promise<string> {
-  const resp = await fetch(`${API}${query}`, {
+  const resp = await sessionFetch(`${API}${query}`, {
     method,
-    credentials: "same-origin",
     headers: {
-      "X-CSRFToken": getCsrfToken(),
       Accept: "text/plain, application/json",
     },
     body,
@@ -57,9 +55,8 @@ export async function loadTree(
     folder_name: folderName,
     format: "json",
   });
-  const resp = await fetch(`${API}?${params}`, {
-    credentials: "same-origin",
-    headers: { Accept: "application/json", "X-CSRFToken": getCsrfToken() },
+  const resp = await sessionFetch(`${API}?${params}`, {
+    headers: { Accept: "application/json" },
   });
   if (!resp.ok) {
     throw new Error(await readError(resp));
@@ -76,10 +73,7 @@ export async function checkExists(
     path,
     folder_name: folderName,
   });
-  const resp = await fetch(`${API}?${params}`, {
-    credentials: "same-origin",
-    headers: { "X-CSRFToken": getCsrfToken() },
-  });
+  const resp = await sessionFetch(`${API}?${params}`, {});
   if (!resp.ok) {
     throw new Error(await readError(resp));
   }
