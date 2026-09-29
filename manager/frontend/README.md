@@ -34,6 +34,7 @@ Outputs under `manager/backend/manager/static/ui/`:
 | Entry                 | Files                    | Used by                           |
 | --------------------- | ------------------------ | --------------------------------- |
 | shared CSS            | `manager-ui.css`         | All islands                       |
+| `chrome`              | `chrome.js`              | Navbar / about / theme (all pages)|
 | `scene-detail`        | `scene-detail.js`        | Scene detail                      |
 | `scenes-home`         | `scenes-home.js`         | Scenes gallery                    |
 | `list-sheets`         | `list-sheets.js`         | Cam / sensor / asset lists        |

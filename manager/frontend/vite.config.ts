@@ -58,6 +58,7 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       input: {
+        chrome: path.resolve(__dirname, "src/chrome-main.tsx"),
         "scene-detail": path.resolve(__dirname, "src/main.tsx"),
         "admin-list": path.resolve(__dirname, "src/admin-list-main.tsx"),
         "destructive-actions": path.resolve(

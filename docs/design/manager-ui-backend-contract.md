@@ -50,12 +50,21 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 
 | Island | Mount | Bootstrap `id` |
 | --- | --- | --- |
+| Chrome (nav/about/theme) | `#ss-chrome-root` | `ss-chrome-bootstrap` |
 | Scenes home | `#ss-scenes-home-app` | `ss-scenes-home-bootstrap` |
 | Scene detail | `#ss-scene-detail-root` | `ss-scene-detail-bootstrap` |
 | Admin lists | `#ss-admin-list-root` | `ss-admin-list-bootstrap` |
 | List sheets | (query-driven; no dedicated root) | `ss-list-sheets-bootstrap` |
 | Models directory | `#ss-models-directory-root` | `ss-models-directory-bootstrap` |
 | Destructive actions | creates `#ss-destructive-actions-root` | none |
+
+#### Chrome (`ss-chrome-bootstrap`)
+
+- `authenticated`, `username`, `isStaff`, `isKubernetes`
+- `appName`, `appVersion`, `appGitCommit`, `docsVersion`
+- `urls` `{ home, scenes, cameras, sensors, models, assets, admin,
+  signOut, docs, support, intel, intelLogo }`
+- `activeNav?` — `scenes` \| `cameras` \| `sensors` \| `models` \| `assets`
 
 Scene detail also exposes `google-maps-api-key` and `mapbox-api-key`
 `json_script` nodes (string scalars).

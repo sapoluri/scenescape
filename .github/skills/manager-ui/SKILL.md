@@ -158,10 +158,15 @@ SVG `g.roi` / `g.tripwire`, `adding-roi` / `adding-tripwire`.
 
 ### Navbar
 
+Owned by the React **chrome** island (`ui/chrome.js`, `#ss-chrome-root` +
+`ss-chrome-bootstrap`). Ids remain hard contracts:
+
 `#nav-help` (Help menu), `#nav-docs` (OEP published docs), `#nav-support`
 (GitHub Issues), `#nav-about` / `#ss-about-modal` (About), `#nav-admin`
 (staff; under account menu), `#navbar-username` (account menu),
-`#ss-theme-toggle`.
+`#ss-theme-toggle`, `#home`, `#navbar-version`, `#nav-scenes`,
+`#nav-cameras`, `#nav-sensors`, `#nav-models` (K8s), `#nav-object-library`,
+`#nav-sign-out`, `#login-submit` (sign-in form).
 
 ### `window` APIs
 
