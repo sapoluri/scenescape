@@ -143,7 +143,7 @@ export function SceneSheet({
           />
         </FormSection>
         <FormSection
-          id="ss-scene-map"
+          id="ss-scene-map-section"
           title="Map"
           description="Floor plan and scale for the common create path."
         >

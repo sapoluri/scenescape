@@ -62,7 +62,11 @@ export function SceneImportDialog({
       }}
     >
       <p>Upload a SceneScape scene export (.zip).</p>
+      <label className="ss-text-field-label" htmlFor="ss-scene-import-file">
+        Scene archive
+      </label>
       <input
+        id="ss-scene-import-file"
         type="file"
         accept=".zip,application/zip"
         disabled={busy}

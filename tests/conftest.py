@@ -475,12 +475,15 @@ def _inject_options(config, spec, secrets_dir, supass, env=None):
   # used by testdb-derived profiles, "Retail"/"Queuing" by exampledb- and
   # calibrationdb-derived ones; pick whichever the stack actually uploaded.
   scene_uids = getattr(env, "scene_uids", None) or {}
-  scene_uid = scene_uids.get("Demo") or scene_uids.get("Retail") or scene_uids.get("Queuing")
+  scene_name = next((n for n in ("Demo", "Retail", "Queuing") if n in scene_uids), None)
+  scene_uid = scene_uids.get(scene_name) if scene_name else None
   if scene_uid:
     opt.scene_id = scene_uid
+    opt.scene = scene_name
     try:
       from tests.ui import common_ui_test_utils
       common_ui_test_utils.TEST_SCENE_ID = scene_uid
+      common_ui_test_utils.TEST_SCENE_NAME = scene_name
     except ImportError:
       pass
 
@@ -940,12 +943,15 @@ def _inject_k8s_options(config, spec, k8s_mgr):
 
   # Baseline scene uid, uploaded over REST once the cluster came up.
   scene_uids = k8s_mgr._scene_uids or {}
-  scene_uid = scene_uids.get("Demo") or scene_uids.get("Retail") or scene_uids.get("Queuing")
+  scene_name = next((n for n in ("Demo", "Retail", "Queuing") if n in scene_uids), None)
+  scene_uid = scene_uids.get(scene_name) if scene_name else None
   if scene_uid:
     opt.scene_id = scene_uid
+    opt.scene = scene_name
     try:
       from tests.ui import common_ui_test_utils
       common_ui_test_utils.TEST_SCENE_ID = scene_uid
+      common_ui_test_utils.TEST_SCENE_NAME = scene_name
     except ImportError:
       pass
 

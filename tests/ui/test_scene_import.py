@@ -94,14 +94,29 @@ class SceneImportTest(UserInterfaceTest):
     )
     return int(count_element.text.strip())
 
+  def closeImportDialog(self):
+    """Dismiss the import ConfirmDialog if it is still on screen."""
+    cancels = self.browser.find_elements(
+      self.By.CSS_SELECTOR, ".ss-confirm-footer .ss-btn--secondary"
+    )
+    if cancels:
+      cancels[0].click()
+      WebDriverWait(self.browser, self.waitTime).until(
+        EC.invisibility_of_element_located((self.By.CSS_SELECTOR, ".ss-confirm"))
+      )
+    return
+
   def importScene(self):
+    # A dialog left open from a previous failed import would eat this click.
+    self.closeImportDialog()
     importSceneButton = self.findElement(self.By.ID, "import-scene")
     importSceneButton.click()
     time.sleep(self.waitTime)
-    self.findElement(self.By.ID, "id_zipFile").send_keys(self.zipFile)
-    errors_list = self.findElement(self.By.ID, "global-error-list")
-    importButton = self.findElement(self.By.ID, "scene-import")
-    importButton.click()
+    self.findElement(self.By.ID, "ss-scene-import-file").send_keys(self.zipFile)
+    # Import is a ConfirmDialog, not a form page: confirm is the primary button.
+    self.findElement(
+      self.By.CSS_SELECTOR, ".ss-confirm-footer .ss-btn--primary"
+    ).click()
     return
 
   def readJSONFromZip(self):
@@ -227,11 +242,13 @@ class SceneImportTest(UserInterfaceTest):
         if self.expected == SCENE_EXISTS:
           errorMessage = errorMessage.format(self.sceneData['name'])
 
-        errors_list = self.findElement(self.By.ID, "global-error-list")
+        errors_list = self.findElement(self.By.CSS_SELECTOR, ".ss-confirm-error")
         assert errors_list
         print("Errors detected")
         print(errors_list.text.strip())
-        assert errorMessage == errors_list.text.strip()
+        assert errorMessage in errors_list.text.strip()
+        # The dialog stays open on failure; close it so later nav clicks land.
+        self.closeImportDialog()
 
       if self.expected == ORPHANED_CAMERA:
         common.delete_scene(self.browser, self.sceneData['name'])

@@ -7,7 +7,8 @@ import time
 from selenium.webdriver import Firefox
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
-from selenium.common.exceptions import NoSuchElementException, WebDriverException
+from selenium.common.exceptions import (NoSuchElementException, TimeoutException,
+                                        WebDriverException)
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
@@ -18,6 +19,8 @@ import subprocess
 
 MAX_RETRIES = 5
 RETRY_DELAY = 30
+PAGE_LOAD_TIMEOUT = 30
+LOGIN_BUTTON_TIMEOUT = 30
 
 def _is_real_executable(binary):
   # geckodriver cannot launch shell-script wrappers (e.g. the snap launcher at
@@ -134,6 +137,7 @@ class Browser(Firefox):
     options.set_preference("network.dns.localDomains", ",".join(_host_aliases))
     service = Service(_find_geckodriver())
     super().__init__(options=options, service=service)
+    self.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
 
   def getPage(self, url, expected_title, retries=MAX_RETRIES, delay=RETRY_DELAY):
     '''
@@ -187,19 +191,25 @@ class Browser(Firefox):
           field.clear()
           field.send_keys(password)
 
-          button = self.find_element(By.CSS_SELECTOR, "button.btn-primary")
-          button.click()
-
           try:
-            self.find_element(By.CSS_SELECTOR, "ul.navbar-nav")
-            success = True
-            break
-          except NoSuchElementException:
+            button = WebDriverWait(self, LOGIN_BUTTON_TIMEOUT).until(
+              EC.element_to_be_clickable((By.ID, "login-submit")))
+          except TimeoutException:
+            print("Sign-in button never became clickable")
+          else:
+            button.click()
+
             try:
-              self.find_element(By.CSS_SELECTOR, "ul.errorlist")
-              print("Invalid user/password")
-            except NoSuchElementException:
-              print("Couldn't find login status")
+              WebDriverWait(self, LOGIN_BUTTON_TIMEOUT).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.navbar-nav")))
+              success = True
+              break
+            except TimeoutException:
+              try:
+                self.find_element(By.CSS_SELECTOR, "ul.errorlist")
+                print("Invalid user/password")
+              except NoSuchElementException:
+                print("Couldn't find login status")
 
       retry += 1
       if retry >= retries:

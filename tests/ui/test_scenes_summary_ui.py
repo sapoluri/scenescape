@@ -6,6 +6,7 @@
 import os
 import time
 from tests.ui.browser import By, Browser
+from selenium.webdriver.support.ui import WebDriverWait
 import tests.ui.common_ui_test_utils as common
 from tests.utils.spec import FuncTestSpec
 from tests.utils.profiles import FULL_STACK
@@ -41,7 +42,12 @@ def test_scenes_summary_main(params, record_xml_attribute):
 
     time.sleep(1)
     browser.find_element(By.ID, "nav-scenes").click()
-    scenes_name = browser.find_elements(By.CLASS_NAME, "card-header")
+    header_selector = ".ss-scene-card .card-header"
+    WebDriverWait(browser, 30).until(
+      lambda drv: len(drv.find_elements(By.CSS_SELECTOR, header_selector)) >= 2
+      and all(h.text.strip() for h in drv.find_elements(By.CSS_SELECTOR, header_selector))
+    )
+    scenes_name = browser.find_elements(By.CSS_SELECTOR, header_selector)
     element1 = scenes_name[0].text
     element2 = scenes_name[1].text
     nr_scenes = len(scenes_name)

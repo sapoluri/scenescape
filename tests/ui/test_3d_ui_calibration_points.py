@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -24,6 +24,8 @@ TEST_NAME = "NEX-T10473"
 WAIT_SEC = 3
 
 class WillOurShipGo(UserInterfaceTest):
+  BROWSER_WEBGL = True
+
   def __init__(self, testName, request, recordXMLAttribute):
     super().__init__(testName, request, recordXMLAttribute)
 

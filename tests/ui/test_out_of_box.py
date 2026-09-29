@@ -108,13 +108,15 @@ def get_person_marks(browser):
     marks_found.append(marks.get_attribute('transform'))
   return marks_found
 
-def check_person_marks(browser, camera_id):
+def check_person_marks(browser, camera_selector):
   """! Checks that the number of person marks in a scene before a delay and after differ.
-  @param   browser    Object wrapping the Selenium driver.
-  @return  BOOL       Boolean representing a successful reset.
+  @param   browser           Object wrapping the Selenium driver.
+  @param   camera_selector   CSS selector of the camera live-view element.
+  @return  BOOL              Boolean representing a successful reset.
   """
   global UI_MARKS_DELAY
-  video_frame = common.wait_for_elements(browser, camera_id, findBy=By.CSS_SELECTOR)
+  video_frame = common.wait_for_elements(browser, camera_selector, findBy=By.CSS_SELECTOR,
+                                         maxWait=20, refreshPage=False)
 
   marks_before = marks_after = []
   attempt = 0
@@ -213,10 +215,10 @@ def test_out_of_box(params, record_xml_attribute):
     browser = Browser()
     assert common.check_page_login(browser, params)
     assert common.navigate_to_scene(browser, "Retail")
-    assert check_person_marks(browser, '#camera1')
+    assert check_person_marks(browser, '#card-preview-camera1')
 
     assert common.navigate_to_scene(browser, "Queuing")
-    assert check_person_marks(browser, '#atag-qcam1')
+    assert check_person_marks(browser, '#card-preview-atag-qcam1')
 
     log.info( "Camera images ARE updating on the scene" )
     exit_code = 0

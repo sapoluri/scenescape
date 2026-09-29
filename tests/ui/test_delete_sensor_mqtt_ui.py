@@ -23,7 +23,7 @@ SCENESCAPE_SPEC = FuncTestSpec(
 
 GOOD_DATA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'test_media/good_data.txt')
 SENSOR_NAME = 'Scene_Sensor_to_be_Deleted'
-SENSOR_ID = 'scene_sensor_to_be_deleted'
+SENSOR_ID = 'scene_sensor_del'
 SENSOR_TYPE_CHOICES = ['entire_scene', 'circle', 'triangle']
 VIEWPORT_SIZE = 1200
 is_receiving_message = False

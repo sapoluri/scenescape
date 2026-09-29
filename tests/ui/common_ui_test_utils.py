@@ -48,6 +48,8 @@ DEFAULT_SENSOR_TRIANGLE_HEIGHT = 600
 DEFAULT_SENSOR_TRIANGLE_LENGTH = 800
 DEFAULT_SENSOR_TRIANGLE_UPPER_LEFT_POINT = (-400, -300)
 BROWSER_WAIT = 5
+OBJECT_LIBRARY_WAIT = 30
+ASSET_SHEET_FORM_ID = "ss-asset-sheet-form"
 CALIBRATE_IFRAME = (
   By.CSS_SELECTOR,
   'iframe[title="Point calibrator"], .ss-workspace-cal-preview-frame iframe',
@@ -130,45 +132,67 @@ def check_page_login(browser, params):
     print("Logged in: ", logged_in)
   return logged_in
 
-def create_object_library(browser, object_name, max_radius=None, tracking_radius=None,
-                          max_height=None, mark_color=None, model_file=None):
+def object_library_row(browser, object_name):
+  """! Finds the Object Library table row cell holding the given asset name.
+  @param    browser                    Object wrapping the Selenium driver.
+  @param    object_name                Class of the tracked Object.
+  @return   list                       Matching <td> elements (empty when absent).
+  """
+  return browser.find_elements(
+    By.XPATH, "//td[normalize-space(text())='{0}']".format(object_name))
+
+def set_react_input_value(browser, element, value):
+  """! Sets a React-controlled input's value so that onChange still fires.
+  @param    browser                    Object wrapping the Selenium driver.
+  @param    element                    The input web element.
+  @param    value                      Value to assign.
+  @return   None
+  """
+  browser.execute_script("""
+    const el = arguments[0];
+    const proto = Object.getPrototypeOf(el);
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    setter.call(el, arguments[1]);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    """, element, value)
+
+def create_object_library(browser, object_name, tracking_radius=None,
+                          mark_color=None, model_file=None):
   """! Adds an Object to the Object Library.
   @param    browser                    Object wrapping the Selenium driver.
   @param    object_name                Class of the tracked Object.
-  @param    max_radius                 Max Object Radius (meters).
   @param    tracking_radius            Tracking radius (meters).
-  @param    max_height                 Max Object Height (meters).
   @param    mark_color                 Mark Color used for representation.
   @param    model_file                 Path to file to upload.
   @return   bool                       Boolean representing success.
   """
+  wait = WebDriverWait(browser, OBJECT_LIBRARY_WAIT)
   browser.find_element(By.ID, "nav-object-library").click()
-  obj_record = browser.find_elements(By.XPATH, "//td[text()='{0}']".format(object_name))
-  if len(obj_record) > 0:
+  wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-admin-list")))
+  if object_library_row(browser, object_name):
     print("3D object already exists, deleting it before proceeding ...")
     if not delete_object_library(browser, object_name):
       return False
-  browser.find_element(By.CSS_SELECTOR, "a[href^=\"/asset/create/\"]").click()
-  # Fill in the form
-  browser.find_element(By.ID, 'id_name').send_keys(object_name)
-  if max_radius:
-    browser.find_element(By.ID, "id_max_radius").clear()
-    browser.find_element(By.ID, "id_max_radius").send_keys(max_radius)
+  # The create form is a React drawer opened by the "+ New Object" link, not a
+  # separate /asset/create/ page (list-sheets-main.tsx intercepts the click).
+  wait.until(EC.element_to_be_clickable((By.ID, "new-asset"))).click()
+  wait.until(EC.visibility_of_element_located((By.ID, "ss-asset-name"))).send_keys(object_name)
   if tracking_radius:
-    browser.find_element(By.ID, "id_tracking_radius").clear()
-    browser.find_element(By.ID, "id_tracking_radius").send_keys(tracking_radius)
-  if max_height:
-    browser.find_element(By.ID, "id_max_height").clear()
-    browser.find_element(By.ID, "id_max_height").send_keys(max_height)
+    field = browser.find_element(By.ID, "ss-asset-track-r")
+    field.clear()
+    field.send_keys(tracking_radius)
   if mark_color:
-    browser.find_element(By.ID, "id_mark_color").clear()
-    browser.find_element(By.ID, "id_mark_color").send_keys(mark_color)
+    # <input type="color"> ignores send_keys; set it through React's value setter.
+    set_react_input_value(browser, browser.find_element(By.ID, "ss-asset-color"), mark_color)
   if model_file:
-    browser.find_element(By.ID, "id_model_3d").send_keys(model_file)
-  browser.find_element(By.CSS_SELECTOR, "input[value=\"Add New Object\"]").click()
-  # Verify object is shown in list
-  obj_record = browser.find_elements(By.XPATH, "//td[text()='{0}']".format(object_name))
-  if len(obj_record) == 0:
+    browser.find_element(By.ID, "ss-asset-glb").send_keys(model_file)
+  browser.find_element(
+    By.CSS_SELECTOR, 'button[type="submit"][form="{0}"]'.format(ASSET_SHEET_FORM_ID)).click()
+  # AssetSheet reloads the list page on a successful save (onSaved={reload}).
+  try:
+    wait.until(lambda drv: bool(object_library_row(drv, object_name)))
+  except TimeoutException:
     return False
   print('Object Library asset "{0}" created!'.format(object_name))
   return True
@@ -179,13 +203,19 @@ def delete_object_library(browser, object_name):
   @param    object_name                Name of the Object.
   @return   bool                       Boolean representing success.
   """
+  wait = WebDriverWait(browser, OBJECT_LIBRARY_WAIT)
   # navigate to 3D Assets page
   browser.find_element(By.ID, "nav-object-library").click()
-  browser.find_element(By.XPATH, "//td[text()='{0}']/parent::tr//i[contains(@class, 'bi-trash')]/parent::a".format(object_name)).click()
-  # click on delete confirmation button
-  browser.find_element(By.CSS_SELECTOR, "input[value^=\"Yes, Delete the Object!\"]").click()
-  obj_record = browser.find_elements(By.XPATH, "//td[text()='{0}']".format(object_name))
-  if len(obj_record) > 0:
+  wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-admin-list")))
+  browser.find_element(
+    By.XPATH,
+    "//td[normalize-space(text())='{0}']/parent::tr//i[contains(@class, 'bi-trash')]"
+    "/parent::a".format(object_name)).click()
+  wait.until(EC.element_to_be_clickable(
+    (By.CSS_SELECTOR, ".ss-confirm-dialog .ss-btn--danger-solid"))).click()
+  try:
+    wait.until_not(lambda drv: bool(object_library_row(drv, object_name)))
+  except TimeoutException:
     return False
   print('Object Library asset "{0}" deleted!'.format(object_name))
   return True
@@ -198,6 +228,19 @@ def wait_ss_drawer_closed(browser, timeout=None):
   """
   wait = WebDriverWait(browser, timeout if timeout is not None else BROWSER_WAIT)
   wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, ".ss-drawer-backdrop")))
+
+
+def submit_ss_drawer(browser, timeout=None):
+  """! Click the primary submit button of the open React drawer.
+  Every sheet passes its submit button to `Drawer`'s `actions` slot, which
+  renders into `.ss-drawer-header-actions` -- `.ss-drawer-footer` is never used.
+  @param    browser                    Object wrapping the Selenium driver.
+  @param    timeout                    Optional wait seconds (defaults to BROWSER_WAIT).
+  @return   None
+  """
+  wait = WebDriverWait(browser, timeout if timeout is not None else BROWSER_WAIT)
+  wait.until(EC.element_to_be_clickable(
+    (By.CSS_SELECTOR, ".ss-drawer-header-actions .ss-btn--primary"))).click()
 
 
 def confirm_ss_dialog(browser, label="Delete"):
@@ -221,9 +264,13 @@ def delete_scene(browser, scene_name):
   @return   bool                       Boolean representing success.
   """
   wait = WebDriverWait(browser, 30)
+  # A drawer left open by an earlier step would swallow the nav click.
+  wait_ss_drawer_closed(browser, timeout=30)
   browser.find_element(By.ID, "nav-scenes").click()
   wait.until(EC.presence_of_element_located((By.NAME, scene_name)))
-  browser.find_element(By.NAME, scene_name).find_element(By.NAME, "Delete").click()
+  # Scene cards carry the name attribute; the delete anchor is keyed by scene id.
+  card = browser.find_element(By.NAME, scene_name)
+  card.find_element(By.XPATH, ".//a[starts-with(@id, 'scene-delete-')]").click()
   confirm_ss_dialog(browser, "Delete")
   wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, ".ss-confirm")))
   wait.until(EC.presence_of_element_located((By.ID, "nav-scenes")))
@@ -367,13 +414,14 @@ def create_scene(browser, scene_name, scale, map_image):
   scale_field.clear()
   scale_field.send_keys(str(scale))
   browser.find_element(By.ID, "ss-scene-map").send_keys(map_image)
-  browser.find_element(
-    By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-  ).click()
-  # Create navigates to the new scene; wait for the drawer to leave first
+  submit_ss_drawer(browser)
   wait_ss_drawer_closed(browser, timeout=30)
-  wait.until(EC.element_to_be_clickable((By.ID, "nav-scenes"))).click()
-  wait.until(EC.presence_of_element_located((By.NAME, scene_name)))
+  nav_wait = WebDriverWait(browser, 30)
+  nav_wait.until(EC.element_to_be_clickable((By.ID, "nav-scenes"))).click()
+  nav_wait.until(
+    EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-scene-gallery"))
+  )
+  nav_wait.until(EC.presence_of_element_located((By.NAME, scene_name)))
   return True
 
 def inject_json(input_text, browser, element, form_id):
@@ -994,9 +1042,7 @@ def add_camera_to_scene(browser, scene_name, camera_id, camera_name):
       browser.find_element(By.ID, "ss-cam-sensor-id").send_keys(camera_id)
       browser.find_element(By.ID, "ss-cam-name").clear()
       browser.find_element(By.ID, "ss-cam-name").send_keys(camera_name)
-      browser.find_element(
-        By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-      ).click()
+      submit_ss_drawer(browser)
       wait_ss_drawer_closed(browser, timeout=30)
       print("Camera " + camera_name + " added to scene " + scene_name)
       return True
@@ -1045,9 +1091,7 @@ def create_sensor(browser, sensor_id, sensor_name, scene_name=None):
     select = Select(browser.find_element(By.ID, "ss-sensor-scene"))
     select.select_by_visible_text(scene_name)
 
-  browser.find_element(
-    By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-  ).click()
+  submit_ss_drawer(browser)
   wait_ss_drawer_closed(browser, timeout=30)
   return
 
@@ -1214,11 +1258,19 @@ def create_triangle_sensor(
   @return   True                       Returns True if the action is successful.
   """
   _ = (triangle_height, triangle_length, upper_left_point)
-  if points is None:
-    # Stable meter triangle used by React calibrate (replaces Snap.svg click-draw).
-    points = [[2.0, 2.0], [2.0, 6.0], [6.0, 6.0]]
-  set_sensor_cal_area(browser, "poly")
   wait = WebDriverWait(browser, BROWSER_WAIT * 4)
+  if points is None:
+    set_sensor_cal_area(browser, "circle")
+    wait.until(EC.presence_of_element_located((By.ID, "ss-sensor-cal-cx")))
+    center_x = float(browser.find_element(By.ID, "ss-sensor-cal-cx").get_attribute("value") or 0)
+    center_y = float(browser.find_element(By.ID, "ss-sensor-cal-cy").get_attribute("value") or 0)
+    circumradius = 6.0
+    points = [
+      [center_x, center_y + circumradius],
+      [center_x - circumradius * 0.8660254, center_y - circumradius * 0.5],
+      [center_x + circumradius * 0.8660254, center_y - circumradius * 0.5],
+    ]
+  set_sensor_cal_area(browser, "poly")
   wait.until(EC.presence_of_element_located((By.ID, "ss-sensor-cal-pts")))
   set_react_input_value(browser, "ss-sensor-cal-pts", json.dumps(points))
   return save_sensor_calibration(browser)
@@ -1243,12 +1295,19 @@ def delete_sensor(browser, sensor_name):
   ).click()
   confirm_ss_dialog(browser, "Delete")
 
-  # verify the absence of the sensor
-  if sensor_name not in browser.page_source:
-    print(f"Deleted {sensor_name} from Sensors page")
-    return True
-  print("Error while deleting sensor:", sensor_name)
-  return False
+  # The list re-renders after the REST delete resolves; page_source is stale
+  # until the row actually leaves the DOM.
+  try:
+    wait.until(
+      EC.invisibility_of_element_located(
+        (By.XPATH, f"//td[normalize-space()='{sensor_name}']")
+      )
+    )
+  except TimeoutException:
+    print("Error while deleting sensor:", sensor_name)
+    return False
+  print(f"Deleted {sensor_name} from Sensors page")
+  return True
 
 def verify_sensor_list(browser, sensor_names):
   """! Navigates to sensor page via the navigation bar and checks that the
@@ -1515,9 +1574,7 @@ def create_camera(browser, camera_name, camera_id, scene_name):
     select = Select(browser.find_element(By.ID, "ss-cam-scene"))
     select.select_by_visible_text(scene_name)
 
-  browser.find_element(
-    By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-  ).click()
+  submit_ss_drawer(browser)
   wait_ss_drawer_closed(browser, timeout=30)
   wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
 
@@ -1874,9 +1931,7 @@ def upload_scene_file(browser, scene_name, file):
   browser.find_element(By.ID, "ss-scene-map").send_keys(file.file_path)
 
   # Saves uploaded map via React scene sheet
-  browser.find_element(
-    By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-  ).click()
+  submit_ss_drawer(browser)
 
   page_path = f"/scene/detail/{TEST_SCENE_ID}/"
   selector_type = By.CSS_SELECTOR
@@ -2293,7 +2348,9 @@ class InteractWithSceneUpdate(InteractWithPage):
     wait.until(
       EC.element_to_be_clickable((By.ID, f"scene-edit-{TEST_SCENE_ID}"))
     ).click()
-    wait.until(EC.visibility_of_element_located((By.ID, "ss-scene-map")))
+    wait.until(
+      EC.visibility_of_element_located((By.ID, "ss-scene-manage-map-file"))
+    )
     return True
 
   def upload_file(self) -> bool:
@@ -2302,13 +2359,11 @@ class InteractWithSceneUpdate(InteractWithPage):
     """
     wait = WebDriverWait(self.browser, BROWSER_WAIT)
     correct_address = self.navigate_to_page(self.interaction_params.page_path)
-    field_selector = self.interaction_params.field_selector or "#ss-scene-map"
+    field_selector = self.interaction_params.field_selector or "#ss-scene-manage-map-file"
     wait.until(
       EC.presence_of_element_located((By.CSS_SELECTOR, field_selector))
     ).send_keys(self.interaction_params.file_path)
-    self.browser.find_element(
-      By.CSS_SELECTOR, ".ss-drawer-footer .ss-btn--primary"
-    ).click()
+    submit_ss_drawer(self.browser)
     if correct_address:
       success_str = "Submitting upload {fname} succeeded: {fpath}".format(
         fname=self.interaction_params.field_name,
