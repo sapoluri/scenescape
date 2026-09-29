@@ -125,8 +125,8 @@ calibrate-cam|calibrate-sensor`.
 
 | Mode | How | Used for | Portable? |
 | --- | --- | --- | --- |
-| Token | `Authorization: Token <authToken>` from bootstrap / `ss-auth-bootstrap` | `/api/v1` CRUD + deletes via `lib/rest.ts` / `lib/restDelete.ts` | **Yes** — long-term |
-| Session + CSRF | cookie + `X-CSRFToken` via `lib/session.ts` | Mesh generate, model-directory; DeleteView POST only if no token | **No** — replace remaining callers |
+| Token | `Authorization: Token <authToken>` from bootstrap / `ss-auth-bootstrap` | `/api/v1` CRUD, deletes, model-directory via `lib/rest.ts` / `lib/restDelete.ts` / `modelDirectoryApi.ts` | **Yes** — long-term |
+| Session + CSRF | cookie + `X-CSRFToken` via `lib/session.ts` | Mesh generate/status; DeleteView POST only if no token | **No** — replace remaining callers |
 | Session cookie | `credentials: "same-origin"` | Page shell, media, static | Host concern |
 
 Login today is Django session (`sign_in/`); Token is issued for the signed-in
@@ -158,7 +158,7 @@ Base: `/api/v1`. Client: `manager/frontend/src/lib/rest.ts`.
 
 | Call | Path | Auth |
 | --- | --- | --- |
-| Model directory | `/api/v1/model-directory/` | Session + CSRF |
+| Model directory | `/api/v1/model-directory/` | Token |
 | Mesh generate / status | `/scene/generate-mesh/{uuid}/`, `/scene/generate-mesh-status/{uuid}/` | Session + CSRF |
 | Mapping status | `/mapping-service/status/` | Token |
 | Deletes | bootstrap `deleteUrl` → Token `DELETE /api/v1/...` (CSRF DeleteView fallback) | Token (preferred) |
@@ -219,7 +219,7 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
 
 - **Drift** — Treat TS bootstrap types + this doc + OpenAPI as one change set
   when fields move.
-- **Partial auth portability** — Deletes / mesh / models still CSRF; track as
+- **Partial auth portability** — Mesh generate/status still CSRF; track as
   explicit debt until Token REST replacements exist.
 - **MQTT still on `window.ssMqttClient`** — Document topics now; move ownership
   to React in a later slice without changing topic strings.

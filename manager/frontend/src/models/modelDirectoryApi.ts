@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { sessionFetch } from "../lib/session";
+import { readAuthToken } from "../lib/authToken";
+import { tokenAuthHeaders } from "../lib/session";
 
 export type TreeNode = { [name: string]: TreeNode | null };
 
@@ -13,6 +14,13 @@ export type LoadResponse = {
 };
 
 const API = "/api/v1/model-directory/";
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  return {
+    ...tokenAuthHeaders(readAuthToken()),
+    ...extra,
+  };
+}
 
 async function readError(resp: Response): Promise<string> {
   try {
@@ -31,11 +39,12 @@ async function request(
   query: string,
   body?: FormData,
 ): Promise<string> {
-  const resp = await sessionFetch(`${API}${query}`, {
+  const resp = await fetch(`${API}${query}`, {
     method,
-    headers: {
+    credentials: "same-origin",
+    headers: authHeaders({
       Accept: "text/plain, application/json",
-    },
+    }),
     body,
   });
   const text = (await resp.text()).trim();
@@ -55,8 +64,9 @@ export async function loadTree(
     folder_name: folderName,
     format: "json",
   });
-  const resp = await sessionFetch(`${API}?${params}`, {
-    headers: { Accept: "application/json" },
+  const resp = await fetch(`${API}?${params}`, {
+    credentials: "same-origin",
+    headers: authHeaders({ Accept: "application/json" }),
   });
   if (!resp.ok) {
     throw new Error(await readError(resp));
@@ -73,7 +83,10 @@ export async function checkExists(
     path,
     folder_name: folderName,
   });
-  const resp = await sessionFetch(`${API}?${params}`, {});
+  const resp = await fetch(`${API}?${params}`, {
+    credentials: "same-origin",
+    headers: authHeaders(),
+  });
   if (!resp.ok) {
     throw new Error(await readError(resp));
   }
