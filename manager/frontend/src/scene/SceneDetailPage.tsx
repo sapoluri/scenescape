@@ -10,6 +10,7 @@ import {
 } from "react";
 import { SCENE_TAB_COUNTS_EVENT, type SceneTabCounts } from "../lib/sceneTab";
 import { fitSceneMapDisplay } from "../lib/legacyBridge";
+import { useSceneMqtt, useCameraStripMqtt } from "../mqtt";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ToastProvider } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
@@ -112,6 +113,13 @@ function SceneDetailInner({ bootstrap }: Props) {
    * parent effects, so an effect here would race the first render.
    */
   window.ssUseReactMap = Boolean(mapBitmapUrl);
+
+  useSceneMqtt({
+    sceneId: scene.id,
+    wssConnection: scene.wssConnection || "",
+    enabled: Boolean(mapBitmapUrl),
+  });
+  useCameraStripMqtt(Boolean(mapBitmapUrl));
 
   useEffect(() => {
     const setSceneRateCb = (hz: string) => setSceneRate(hz || "--");
@@ -414,6 +422,7 @@ function SceneDetailInner({ bootstrap }: Props) {
         <div className="ss-workspace-main">
           <SceneMapPane
             mapUrl={mapBitmapUrl}
+            sensors={sensors}
             setupHelper={
               !mapBitmapUrl && isSuperuser ? (
                 <SceneMapSetupHelper

@@ -462,6 +462,10 @@ function sensorHasMapGeometry(sensor) {
 
 /** Draw / refresh singleton sensors from React-rendered .singleton cards. */
 window.ssDrawSingletonSensors = function () {
+  // React SensorLayer owns local sensors when the React map is active.
+  if (window.ssUseReactMap) {
+    return;
+  }
   if (typeof svgCanvas === "undefined" || !svgCanvas) {
     return;
   }
@@ -576,7 +580,277 @@ window.ssSyncRoiColorSectors = function (uuid, sectorsPayload) {
   }
 };
 
+/**
+ * Bind regulated/event/mark/image handlers on an MQTT client.
+ * React scene-detail owns connect and calls this so Snap marks stay live.
+ */
+window.ssAttachSceneMqttClient = function (client) {
+  if (!client || client.__ssSceneHandlersBound) {
+    return;
+  }
+  client.__ssSceneHandlersBound = true;
+
+  client.on("connect", function () {
+    console.log("MQTT scene handlers connected");
+    var topicVal = $("#topic").val();
+    if (
+      (topicVal === undefined || topicVal === null || topicVal === "") &&
+      scene_id
+    ) {
+      topicVal = APP_NAME + DATA_REGULATED + scene_id;
+    }
+    if (topicVal) {
+      client.subscribe(topicVal);
+      console.log("Subscribed to " + topicVal);
+    }
+
+    client.subscribe(APP_NAME + "/event/" + "+/" + scene_id + "/+/+");
+    console.log(
+      "Subscribed to " + APP_NAME + "/event/" + "+/" + scene_id + "/+/+",
+    );
+
+    if (document.getElementById("scene_children")?.value !== "0") {
+      client.subscribe(APP_NAME + SYS_CHILDSCENE_STATUS + "/+");
+      console.log("Subscribed to " + APP_NAME + SYS_CHILDSCENE_STATUS + "/+");
+      var remote_childs = $("[id^='mqtt_status_remote']")
+        .map((_, el) => el.id.split("_").slice(3).join("_"))
+        .get();
+      remote_childs.forEach((e) => {
+        client.publish(
+          APP_NAME + SYS_CHILDSCENE_STATUS + "/" + e,
+          "isConnected",
+        );
+      });
+    }
+
+    $("#mqtt_status").addClass("connected");
+    window.dispatchEvent(
+      new CustomEvent("ss-mqtt-status", { detail: { connected: true } }),
+    );
+    window.dispatchEvent(new CustomEvent("ss-mqtt-connected"));
+
+    if (isCalibratePage()) {
+      var calSensor = calibrateSensorId();
+      if (calSensor) {
+        client.subscribe(APP_NAME + IMAGE_CALIBRATE + calSensor);
+      }
+      requestCalibrateFrames(client);
+    } else {
+      client.subscribe(APP_NAME + IMAGE_CAMERA + "+");
+    }
+
+    if (!window.ssReactOwnsCameraStrip) {
+      window.ssRefreshCameraSnapshots();
+      window.setTimeout(function () {
+        window.ssRefreshCameraSnapshots();
+      }, 500);
+      window.setTimeout(function () {
+        window.ssRefreshCameraSnapshots();
+      }, 1500);
+      $(document)
+        .off("change.ssLiveView", "input#live-view")
+        .on("change.ssLiveView", "input#live-view", function () {
+          if ($(this).is(":checked")) {
+            window.ssRefreshCameraSnapshots();
+            $("#ss-tab-cameras").click();
+            $(".camera-card").addClass("live-view");
+          } else {
+            $(".camera-card").removeClass("live-view");
+          }
+        });
+    }
+  });
+
+  client.on("close", function () {
+    $("[id^='mqtt_status']").removeClass("connected");
+    $(".rate").text("--");
+    $("#scene-rate").text("--");
+    if (
+      window.ssSceneTelemetry &&
+      typeof window.ssSceneTelemetry.clearRates === "function"
+    ) {
+      window.ssSceneTelemetry.clearRates();
+    }
+    if (
+      window.ssSceneTelemetry &&
+      typeof window.ssSceneTelemetry.setSceneRate === "function"
+    ) {
+      window.ssSceneTelemetry.setSceneRate("--");
+    }
+    window.dispatchEvent(new CustomEvent("ss-telemetry-clear"));
+    window.dispatchEvent(
+      new CustomEvent("ss-mqtt-status", { detail: { connected: false } }),
+    );
+  });
+
+  client.on("message", function (topic, data) {
+    var msg;
+    try {
+      msg = JSON.parse(data);
+    } catch (error) {
+      msg = String(data);
+    }
+
+    if (topic.includes(DATA_REGULATED)) {
+      if (show_telemetry) {
+        if (msg.rate && typeof msg.rate === "object") {
+          for (const [key, value] of Object.entries(msg.rate)) {
+            var fps = Number(value);
+            var rateText =
+              (Number.isFinite(fps) ? fps.toFixed(2) : "--") + " FPS";
+            applyCameraRate(key, rateText);
+          }
+        }
+
+        var sceneRateEl = document.getElementById("scene-rate");
+        var sceneRate = Number(msg.scene_rate);
+        if (Number.isFinite(sceneRate)) {
+          var sceneRateText = sceneRate.toFixed(1);
+          if (sceneRateEl) {
+            sceneRateEl.innerText = sceneRateText;
+          }
+          if (
+            window.ssSceneTelemetry &&
+            typeof window.ssSceneTelemetry.setSceneRate === "function"
+          ) {
+            window.ssSceneTelemetry.setSceneRate(sceneRateText);
+          }
+          window.dispatchEvent(
+            new CustomEvent("ss-scene-rate", {
+              detail: { hz: sceneRateText },
+            }),
+          );
+        }
+      }
+
+      schedulePlot(msg.objects || []);
+    } else if (topic.includes("event")) {
+      var etype = topic.split("/")[2];
+      if (etype == "region") {
+        if (msg["metadata"]?.fromSensor == true) {
+          drawSensor(
+            msg["metadata"],
+            msg["metadata"]["title"],
+            "child_sensor",
+          );
+        } else {
+          drawRoi(msg["metadata"], msg["metadata"]["uuid"], "child_roi");
+        }
+        var counts = msg["counts"];
+        var occupancy = 0;
+        if (counts && typeof counts === "object") {
+          Object.keys(counts).forEach(function (category) {
+            var count = counts[category];
+            if (typeof count === "number") {
+              occupancy += count;
+            }
+          });
+          setROIColor(msg["metadata"]["uuid"], occupancy);
+        }
+
+        var value = msg["value"];
+        if (value) {
+          setSensorColor(
+            msg["metadata"]["title"],
+            value,
+            msg["metadata"]["area"],
+          );
+        }
+      } else if (etype == "tripwire") {
+        var trip = msg["metadata"];
+        trip.points[0] = metersToPixels(trip.points[0], scale, scene_y_max);
+        trip.points[1] = metersToPixels(trip.points[1], scale, scene_y_max);
+        newTripwire(trip, msg["metadata"]["uuid"], "child_tripwire");
+      }
+    } else if (topic.includes("singleton")) {
+      plotSingleton(msg);
+    } else if (topic.includes(IMAGE_CALIBRATE)) {
+      applyCalibrationImage(msg);
+    } else if (topic.includes(IMAGE_CAMERA)) {
+      if (isCalibratePage() || window.ssReactOwnsCameraStrip) {
+        return;
+      }
+      if ($(".snapshot-image").length) {
+        var id = topic.split("camera/")[1];
+        var live = isLiveViewEnabled();
+        var previewImgs = document.querySelectorAll(
+          "[id='" +
+            id +
+            "'], [id='card-preview-" +
+            id +
+            "'], [data-ss-card-sensor='" +
+            id +
+            "'], [data-ss-card-name='" +
+            id +
+            "']",
+        );
+        previewImgs.forEach(function (img) {
+          if (!live && cameraStripHasPreview(img)) {
+            return;
+          }
+          if (!msg || !msg.image) {
+            return;
+          }
+          img.setAttribute("src", "data:image/jpeg;base64," + msg.image);
+          img.classList.remove("display-none");
+          var offline = img.parentElement
+            ? img.parentElement.querySelectorAll(".cam-offline")
+            : [];
+          offline.forEach(function (el) {
+            el.style.display = "none";
+            el.hidden = true;
+          });
+        });
+
+        if (live) {
+          client.publish(APP_NAME + CMD_CAMERA + id, "getimage");
+        }
+      }
+    } else if (topic.includes(DATA_CAMERA)) {
+      var camId = topic.slice(topic.lastIndexOf("/") + 1);
+      if (show_telemetry) {
+        var camFps = Number(msg.rate);
+        var camRateText =
+          (Number.isFinite(camFps) ? camFps.toFixed(2) : "--") + " FPS";
+        applyCameraRate(camId, camRateText);
+      }
+      $("#updated-" + camId).text(msg.timestamp);
+    } else if (topic.includes("/child/status")) {
+      var child = topic.slice(topic.lastIndexOf("/") + 1);
+      if (msg === "connected") {
+        console.log(child + msg);
+        $("#mqtt_status_remote_" + child).addClass("connected");
+      } else if (msg === "disconnected") {
+        $("#mqtt_status_remote_" + child).removeClass("connected");
+      }
+    }
+  });
+
+  client.on("error", function (e) {
+    console.log("MQTT error: " + e);
+  });
+
+  if (!window.ssReactOwnsMqtt) {
+    $("#disconnect")
+      .off("click.ssMqttDisconnect")
+      .on("click.ssMqttDisconnect", function () {
+        sessionStorage.setItem("connectToMqtt", false);
+        client.end();
+      });
+  }
+
+  var snapshotTopic = APP_NAME + CMD_CAMERA + $("#sensor_id").val();
+  $("#snapshot").on("click", function () {
+    client.publish(snapshotTopic, "getcalibrationimage");
+  });
+};
+
 async function checkBrokerConnections() {
+  // React scene-detail owns connect when ssReactOwnsMqtt / ssUseReactMap is set.
+  if (window.ssReactOwnsMqtt || window.ssUseReactMap) {
+    return;
+  }
+
   const urlSecure = "wss://" + window.location.host + "/mqtt";
 
   try {
@@ -616,254 +890,7 @@ async function checkBrokerConnections() {
       var client = mqtt.connect(brokerUrl);
       window.ssMqttClient = client;
       sessionStorage.setItem("connectToMqtt", true);
-
-      client.on("connect", function () {
-        console.log("Connected to " + brokerUrl);
-        if ($("#topic").val() !== undefined) {
-          client.subscribe($("#topic").val());
-          console.log("Subscribed to " + $("#topic").val());
-        }
-
-        client.subscribe(APP_NAME + "/event/" + "+/" + scene_id + "/+/+");
-        console.log(
-          "Subscribed to " + APP_NAME + "/event/" + "+/" + scene_id + "/+/+",
-        );
-
-        if (document.getElementById("scene_children")?.value !== "0") {
-          client.subscribe(APP_NAME + SYS_CHILDSCENE_STATUS + "/+");
-          console.log(
-            "Subscribed to " + APP_NAME + SYS_CHILDSCENE_STATUS + "/+",
-          );
-          var remote_childs = $("[id^='mqtt_status_remote']")
-            .map((_, el) => el.id.split("_").slice(3).join("_"))
-            .get();
-          remote_childs.forEach((e) => {
-            client.publish(
-              APP_NAME + SYS_CHILDSCENE_STATUS + "/" + e,
-              "isConnected",
-            );
-          });
-        }
-
-        $("#mqtt_status").addClass("connected");
-
-        // Camera strip may mount via React after connect — always wire live-view + subscribe.
-        if (isCalibratePage()) {
-          var calSensor = calibrateSensorId();
-          if (calSensor) {
-            client.subscribe(APP_NAME + IMAGE_CALIBRATE + calSensor);
-          }
-          requestCalibrateFrames(client);
-        } else {
-          client.subscribe(APP_NAME + IMAGE_CAMERA + "+");
-        }
-        window.ssRefreshCameraSnapshots();
-        // React camera cards may portal in after this connect callback.
-        window.setTimeout(function () {
-          window.ssRefreshCameraSnapshots();
-        }, 500);
-        window.setTimeout(function () {
-          window.ssRefreshCameraSnapshots();
-        }, 1500);
-        // Delegated: #live-view remounts with the cameras tab toolbar.
-        $(document)
-          .off("change.ssLiveView", "input#live-view")
-          .on("change.ssLiveView", "input#live-view", function () {
-            if ($(this).is(":checked")) {
-              window.ssRefreshCameraSnapshots();
-              $("#ss-tab-cameras").click();
-              $(".camera-card").addClass("live-view");
-            } else {
-              $(".camera-card").removeClass("live-view");
-            }
-          });
-      });
-
-      client.on("close", function () {
-        $("[id^='mqtt_status']").removeClass("connected");
-        $(".rate").text("--");
-        $("#scene-rate").text("--");
-        if (
-          window.ssSceneTelemetry &&
-          typeof window.ssSceneTelemetry.clearRates === "function"
-        ) {
-          window.ssSceneTelemetry.clearRates();
-        }
-        if (
-          window.ssSceneTelemetry &&
-          typeof window.ssSceneTelemetry.setSceneRate === "function"
-        ) {
-          window.ssSceneTelemetry.setSceneRate("--");
-        }
-        window.dispatchEvent(new CustomEvent("ss-telemetry-clear"));
-      });
-
-      client.on("message", function (topic, data) {
-        var msg;
-        try {
-          msg = JSON.parse(data);
-        } catch (error) {
-          msg = String(data);
-        }
-        var img;
-
-        if (topic.includes(DATA_REGULATED)) {
-          if (show_telemetry) {
-            // Show the FPS for each camera that currently has a live preview.
-            // scene.rate is a sticky cache and still lists cameras that went offline.
-            if (msg.rate && typeof msg.rate === "object") {
-              for (const [key, value] of Object.entries(msg.rate)) {
-                var fps = Number(value);
-                var rateText =
-                  (Number.isFinite(fps) ? fps.toFixed(2) : "--") + " FPS";
-                applyCameraRate(key, rateText);
-              }
-            }
-
-            // Show the scene controller update rate
-            var sceneRateEl = document.getElementById("scene-rate");
-            var sceneRate = Number(msg.scene_rate);
-            if (Number.isFinite(sceneRate)) {
-              var sceneRateText = sceneRate.toFixed(1);
-              if (sceneRateEl) {
-                sceneRateEl.innerText = sceneRateText;
-              }
-              if (
-                window.ssSceneTelemetry &&
-                typeof window.ssSceneTelemetry.setSceneRate === "function"
-              ) {
-                window.ssSceneTelemetry.setSceneRate(sceneRateText);
-              }
-              window.dispatchEvent(
-                new CustomEvent("ss-scene-rate", {
-                  detail: { hz: sceneRateText },
-                }),
-              );
-            }
-          }
-
-          // Plot the marks (coalesce to one paint per animation frame)
-          schedulePlot(msg.objects || []);
-        } else if (topic.includes("event")) {
-          var etype = topic.split("/")[2];
-          if (etype == "region") {
-            if (msg["metadata"]?.fromSensor == true) {
-              drawSensor(
-                msg["metadata"],
-                msg["metadata"]["title"],
-                "child_sensor",
-              );
-            } else {
-              drawRoi(msg["metadata"], msg["metadata"]["uuid"], "child_roi");
-            }
-            var counts = msg["counts"];
-            var occupancy = 0;
-            if (counts && typeof counts === "object") {
-              Object.keys(counts).forEach(function (category) {
-                var count = counts[category];
-                if (typeof count === "number") {
-                  occupancy += count;
-                }
-              });
-              setROIColor(msg["metadata"]["uuid"], occupancy);
-            }
-
-            var value = msg["value"];
-            if (value) {
-              setSensorColor(
-                msg["metadata"]["title"],
-                value,
-                msg["metadata"]["area"],
-              );
-            }
-          } else if (etype == "tripwire") {
-            var trip = msg["metadata"];
-            trip.points[0] = metersToPixels(trip.points[0], scale, scene_y_max);
-            trip.points[1] = metersToPixels(trip.points[1], scale, scene_y_max);
-            newTripwire(trip, msg["metadata"]["uuid"], "child_tripwire");
-          }
-        } else if (topic.includes("singleton")) {
-          plotSingleton(msg);
-        } else if (topic.includes(IMAGE_CALIBRATE)) {
-          applyCalibrationImage(msg);
-        } else if (topic.includes(IMAGE_CAMERA)) {
-          if (isCalibratePage()) {
-            return;
-          }
-          // Use native JS since jQuery.load() pukes on data URI's
-          if ($(".snapshot-image").length) {
-            var id = topic.split("camera/")[1];
-            var live = isLiveViewEnabled();
-            var previewImgs = document.querySelectorAll(
-              "[id='" +
-                id +
-                "'], [id='card-preview-" +
-                id +
-                "'], [data-ss-card-sensor='" +
-                id +
-                "'], [data-ss-card-name='" +
-                id +
-                "']",
-            );
-            previewImgs.forEach(function (img) {
-              // Live View off: keep the first thumbnail; ignore later frames
-              // from connect/mount getimage retries.
-              if (!live && cameraStripHasPreview(img)) {
-                return;
-              }
-              if (!msg || !msg.image) {
-                return;
-              }
-              img.setAttribute("src", "data:image/jpeg;base64," + msg.image);
-              img.classList.remove("display-none");
-              var offline = img.parentElement
-                ? img.parentElement.querySelectorAll(".cam-offline")
-                : [];
-              offline.forEach(function (el) {
-                el.style.display = "none";
-                el.hidden = true;
-              });
-            });
-
-            if (live) {
-              client.publish(APP_NAME + CMD_CAMERA + id, "getimage");
-            }
-          }
-        } else if (topic.includes(DATA_CAMERA)) {
-          var id = topic.slice(topic.lastIndexOf("/") + 1);
-          if (show_telemetry) {
-            var camFps = Number(msg.rate);
-            var camRateText =
-              (Number.isFinite(camFps) ? camFps.toFixed(2) : "--") + " FPS";
-            applyCameraRate(id, camRateText);
-          }
-          $("#updated-" + id).text(msg.timestamp);
-        } else if (topic.includes("/child/status")) {
-          var child = topic.slice(topic.lastIndexOf("/") + 1);
-          if (msg === "connected") {
-            console.log(child + msg);
-            $("#mqtt_status_remote_" + child).addClass("connected");
-          } else if (msg === "disconnected") {
-            $("#mqtt_status_remote_" + child).removeClass("connected");
-          }
-        }
-      });
-
-      client.on("error", function (e) {
-        console.log("MQTT error: " + e);
-      });
-
-      $("#disconnect")
-        .off("click.ssMqttDisconnect")
-        .on("click.ssMqttDisconnect", function () {
-          sessionStorage.setItem("connectToMqtt", false);
-          client.end();
-        });
-
-      var topic = APP_NAME + CMD_CAMERA + $("#sensor_id").val();
-      $("#snapshot").on("click", function () {
-        client.publish(topic, "getcalibrationimage");
-      });
+      window.ssAttachSceneMqttClient(client);
     });
 
   // Connect by default
@@ -920,6 +947,14 @@ $("#auto-autocalibration").on("click", async function () {
 });
 
 function plotSingleton(m) {
+  window.dispatchEvent(
+    new CustomEvent("ss-singleton", {
+      detail: { id: m.id, value: m.value, status: m.status },
+    }),
+  );
+  if (window.ssUseReactMap) {
+    return;
+  }
   var $sensor = $("#sensor_" + m.id);
 
   $(".area", $sensor).css("fill", m.status);
@@ -2471,7 +2506,11 @@ $(document).ready(function () {
 
   // MQTT management (see https://github.com/mqttjs/MQTT.js)
   // #broker may appear after React adopts panels — also exposed as ssEnsureMqttScene.
+  // When React owns scene-detail MQTT (ssReactOwnsMqtt), skip legacy wiring.
   window.ssEnsureMqttScene = function () {
+    if (window.ssReactOwnsMqtt || window.ssUseReactMap) {
+      return;
+    }
     if ($("#broker").length == 0) {
       return;
     }

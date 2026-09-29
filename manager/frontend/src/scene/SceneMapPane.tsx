@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { fitSceneMapDisplay } from "../lib/legacyBridge";
 import { LEGACY_MAP_IDS, notifyMapHostReady } from "../map/legacyMapHost";
 import { ReactSceneMap } from "./map/ReactSceneMap";
+import type { SceneSensorBootstrap } from "./types";
 import "./SceneMapPane.css";
 
 function refitMap(): void {
@@ -42,6 +43,7 @@ type Props = {
   mapUrl?: string | null;
   mapWidth?: number;
   mapHeight?: number;
+  sensors?: SceneSensorBootstrap[];
   setupHelper?: ReactNode;
 };
 
@@ -54,6 +56,7 @@ export const SceneMapPane = memo(function SceneMapPane({
   mapUrl = null,
   mapWidth = 1280,
   mapHeight = 720,
+  sensors = [],
   setupHelper = null,
 }: Props) {
   const slotRef = useRef<HTMLDivElement>(null);
@@ -199,6 +202,7 @@ export const SceneMapPane = memo(function SceneMapPane({
                 mapHref={mapUrl}
                 mapWidth={naturalSize.width || mapWidth}
                 mapHeight={naturalSize.height || mapHeight}
+                sensors={sensors}
               />
             </div>,
             stage,

@@ -11,11 +11,7 @@ import {
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAppToast } from "../../components/ToastProvider";
 import { ACTION_ICONS } from "../../components/actionIcons";
-import {
-  drawSingletonSensors,
-  refreshCameraSnapshots,
-  removeSingletonSensor,
-} from "../../lib/legacyBridge";
+import { refreshCameraStrip } from "../../mqtt";
 import { api, type RestError } from "../../lib/rest";
 import { publishSceneTabCounts } from "../../lib/sceneTab";
 import { copyTextToClipboard } from "../editors/copyText";
@@ -46,7 +42,7 @@ export function CamerasPanelContent({
   const canDelete = Boolean(authToken && onCamerasChange);
 
   useEffect(() => {
-    const refresh = () => refreshCameraSnapshots();
+    const refresh = () => refreshCameraStrip();
     refresh();
     const t1 = window.setTimeout(refresh, 400);
     const t2 = window.setTimeout(refresh, 1200);
@@ -212,8 +208,8 @@ export function SensorsPanelContent({
   const canDelete = Boolean(authToken && onSensorsChange);
 
   useEffect(() => {
-    drawSingletonSensors();
-  }, [sensors]);
+    publishSceneTabCounts({ sensors: sensors.length });
+  }, [sensors.length]);
 
   const confirmSensorDelete = useCallback(async () => {
     if (!pendingSensor || !authToken || !onSensorsChange) {
@@ -223,7 +219,6 @@ export function SensorsPanelContent({
     setDeleteError(null);
     try {
       await api.deleteSensor(authToken, pendingSensor.sensorId);
-      removeSingletonSensor(pendingSensor.sensorId);
       onSensorsChange((prev) =>
         prev.filter(
           (s) =>

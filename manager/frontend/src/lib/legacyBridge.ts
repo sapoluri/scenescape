@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Typed React → hybrid `sscape.js` bridges.
+ * Typed React → hybrid `sscape.js` bridges for Snap map / ROI helpers.
  *
- * Prefer this module over ad-hoc `window.ss*` / `window.fitSceneMapDisplay`
- * in React. Implementations still live on `window` until MQTT/map ownership
- * moves fully into React (plan item D remainder).
+ * MQTT connect, camera strip, and local sensor draw are React-owned
+ * (`src/mqtt/`, `SensorLayer`). Do not reintroduce those via this module.
  */
 
 type PersistOptions = { preferHidden?: boolean } | string[];
@@ -40,22 +39,6 @@ export function numberTripwires(): void {
   window.numberTripwires?.();
 }
 
-export function refreshCameraSnapshots(): void {
-  window.ssRefreshCameraSnapshots?.();
-}
-
-export function drawSingletonSensors(): void {
-  window.ssDrawSingletonSensors?.();
-}
-
-export function removeSingletonSensor(sensorId: string): void {
-  window.ssRemoveSingletonSensor?.(sensorId);
-}
-
-export function ensureMqttScene(): void {
-  window.ssEnsureMqttScene?.();
-}
-
 export function syncRoiColorSectors(
   uuid: string,
   sectors: RoiColorSectors,
@@ -75,10 +58,6 @@ export function persistGeometry(
 
 declare global {
   interface Window {
-    ssRefreshCameraSnapshots?: () => void;
-    ssDrawSingletonSensors?: () => void;
-    ssRemoveSingletonSensor?: (sensorId: string) => void;
-    ssEnsureMqttScene?: () => void;
     ssSyncRoiColorSectors?: (uuid: string, sectors: RoiColorSectors) => void;
     ssReapplyRoiColors?: () => void;
   }

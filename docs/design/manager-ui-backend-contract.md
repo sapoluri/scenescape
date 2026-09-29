@@ -172,8 +172,9 @@ change.
 ### 5.4 MQTT (2D UI)
 
 Transport: WSS broker URL (`scene.wssConnection` / `wss://{host}/mqtt`).
-App prefix: `scenescape`. Live client today is legacy `window.ssMqttClient`
-(`sscape.js`); React MQTT module is not yet the transport owner.
+App prefix: `scenescape`. Scene-detail React owns connect (`src/mqtt`) and
+assigns `window.ssMqttClient`; Snap mark/event handlers attach via
+`ssAttachSceneMqttClient`. Calibrate pages still use legacy `ssEnsureMqttScene`.
 
 | Direction | Pattern | Role |
 | --- | --- | --- |
@@ -232,8 +233,8 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
   when fields move.
 - **Partial auth portability** — Legacy session mesh URLs remain for
   compatibility; UI uses Token `/api/v1` mesh endpoints.
-- **MQTT still on `window.ssMqttClient`** — Document topics now; move ownership
-  to React in a later slice without changing topic strings.
+- **MQTT shared client** — React owns connect on scene detail; Snap still
+  consumes `ssMqttClient` for marks until a marks epic moves them.
 
 ## 8. Rollout / Migration Plan
 

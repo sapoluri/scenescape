@@ -21,6 +21,8 @@ import {
   readSceneYMax,
 } from "./coords";
 import { reapplyRoiColors } from "../../lib/legacyBridge";
+import { SensorLayer } from "./SensorLayer";
+import type { SceneSensorBootstrap } from "../types";
 import "./reactSceneMap.css";
 
 type Mode = "idle" | "add-roi" | "add-trip";
@@ -29,6 +31,7 @@ type Props = {
   mapHref: string;
   mapWidth: number;
   mapHeight: number;
+  sensors?: SceneSensorBootstrap[];
 };
 
 /** Extra viewBox room so marker labels above/beside edge sensors aren't clipped. */
@@ -128,6 +131,7 @@ export const ReactSceneMap = memo(function ReactSceneMap({
   mapHref,
   mapWidth,
   mapHeight,
+  sensors = [],
 }: Props) {
   const [rois, setRois] = useState<RoiGeometry[]>(() => getRoiList());
   const [trips, setTrips] = useState<TripwireGeometry[]>(() =>
@@ -410,6 +414,7 @@ export const ReactSceneMap = memo(function ReactSceneMap({
           </g>
         );
       })}
+      <SensorLayer sensors={sensors} scale={scale} sceneYMax={sceneYMax} />
       {draftPx.length > 0 ? (
         <g className="ss-react-draft">
           {mode === "add-roi" && draftPx.length >= 3 ? (

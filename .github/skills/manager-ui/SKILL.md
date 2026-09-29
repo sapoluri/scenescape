@@ -165,23 +165,29 @@ SVG `g.roi` / `g.tripwire`, `adding-roi` / `adding-tripwire`.
 
 ### `window` APIs
 
-React call sites go through `manager/frontend/src/lib/legacyBridge.ts`
-(not ad-hoc `window.*`). Bridges still installed for hybrid `sscape.js`:
+React scene-detail owns MQTT connect (`src/mqtt/useSceneMqtt`), camera strip
+frames (`useCameraStripMqtt`), and local sensors (`SensorLayer`). Snap map /
+ROI helpers still go through `lib/legacyBridge.ts`.
+
+Still installed for hybrid / Snap:
 
 `fitSceneMapDisplay`, `numberRois` / `numberTripwires`,
 `stringifyRois` / `stringifyTripwires`, `ssPersistGeometry` (React install;
 sscape `saveRois` still calls it), `ssMap`, `ssRoiEditors`,
-`ssRefreshCameraSnapshots` / `ssDrawSingletonSensors` /
-`ssRemoveSingletonSensor`, `ssEnsureMqttScene`,
+`ssAttachSceneMqttClient` / `ssMqttClient` (shared transport; React connects),
 `ssToast` / `ssConfirm` (legacy JS only; React uses providers/dialogs),
-`ssSceneTelemetry`, `ssMqttClient`,
-`ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
+`ssSceneTelemetry`, `ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
+
+Calibrate / non-React pages may still use: `ssEnsureMqttScene`,
+`ssRefreshCameraSnapshots`, `ssDrawSingletonSensors`,
+`ssRemoveSingletonSensor`.
 
 sscape-internal only (not React-facing): `getRoiValues`, `saveRois`.
 
 Events: `ss-roi-form-add`, `ss-tripwire-form-add`, `ss-scene-rate`,
 `ss-camera-rate`, `ss-telemetry-clear`, `ss-map-host-ready`,
-`ss-tab-counts`, `ss-scene-tab`, `ss-roi-dirty`, `ss-trip-dirty`.
+`ss-tab-counts`, `ss-scene-tab`, `ss-roi-dirty`, `ss-trip-dirty`,
+`ss-mqtt-status`, `ss-mqtt-connected`, `ss-singleton`.
 
 ### REST (Manager persist)
 

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect } from "react";
-import { ensureMqttScene } from "../lib/legacyBridge";
 import "./MqttSettingsPanel.css";
 
 type Props = {
@@ -11,11 +10,19 @@ type Props = {
 };
 
 /**
- * MQTT tab content with hard-contract ids (#broker, #connect, …) for sscape.js.
+ * MQTT tab content with hard-contract ids (#broker, #connect, …).
+ * Connect lifecycle is owned by useSceneMqtt on SceneDetailPage.
  */
 export function MqttSettingsPanel({ wssConnection, sceneId }: Props) {
   useEffect(() => {
-    ensureMqttScene();
+    const broker = document.getElementById("broker") as HTMLInputElement | null;
+    const addr = document.getElementById("broker-address");
+    if (broker && !broker.value && wssConnection) {
+      broker.value = wssConnection;
+    }
+    if (addr && !addr.textContent) {
+      addr.textContent = window.location.hostname;
+    }
   }, [wssConnection, sceneId]);
 
   const topicDefault = sceneId

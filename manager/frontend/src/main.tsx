@@ -19,6 +19,9 @@ const rootEl = document.getElementById("ss-scene-detail-root");
 if (bootstrap && rootEl) {
   /* Prefer React map before sscape.js document.ready reads the flag. */
   window.ssUseReactMap = Boolean(sceneMapBitmapUrl(bootstrap.scene));
+  /* Scene-detail MQTT connect is owned by React when the React map is on. */
+  window.ssReactOwnsMqtt = Boolean(window.ssUseReactMap);
+  window.ssReactOwnsCameraStrip = Boolean(window.ssUseReactMap);
   /* Map host + geometry hiddens from bootstrap — not Django template siblings. */
   ensureSceneDetailDom(bootstrap);
   /* Own the viewport before paint settles — Django chrome becomes a slim shell. */
