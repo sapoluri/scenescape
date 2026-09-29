@@ -226,6 +226,7 @@ SPDX-License-Identifier: Apache-2.0
       <form class="d-none" aria-hidden="true" id="ss-csrf-form">
         {% csrf_token %}
       </form>
+      {{ SS_AUTH_TOKEN|json_script:"ss-auth-bootstrap" }}
     {% endif %}
 
     <script src="{% static 'assets/jquery-3.6.0.min.js' %}"></script>

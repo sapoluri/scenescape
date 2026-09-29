@@ -125,15 +125,20 @@ calibrate-cam|calibrate-sensor`.
 
 | Mode | How | Used for | Portable? |
 | --- | --- | --- | --- |
-| Token | `Authorization: Token <authToken>` from bootstrap | `/api/v1` CRUD via `lib/rest.ts` | **Yes** — long-term |
-| Session + CSRF | cookie + `X-CSRFToken` / form field via `lib/session.ts` | Django DeleteViews, mesh generate, model-directory | **No** — replace with Token REST |
+| Token | `Authorization: Token <authToken>` from bootstrap / `ss-auth-bootstrap` | `/api/v1` CRUD + deletes via `lib/rest.ts` / `lib/restDelete.ts` | **Yes** — long-term |
+| Session + CSRF | cookie + `X-CSRFToken` via `lib/session.ts` | Mesh generate, model-directory; DeleteView POST only if no token | **No** — replace remaining callers |
 | Session cookie | `credentials: "same-origin"` | Page shell, media, static | Host concern |
 
 Login today is Django session (`sign_in/`); Token is issued for the signed-in
-user and injected into bootstrap. `POST /api/v1/auth` exists for API clients
-but islands do not call it yet. New island code must use `lib/rest.ts` and
-`lib/session.ts` — do not parse CSRF cookies or assume `#ss-csrf-form` in
-feature modules.
+user and injected as `ss-auth-bootstrap` (all authenticated pages) plus
+island bootstraps. `POST /api/v1/auth` exists for API clients. New island
+code must use `lib/rest.ts`, `lib/session.ts`, and `lib/restDelete.ts` — do
+not parse CSRF cookies or assume `#ss-csrf-form` in feature modules.
+
+Entity deletes from the UI prefer `DELETE /api/v1/{camera\|sensor\|scene\|child\|asset}/{uid}`
+(ManageThing). Django DeleteView URLs remain as link hrefs for
+progressive enhancement; the destructive-actions interceptor maps those
+paths to Token REST when a token is present.
 
 ### 5.3 REST the UI calls
 
@@ -156,7 +161,7 @@ Base: `/api/v1`. Client: `manager/frontend/src/lib/rest.ts`.
 | Model directory | `/api/v1/model-directory/` | Session + CSRF |
 | Mesh generate / status | `/scene/generate-mesh/{uuid}/`, `/scene/generate-mesh-status/{uuid}/` | Session + CSRF |
 | Mapping status | `/mapping-service/status/` | Token |
-| Deletes | bootstrap `deleteUrl` → Django DeleteView POST | Session + CSRF |
+| Deletes | bootstrap `deleteUrl` → Token `DELETE /api/v1/...` (CSRF DeleteView fallback) | Token (preferred) |
 | Media | `thumbnailUrl` / `mapUrl` / `/media/…` | Session |
 
 OpenAPI details: [`api.yaml`](../user-guide/api-docs/api.yaml). Breaking path

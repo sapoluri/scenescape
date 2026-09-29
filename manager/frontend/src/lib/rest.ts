@@ -135,6 +135,14 @@ export const api = {
     ),
   deleteSensor: (token: string, uid: string) =>
     restJson("DELETE", `/sensor/${encodeURIComponent(uid)}`, token),
+  deleteCamera: (token: string, uid: string) =>
+    restJson("DELETE", `/camera/${encodeURIComponent(uid)}`, token),
+  deleteChild: (token: string, uid: string) =>
+    restJson("DELETE", `/child/${encodeURIComponent(uid)}`, token),
+  deleteScene: (token: string, uid: string) =>
+    restJson("DELETE", `/scene/${encodeURIComponent(uid)}`, token),
+  deleteAsset: (token: string, uid: string) =>
+    restJson("DELETE", `/asset/${encodeURIComponent(uid)}`, token),
   createChild: (token: string, data: unknown) =>
     restJson<Record<string, unknown>>("POST", "/child", token, data),
   updateChild: (token: string, uid: string, data: unknown) =>

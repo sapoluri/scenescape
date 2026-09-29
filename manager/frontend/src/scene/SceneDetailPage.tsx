@@ -17,7 +17,7 @@ import { SceneMapSetupHelper } from "./SceneMapSetupHelper";
 import { SceneSidePanel } from "./SceneSidePanel";
 import { RoiTripwireEditors } from "./editors/RoiTripwireEditors";
 import { SceneWorkspaceSheets } from "../sheets/SceneWorkspaceSheets";
-import { postDjangoDelete } from "../lib/djangoDelete";
+import { deleteViaRestOrDjango } from "../lib/restDelete";
 import { useWorkspaceLayout } from "./useWorkspaceLayout";
 import type { WorkspaceLayoutMode } from "./useWorkspaceLayout";
 import { useWorkspaceDensity } from "./useWorkspaceDensity";
@@ -172,12 +172,16 @@ function SceneDetailInner({ bootstrap }: Props) {
     setSceneDeleteBusy(true);
     setSceneDeleteError(null);
     try {
-      await postDjangoDelete(urls.sceneDelete, urls.scenesHome || "/");
+      await deleteViaRestOrDjango(
+        urls.sceneDelete,
+        bootstrap.authToken || "",
+        urls.scenesHome || "/",
+      );
     } catch (e) {
       setSceneDeleteBusy(false);
       setSceneDeleteError(e instanceof Error ? e.message : "Delete failed");
     }
-  }, [urls.sceneDelete, urls.scenesHome]);
+  }, [bootstrap.authToken, urls.sceneDelete, urls.scenesHome]);
 
   const tabs: TabItem[] = [
     { id: "cameras", label: "Cameras", count: countLabel(tabCounts.cameras) },
@@ -445,7 +449,9 @@ function SceneDetailInner({ bootstrap }: Props) {
           sceneId={scene.id}
           wssConnection={bootstrap.scene.wssConnection || ""}
           authToken={bootstrap.authToken}
+          onCamerasChange={setCameras}
           onSensorsChange={setSensors}
+          onChildrenChange={setChildrenLinks}
         />
       </div>
       <RoiTripwireEditors

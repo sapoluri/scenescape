@@ -10,6 +10,8 @@ Remaining work after the 2D React rewrite.
 Conventions, layout shells, tokens, and hard DOM contracts:
 [`.github/skills/manager-ui/SKILL.md`](../skills/manager-ui/SKILL.md).
 Package notes: [`manager/frontend/README.md`](../../manager/frontend/README.md).
+Frozen UI↔backend contract:
+[`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
 
 ## 1. 3D scene viewport (epic)
 
@@ -27,9 +29,9 @@ from the 2D rewrite. Keep the **workspace** shell (full-bleed). Do **not**
 fold into 2D trickle PRs.
 
 Precursor: non-georeferenced child linking already ships a thin Z-up
-placement canvas (`manager/ui/src/placement/`) with `poseThree` conversion
-and TransformControls. Reuse that pose/gizmo module in the viewport; do
-not wrap `scenescape3d.js` for hierarchy placement.
+placement canvas (`manager/frontend/src/placement/`) with `poseThree`
+conversion and TransformControls. Reuse that pose/gizmo module in the
+viewport; do not wrap `scenescape3d.js` for hierarchy placement.
 
 Suggested slices:
 
@@ -43,60 +45,61 @@ legacy globals; UI BAT green for scene 3D view when that suite exists.
 
 ## 2. Path to a swappable backend (epic)
 
-**Status:** Intermediate step in progress — contract frozen; Django remains
-host. Do **not** start a framework swap.
+**Status:** Intermediate step — contract frozen, scene-detail DOM decoupled,
+entity deletes on Token REST. Django remains host. Do **not** start a
+framework swap.
 
-The React islands already prefer REST + bootstrap JSON (`authToken`, scene
-payloads) over pure server-rendered forms. Grow the UI against the frozen
-HTTP/MQTT contract
-([`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md)),
-then optionally put a different server behind that contract later.
+### Progress
+
+| Slice | Status |
+| --- | --- |
+| 1. Freeze the contract | ✅ Done |
+| 2. Retire template/DOM coupling (scene detail) | ✅ Done (nav/`window.ss*` debt remains) |
+| 3. Auth as a portable session | ✅ Token deletes + `ss-auth-bootstrap`; mesh / model-directory still CSRF |
+| 4. Extract domain behind HTTP | 🔶 Next (mesh, model-directory, service layer) |
+| 5. Host independence / framework swap | ⬜ Deferred |
+
+Commits on this path: contract + session helpers; `ensureSceneDetailDom`;
+Token REST deletes (`lib/restDelete.ts`, ManageThing pk fallback for cams).
+
+The React islands prefer REST + bootstrap JSON over server-rendered forms.
+Grow against
+[`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md);
+optionally put a different server behind that contract later.
 
 ### What already helps
 
-- Vite islands (`scenes-home`, `scene-detail`, admin lists, sheets) own more
-  chrome each release.
-- Bootstrap `json_script` + REST tokens reduce template form coupling.
-- MQTT and auth patterns are reusable if the wire contract is frozen.
-- **Frozen contract doc** (bootstrap, REST, auth modes, MQTT, DOM debt).
-- Portable client helpers: `manager/frontend/src/lib/session.ts`,
-  `lib/bootstrap.ts`, Token CRUD via `lib/rest.ts`.
+- Vite islands own chrome; scene detail template is root + bootstrap only.
+- Map host / toggles / geometry hiddens built by `ensureSceneDetailDom`.
+- Frozen contract; `lib/session.ts`, `lib/bootstrap.ts`, `lib/rest.ts`,
+  `lib/restDelete.ts`; page-wide `ss-auth-bootstrap`.
+- Destructive-actions + scene/camera/child panels delete via Token REST.
 
 ### What still binds us to Django
 
-- Page shells, session/auth, and static serving still come from Django
-  templates (`base.html`, list pages, etc.). Scene detail content is a
-  single React root + bootstrap `json_script` only.
-- Hard DOM/window contracts (`#map-controls`, `#ss-map-host`, `window.ss*`,
-  legacy map JS) still exist at **runtime** (built from bootstrap) for
-  hybrid `sscape.js` — not as Django template siblings. See the manager-ui
-  skill hard-contract tables.
-- Domain logic (scene map/GLB upload, serializers, permissions, MQTT wiring)
-  lives in Django models/views without a backend-agnostic service boundary.
-- CSRF deletes / mesh / model-directory keep some calls on the Django
-  session request cycle.
+- `base.html` nav/about, session login, static serving.
+- Runtime hard DOM / `window.ss*` for hybrid `sscape.js`.
+- Domain logic in Django models/views (no backend-agnostic service layer).
+- CSRF session calls: mesh generate/status, model-directory.
 
 ### Suggested slices (order matters)
 
-1. **Freeze the contract.** ✅ Documented in
-   [`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
-   Keep TS bootstrap types + OpenAPI + that doc in sync. Treat skill hard
-   contracts as debt to retire, not as the long-term boundary.
-2. **Retire template/DOM coupling.** ✅ Scene detail template is root +
-   bootstrap only; map host / toggles / geometry hiddens come from
-   `ensureSceneDetailDom`. Remaining: nav/about still Django `base.html`;
-   shrink `window.ss*` as legacy map JS retires.
-3. **Auth as a portable session.** ✅ Helpers landed (`lib/session.ts`);
-   Token path is primary. Still replace CSRF DeleteViews / mesh /
-   model-directory with Token REST before calling auth “done.”
-4. **Extract domain behind HTTP.** Scene map upload/align/thumbnail, CRUD,
-   and permissions callable without importing Django models from the UI path.
-   Prefer thin API handlers over template views for anything the React app
-   touches.
-5. **Host independence last.** Only after (1)–(4): serve the SPA/static UI
-   from a non-Django host (or reverse proxy) pointed at the API. Do **not**
-   attempt a framework swap before the UI can run without template-injected
-   DOM and `window.ss*` bridges.
+1. **Freeze the contract.** ✅
+2. **Retire template/DOM coupling.** ✅ Scene detail root + bootstrap.
+3. **Auth as a portable session.** ✅ Token path for CRUD + entity deletes;
+   `ss-auth-bootstrap` on authenticated pages. Mesh / model-directory still
+   session+CSRF.
+4. **Extract domain behind HTTP.** **← next focus.** Token-auth
+   model-directory; mesh generate/status under `/api/v1`; thin service
+   layer for scene map upload/align.
+5. **Host independence last.** Only after (1)–(4).
+
+### Next concrete work (slice 4)
+
+1. **Token-auth model-directory** (drop session+CSRF on that API).
+2. **Mesh generate/status under `/api/v1`** (or mapping proxy) with Token.
+3. **Thin service layer** in Manager for scene map upload/align.
+4. Only then reconsider host independence.
 
 Gate: UI BAT and manager functional tests green against the frozen contract;
 hard-contract table in the manager-ui skill shrinks as IDs move behind React

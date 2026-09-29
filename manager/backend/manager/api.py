@@ -182,6 +182,16 @@ class ManageThing(APIView):
         thing = thing_class.objects.filter(child_id=uid).first()
       if thing is None and isinstance(uid, int):
         thing = thing_class.objects.filter(pk=uid).first()
+      return thing
+    # Django delete URLs use Cam/SingletonSensor pk; REST clients use sensor_id.
+    if thing_type in ("camera", "sensor") and uid is not None:
+      pk = None
+      if isinstance(uid, int):
+        pk = uid
+      elif str(uid).isdigit():
+        pk = int(uid)
+      if pk is not None:
+        thing = thing_class.objects.filter(pk=pk).first()
     return thing
 
   def get(self, request, thing_type, uid=None):
