@@ -72,6 +72,10 @@ export type SceneDetailBootstrap = {
     regions: number;
     tripwires: number;
   };
+  /** Child overlay JSON strings for legacy `#id_child_*` hidden inputs. */
+  childRoiJson?: string;
+  childTripwireJson?: string;
+  childSensorJson?: string;
   scenes?: {
     id: string;
     name: string;

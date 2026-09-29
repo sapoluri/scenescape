@@ -306,6 +306,9 @@ def sceneDetail(request, scene_id):
       "regions": scene.regions.count(),
       "tripwires": scene.tripwires.count(),
     },
+    "childRoiJson": child_rois,
+    "childTripwireJson": child_trips,
+    "childSensorJson": child_sensors,
     "scenes": [
       {
         "id": str(s.id),
@@ -318,10 +321,6 @@ def sceneDetail(request, scene_id):
   }
 
   return render(request, 'sscape/sceneDetail.html', {
-    'scene': scene,
-    'child_rois': child_rois,
-    'child_tripwires': child_trips,
-    'child_sensors': child_sensors,
     'scene_detail_bootstrap': scene_detail_bootstrap,
     'google_maps_api_key': getattr(settings, "GOOGLE_MAPS_API_KEY", "") or "",
     'mapbox_api_key': getattr(settings, "MAPBOX_API_KEY", "") or "",

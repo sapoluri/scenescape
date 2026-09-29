@@ -104,6 +104,9 @@ sibling ids or `window.ss*` APIs. Prefer `lib/rest.ts`, `lib/session.ts`, and
 
 ### Map host
 
+Built from scene-detail bootstrap by `ensureSceneDetailDom` (not Django
+HTML). Ids remain hard contracts for `sscape.js` / UI tests.
+
 | Id / selector | Role |
 | --- | --- |
 | `#ss-map-host` | Map parking / adopt root |
@@ -114,8 +117,8 @@ sibling ids or `window.ss*` APIs. Prefer `lib/rest.ts`, `lib/session.ts`, and
 | `#scene` | Scene id / metadata |
 | `#fullscreen`, `#show-trails`, `#show-telemetry`, `#coloring-switch` | Map chrome (`#map-controls` centered on map column via `#ss-map-toggles-slot`) |
 | `#ss-scene-chrome` / `.ss-scene-header-actions` | Scene chrome: back + title + export/3d/edit/delete + rate |
-| `#id_rois`, `#tripwires` | Hidden geometry JSON |
-| `#id_child_rois`, `#child_tripwires`, `#child_sensors` | Child overlay JSON |
+| `#id_rois`, `#tripwires` | Hidden geometry JSON (from bootstrap) |
+| `#id_child_rois`, `#child_tripwires`, `#child_sensors` | Child overlay JSON (from bootstrap) |
 
 ### Toolbar / tabs
 

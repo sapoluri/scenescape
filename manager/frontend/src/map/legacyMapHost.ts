@@ -3,7 +3,9 @@
 
 /**
  * Legacy Snap.svg map host — required DOM ids for sscape.js.
- * React only owns layout chrome around this host; do not remount #map/#svgout.
+ * Built from scene-detail bootstrap via `ensureSceneDetailDom` (not Django
+ * templates). React owns layout chrome around this host; do not remount
+ * #map/#svgout after Snap initializes.
  */
 export const LEGACY_MAP_IDS = {
   host: "ss-map-host",

@@ -91,6 +91,8 @@ must keep field names below stable or update islands + this doc together.
 - `appVersion`, `appGitCommit?`
 - `googleMapsApiKey?`, `mapboxApiKey?`
 - `deleteImpact?` `{ sensors, regions, tripwires }`
+- `childRoiJson?`, `childTripwireJson?`, `childSensorJson?` — JSON strings
+  for legacy child overlay hidden inputs (created by `ensureSceneDetailDom`)
 - `scenes[]` for pickers: `id`, `name`, `georeferenced?`, `mapUrl?`
 
 #### Admin list (`ss-admin-list-bootstrap`)
@@ -184,11 +186,17 @@ New ROI / tripwire topics created in UI:
 
 ### 5.5 DOM / window debt (retire, do not extend)
 
-Until slice 2 of the plan lands, scene detail still requires Django-parked
-siblings (for example `#ss-map-host`, `#map-controls`, hidden `#id_rois` /
-`#tripwires`) and hybrid `window.ss*` bridges. Full freeze tables live in the
-manager-ui skill. **New UI must not add** required template sibling ids or
-new `window.ss*` APIs; prefer bootstrap + fetch + React-owned mounts.
+**Scene detail template** only supplies bootstrap `json_script` nodes and
+`#ss-scene-detail-root`. Map host (`#ss-map-host`, `#map-controls`, `#map`,
+`#svgout`, geometry hiddens) is created from bootstrap by
+`ensureSceneDetailDom` before React mounts so `sscape.js` still finds the
+same hard-contract ids.
+
+Until hybrid legacy JS is gone, those ids and `window.ss*` bridges remain
+required at runtime — but they are **not** Django template siblings. Full
+freeze tables live in the manager-ui skill. **New UI must not add** required
+template sibling ids or new `window.ss*` APIs; prefer bootstrap + fetch +
+React-owned mounts.
 
 Long-term host shape: a single root per page + bootstrap JSON (or equivalent
 config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.

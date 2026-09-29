@@ -326,7 +326,7 @@ function SceneDetailInner({ bootstrap }: Props) {
 
   const mapTogglesSlotRef = useRef<HTMLDivElement>(null);
 
-  // Park Django #map-controls centered over the map column chrome.
+  // Park bootstrap-built #map-controls centered over the map column chrome.
   useEffect(() => {
     const slot = mapTogglesSlotRef.current;
     if (!slot) {

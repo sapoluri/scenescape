@@ -104,7 +104,21 @@ var dragging, drawing, adding, editing, fullscreen;
 var g;
 var radius = 5;
 var scale = 30.0; // Default map scale in pixels/meter
-var scene_id = $("#scene").val();
+function sceneIdFromBootstrap() {
+  var boot = document.getElementById("ss-scene-detail-bootstrap");
+  if (!boot || !boot.textContent) {
+    return "";
+  }
+  try {
+    var data = JSON.parse(boot.textContent);
+    return data.scene && data.scene.id ? String(data.scene.id) : "";
+  } catch (err) {
+    return "";
+  }
+}
+
+// Prefer #scene when present (ensureSceneDetailDom / calibrate pages); else bootstrap.
+var scene_id = $("#scene").val() || sceneIdFromBootstrap();
 var icon_size = 24;
 var show_telemetry = false;
 var show_trails = false;

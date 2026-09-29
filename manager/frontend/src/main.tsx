@@ -4,6 +4,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { readBootstrapJson } from "./lib/bootstrap";
+import { ensureSceneDetailDom } from "./lib/ensureSceneDetailDom";
+import { sceneMapBitmapUrl } from "./lib/sceneMapBitmap";
 import { SceneDetailApp } from "./scene/SceneDetailApp";
 import type { SceneDetailBootstrap } from "./scene/types";
 import "./tokens/tokens.css";
@@ -15,6 +17,10 @@ const bootstrap = readBootstrapJson<SceneDetailBootstrap>(
 const rootEl = document.getElementById("ss-scene-detail-root");
 
 if (bootstrap && rootEl) {
+  /* Prefer React map before sscape.js document.ready reads the flag. */
+  window.ssUseReactMap = Boolean(sceneMapBitmapUrl(bootstrap.scene));
+  /* Map host + geometry hiddens from bootstrap — not Django template siblings. */
+  ensureSceneDetailDom(bootstrap);
   /* Own the viewport before paint settles — Django chrome becomes a slim shell. */
   document.documentElement.classList.add("ss-scene-workspace");
   document.body.classList.add("ss-scene-workspace");

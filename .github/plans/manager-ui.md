@@ -65,14 +65,16 @@ then optionally put a different server behind that contract later.
 ### What still binds us to Django
 
 - Page shells, session/auth, and static serving still come from Django
-  templates (`base.html`, `sceneDetail.html`, list pages, etc.).
+  templates (`base.html`, list pages, etc.). Scene detail content is a
+  single React root + bootstrap `json_script` only.
 - Hard DOM/window contracts (`#map-controls`, `#ss-map-host`, `window.ss*`,
-  legacy map JS) couple React to Django-rendered markup and lifecycle — not
-  to a stable API alone. See the manager-ui skill hard-contract tables.
+  legacy map JS) still exist at **runtime** (built from bootstrap) for
+  hybrid `sscape.js` — not as Django template siblings. See the manager-ui
+  skill hard-contract tables.
 - Domain logic (scene map/GLB upload, serializers, permissions, MQTT wiring)
   lives in Django models/views without a backend-agnostic service boundary.
-- Dual-run leftovers (map parking, mixed CSS barrels) and CSRF deletes /
-  mesh / model-directory keep the UI host tied to the Django request cycle.
+- CSRF deletes / mesh / model-directory keep some calls on the Django
+  session request cycle.
 
 ### Suggested slices (order matters)
 
@@ -80,10 +82,10 @@ then optionally put a different server behind that contract later.
    [`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md).
    Keep TS bootstrap types + OpenAPI + that doc in sync. Treat skill hard
    contracts as debt to retire, not as the long-term boundary.
-2. **Retire template/DOM coupling.** Move remaining Django-owned chrome
-   (map toggles parking, nav/about host, list shells) into React mounts so
-   islands boot from bootstrap + fetch only — no required sibling DOM from
-   Django templates beyond a single root.
+2. **Retire template/DOM coupling.** ✅ Scene detail template is root +
+   bootstrap only; map host / toggles / geometry hiddens come from
+   `ensureSceneDetailDom`. Remaining: nav/about still Django `base.html`;
+   shrink `window.ss*` as legacy map JS retires.
 3. **Auth as a portable session.** ✅ Helpers landed (`lib/session.ts`);
    Token path is primary. Still replace CSRF DeleteViews / mesh /
    model-directory with Token REST before calling auth “done.”
