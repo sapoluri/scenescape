@@ -35,6 +35,7 @@ Outputs under `manager/backend/manager/static/ui/`:
 | --------------------- | ------------------------ | --------------------------------- |
 | shared CSS            | `manager-ui.css`         | All islands                       |
 | `chrome`              | `chrome.js`              | Navbar / about / theme (all pages)|
+| `spa`                 | `spa.js` + `shell.html`  | Static host (scenes + scene detail)|
 | `scene-detail`        | `scene-detail.js`        | Scene detail                      |
 | `scenes-home`         | `scenes-home.js`         | Scenes gallery                    |
 | `list-sheets`         | `list-sheets.js`         | Cam / sensor / asset lists        |
@@ -60,12 +61,27 @@ build outputs and are not tracked in Git.
 ## Django load path
 
 Each page mounts a root + `json_script` bootstrap and loads the matching
-`{% static 'ui/<entry>.js' %}` as `type="module"`.
+`{% static 'ui/<entry>.js' %}` as `type="module"`. Islands also accept
+`GET /api/v1/ui-bootstrap/?page=…` when the script tag is absent (static
+shell).
 
 Scene detail also adopts `#ss-map-host`; control tab panels are React-owned
 inside `SceneSidePanel` (hard-contract pane ids `#cameras`, `#trips`, …).
 ROI/tripwire editor cards portal into `#roi-fields` / `#tripwire-fields`.
 Sheets open from `?ss=<action>&id=<optional>` (see `src/lib/sheetQuery.ts`).
+
+## Static host (plan item F)
+
+Build emits `static/ui/shell.html` + `spa.js`. Point a reverse proxy so that:
+
+- `/` and `/<scene-uuid>/` serve `shell.html` (or redirect to
+  `/static/ui/shell.html` with path preserved via `try_files`)
+- `/static/` → Manager static files (css, js, ui, assets, images, bootstrap)
+- `/api/`, `/media/`, `/sign_in/`, `/sign_out/`, `/mqtt` → API / session host
+
+Chrome, scenes home, and scene detail bootstraps come from
+`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>` (session cookie
+or Token). Django page templates remain a dual path until cut over.
 
 ## Lint
 

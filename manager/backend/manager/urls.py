@@ -134,6 +134,11 @@ urlpatterns += [
     api.GenerateSceneMeshStatus.as_view(),
     name="api_generate_mesh_status",
   ),
+  path(
+    "api/v1/ui-bootstrap/",
+    api.UiBootstrap.as_view(),
+    name="api_ui_bootstrap",
+  ),
 
 ]
 

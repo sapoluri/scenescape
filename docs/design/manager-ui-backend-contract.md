@@ -66,6 +66,13 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
   signOut, docs, support, intel, intelLogo }`
 - `activeNav?` — `scenes` \| `cameras` \| `sensors` \| `models` \| `assets`
 
+#### Host-independent bootstrap API
+
+`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>` returns the
+same JSON shapes as the `json_script` nodes above (Session or Token).
+Static shell: `manager/backend/manager/static/ui/shell.html` + `spa.js`
+(see `manager/frontend/README.md`).
+
 Scene detail also exposes `google-maps-api-key` and `mapbox-api-key`
 `json_script` nodes (string scalars).
 
@@ -255,7 +262,6 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
 
 ## 9. Open Questions
 
-- Prefer a single `GET /api/v1/ui-bootstrap/?page=…` instead of per-page
-  `json_script` once shells are React-only?
-- Should deletes move to existing ManageThing DELETE where missing (scenes,
-  cameras, children, assets) before any host swap?
+- Extend `ui-bootstrap` for cam/sensor/asset/models list pages and retire
+  those Django templates?
+- Prefer path-based nginx `try_files` vs Django serving `shell.html` for `/`?

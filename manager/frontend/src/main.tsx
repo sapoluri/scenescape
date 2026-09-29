@@ -3,7 +3,7 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { readBootstrapJson } from "./lib/bootstrap";
+import { loadUiBootstrap } from "./lib/uiBootstrap";
 import { ensureSceneDetailDom } from "./lib/ensureSceneDetailDom";
 import { sceneMapBitmapUrl } from "./lib/sceneMapBitmap";
 import { SceneDetailApp } from "./scene/SceneDetailApp";
@@ -11,20 +11,28 @@ import type { SceneDetailBootstrap } from "./scene/types";
 import "./tokens/tokens.css";
 import "./scene-detail.css";
 
-const bootstrap = readBootstrapJson<SceneDetailBootstrap>(
-  "ss-scene-detail-bootstrap",
-);
-const rootEl = document.getElementById("ss-scene-detail-root");
+function sceneIdFromPath(): string | undefined {
+  const m = window.location.pathname.match(
+    /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?/i,
+  );
+  return m?.[1];
+}
 
-if (bootstrap && rootEl) {
+async function main(): Promise<void> {
+  const bootstrap = await loadUiBootstrap<SceneDetailBootstrap>(
+    "ss-scene-detail-bootstrap",
+    "scene",
+    sceneIdFromPath(),
+  );
+  const rootEl = document.getElementById("ss-scene-detail-root");
+  if (!bootstrap || !rootEl) {
+    return;
+  }
   /* Prefer React map before sscape.js document.ready reads the flag. */
   window.ssUseReactMap = Boolean(sceneMapBitmapUrl(bootstrap.scene));
-  /* Scene-detail MQTT connect is owned by React when the React map is on. */
   window.ssReactOwnsMqtt = Boolean(window.ssUseReactMap);
   window.ssReactOwnsCameraStrip = Boolean(window.ssUseReactMap);
-  /* Map host + geometry hiddens from bootstrap — not Django template siblings. */
   ensureSceneDetailDom(bootstrap);
-  /* Own the viewport before paint settles — Django chrome becomes a slim shell. */
   document.documentElement.classList.add("ss-scene-workspace");
   document.body.classList.add("ss-scene-workspace");
   createRoot(rootEl).render(
@@ -33,3 +41,5 @@ if (bootstrap && rootEl) {
     </StrictMode>,
   );
 }
+
+void main();

@@ -623,3 +623,43 @@ class GenerateSceneMeshStatus(APIView):
     from manager.mesh_http import mesh_generation_status_payload
     payload, code = mesh_generation_status_payload(scene, request_id)
     return Response(payload, status=code)
+
+
+class UiBootstrap(APIView):
+  """
+  GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>
+
+  Session cookie or Token. Chrome allows anonymous; other pages need auth.
+  Same payloads as Django json_script bootstraps (host-independent UI).
+  """
+  authentication_classes = [
+    authentication.TokenAuthentication,
+    authentication.SessionAuthentication,
+  ]
+  permission_classes = [permissions.AllowAny]
+
+  def get(self, request):
+    from django.http import Http404
+    from manager.services.ui_bootstrap import resolve_ui_bootstrap
+
+    page = request.query_params.get("page", "").strip()
+    entity_id = request.query_params.get("id")
+    if page not in ("chrome",) and not request.user.is_authenticated:
+      return Response(
+        {"detail": "Authentication credentials were not provided."},
+        status=status.HTTP_401_UNAUTHORIZED,
+      )
+    try:
+      payload = resolve_ui_bootstrap(request, page, entity_id)
+    except ValueError as exc:
+      return Response(
+        {"detail": str(exc)},
+        status=status.HTTP_400_BAD_REQUEST,
+      )
+    except Http404:
+      return Response(
+        {"detail": "Not found."},
+        status=status.HTTP_404_NOT_FOUND,
+      )
+    return Response(payload)
+

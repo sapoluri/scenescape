@@ -3,33 +3,40 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { readBootstrapJson } from "./lib/bootstrap";
+import { loadUiBootstrap } from "./lib/uiBootstrap";
 import {
   ScenesHomeApp,
   type ScenesHomeBootstrap,
 } from "./scenes/ScenesHomeApp";
 import "./tokens/tokens.css";
 
-const bootstrap = readBootstrapJson<ScenesHomeBootstrap>(
-  "ss-scenes-home-bootstrap",
-);
-const host =
-  document.getElementById("ss-scenes-home-app") ||
-  (() => {
-    const el = document.createElement("div");
-    el.id = "ss-scenes-home-app";
-    const main =
-      document.querySelector("main") ||
-      document.querySelector(".container") ||
-      document.body;
-    main.appendChild(el);
-    return el;
-  })();
+async function main(): Promise<void> {
+  const bootstrap = await loadUiBootstrap<ScenesHomeBootstrap>(
+    "ss-scenes-home-bootstrap",
+    "scenes",
+  );
+  const host =
+    document.getElementById("ss-scenes-home-app") ||
+    (() => {
+      const el = document.createElement("div");
+      el.id = "ss-scenes-home-app";
+      const mainEl =
+        document.querySelector("main") ||
+        document.querySelector(".content") ||
+        document.querySelector(".container") ||
+        document.body;
+      mainEl.appendChild(el);
+      return el;
+    })();
 
-if (bootstrap) {
+  if (!bootstrap) {
+    return;
+  }
   createRoot(host).render(
     <StrictMode>
       <ScenesHomeApp bootstrap={bootstrap} />
     </StrictMode>,
   );
 }
+
+void main();
