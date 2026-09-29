@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { SCENE_TAB_COUNTS_EVENT, type SceneTabCounts } from "../lib/sceneTab";
+import { fitSceneMapDisplay } from "../lib/legacyBridge";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ToastProvider } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
@@ -158,9 +159,7 @@ function SceneDetailInner({ bootstrap }: Props) {
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => {
-      if (typeof window.fitSceneMapDisplay === "function") {
-        window.fitSceneMapDisplay();
-      }
+      fitSceneMapDisplay();
     });
     return () => window.cancelAnimationFrame(id);
   }, [mapFocus, panelSizePx, layout]);

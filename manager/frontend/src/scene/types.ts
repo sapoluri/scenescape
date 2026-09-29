@@ -103,8 +103,6 @@ declare global {
     numberTripwires?: () => void;
     stringifyRois?: () => void;
     stringifyTripwires?: () => void;
-    saveRois?: (values: string[]) => void;
-    getRoiValues?: (className: string, kind: string) => string[];
     ssMqttClient?: {
       subscribe: (topic: string) => void;
       publish: (topic: string, payload: string) => void;
@@ -114,8 +112,6 @@ declare global {
       end?: (force?: boolean) => void;
     };
     ssEnsureMqttScene?: () => void;
-    ssRoiDirty?: boolean;
-    ssTripDirty?: boolean;
     ssPersistGeometry?: (
       options?: { preferHidden?: boolean } | string[],
     ) => void | Promise<void>;
@@ -142,14 +138,6 @@ declare global {
       hasRoi?: (svgId: string) => boolean;
       hasTripwire?: (svgId: string) => boolean;
     };
-    ssSyncRoiColorSectors?: (
-      uuid: string,
-      sectors: {
-        thresholds: { color: string; color_min: number }[];
-        range_max: number;
-      },
-    ) => void;
-    ssReapplyRoiColors?: () => void;
   }
 }
 

@@ -20,6 +20,7 @@ import {
   readMapScale,
   readSceneYMax,
 } from "./coords";
+import { reapplyRoiColors } from "../../lib/legacyBridge";
 import "./reactSceneMap.css";
 
 type Mode = "idle" | "add-roi" | "add-trip";
@@ -148,7 +149,7 @@ export const ReactSceneMap = memo(function ReactSceneMap({
 
   // React remounts wipe inline occupancy fills — re-apply after geometry paint.
   useEffect(() => {
-    window.ssReapplyRoiColors?.();
+    reapplyRoiColors();
   }, [rois]);
 
   useEffect(() => {
@@ -160,7 +161,6 @@ export const ReactSceneMap = memo(function ReactSceneMap({
       setMode("add-trip");
       setDraft([]);
     };
-    window.ssMapReact = { startAddRoi: startRoi, startAddTripwire: startTrip };
     const onClick = (ev: Event) => {
       const t = ev.target as HTMLElement | null;
       if (!t) {
@@ -182,7 +182,6 @@ export const ReactSceneMap = memo(function ReactSceneMap({
     document.addEventListener("click", onClick, true);
     return () => {
       document.removeEventListener("click", onClick, true);
-      delete window.ssMapReact;
     };
   }, []);
 
@@ -443,10 +442,5 @@ export const ReactSceneMap = memo(function ReactSceneMap({
 declare global {
   interface Window {
     ssUseReactMap?: boolean;
-    ssMapReact?: {
-      startAddRoi: () => void;
-      startAddTripwire: () => void;
-    };
-    ssReapplyRoiColors?: () => void;
   }
 }

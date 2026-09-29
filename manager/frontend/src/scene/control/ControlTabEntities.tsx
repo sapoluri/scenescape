@@ -11,6 +11,11 @@ import {
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAppToast } from "../../components/ToastProvider";
 import { ACTION_ICONS } from "../../components/actionIcons";
+import {
+  drawSingletonSensors,
+  refreshCameraSnapshots,
+  removeSingletonSensor,
+} from "../../lib/legacyBridge";
 import { api, type RestError } from "../../lib/rest";
 import { publishSceneTabCounts } from "../../lib/sceneTab";
 import { copyTextToClipboard } from "../editors/copyText";
@@ -21,14 +26,6 @@ import type {
 } from "../types";
 import "./ControlTabEntities.css";
 import "../../components/Button.css";
-
-declare global {
-  interface Window {
-    ssRefreshCameraSnapshots?: () => void;
-    ssDrawSingletonSensors?: () => void;
-    ssRemoveSingletonSensor?: (sensorId: string) => void;
-  }
-}
 
 export function CamerasPanelContent({
   cameras,
@@ -49,7 +46,7 @@ export function CamerasPanelContent({
   const canDelete = Boolean(authToken && onCamerasChange);
 
   useEffect(() => {
-    const refresh = () => window.ssRefreshCameraSnapshots?.();
+    const refresh = () => refreshCameraSnapshots();
     refresh();
     const t1 = window.setTimeout(refresh, 400);
     const t2 = window.setTimeout(refresh, 1200);
@@ -215,7 +212,7 @@ export function SensorsPanelContent({
   const canDelete = Boolean(authToken && onSensorsChange);
 
   useEffect(() => {
-    window.ssDrawSingletonSensors?.();
+    drawSingletonSensors();
   }, [sensors]);
 
   const confirmSensorDelete = useCallback(async () => {
@@ -226,7 +223,7 @@ export function SensorsPanelContent({
     setDeleteError(null);
     try {
       await api.deleteSensor(authToken, pendingSensor.sensorId);
-      window.ssRemoveSingletonSensor?.(pendingSensor.sensorId);
+      removeSingletonSensor(pendingSensor.sensorId);
       onSensorsChange((prev) =>
         prev.filter(
           (s) =>
@@ -281,7 +278,9 @@ export function SensorsPanelContent({
                   type="button"
                   className="ss-tab-row__meta sensor-id ss-tab-row__copy-id"
                   title="Click to copy ID"
-                  onClick={() => void copyTextToClipboard(sensor.sensorId)}
+                  onClick={() =>
+                    void copyTextToClipboard(sensor.sensorId, toast.show)
+                  }
                 >
                   {sensor.sensorId}
                 </button>

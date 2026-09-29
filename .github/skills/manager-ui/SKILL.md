@@ -165,16 +165,23 @@ SVG `g.roi` / `g.tripwire`, `adding-roi` / `adding-tripwire`.
 
 ### `window` APIs
 
+React call sites go through `manager/frontend/src/lib/legacyBridge.ts`
+(not ad-hoc `window.*`). Bridges still installed for hybrid `sscape.js`:
+
 `fitSceneMapDisplay`, `numberRois` / `numberTripwires`,
-`stringifyRois` / `stringifyTripwires`, `getRoiValues` / `saveRois`,
-`ssPersistGeometry`, `ssMap`, `ssRoiEditors`,
+`stringifyRois` / `stringifyTripwires`, `ssPersistGeometry` (React install;
+sscape `saveRois` still calls it), `ssMap`, `ssRoiEditors`,
 `ssRefreshCameraSnapshots` / `ssDrawSingletonSensors` /
-`ssRemoveSingletonSensor`, `ssToast` / `ssConfirm` / `ssSceneTelemetry`,
-`ssMqttClient`.
+`ssRemoveSingletonSensor`, `ssEnsureMqttScene`,
+`ssToast` / `ssConfirm` (legacy JS only; React uses providers/dialogs),
+`ssSceneTelemetry`, `ssMqttClient`,
+`ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
+
+sscape-internal only (not React-facing): `getRoiValues`, `saveRois`.
 
 Events: `ss-roi-form-add`, `ss-tripwire-form-add`, `ss-scene-rate`,
 `ss-camera-rate`, `ss-telemetry-clear`, `ss-map-host-ready`,
-`ss-tab-counts`, `ss-scene-tab`.
+`ss-tab-counts`, `ss-scene-tab`, `ss-roi-dirty`, `ss-trip-dirty`.
 
 ### REST (Manager persist)
 

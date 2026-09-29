@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { fitSceneMapDisplay } from "../lib/legacyBridge";
+
 /**
  * Legacy Snap.svg map host — required DOM ids for sscape.js.
  * Built from scene-detail bootstrap via `ensureSceneDetailDom` (not Django
@@ -19,7 +21,5 @@ export const LEGACY_MAP_IDS = {
 
 export function notifyMapHostReady(): void {
   window.dispatchEvent(new CustomEvent("ss-map-host-ready"));
-  if (typeof window.fitSceneMapDisplay === "function") {
-    window.fitSceneMapDisplay();
-  }
+  fitSceneMapDisplay();
 }

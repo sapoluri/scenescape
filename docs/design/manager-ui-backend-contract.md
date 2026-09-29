@@ -209,9 +209,10 @@ same hard-contract ids.
 
 Until hybrid legacy JS is gone, those ids and `window.ss*` bridges remain
 required at runtime — but they are **not** Django template siblings. Full
-freeze tables live in the manager-ui skill. **New UI must not add** required
-template sibling ids or new `window.ss*` APIs; prefer bootstrap + fetch +
-React-owned mounts.
+freeze tables live in the manager-ui skill. React call sites use
+`manager/frontend/src/lib/legacyBridge.ts` rather than ad-hoc `window.*`.
+**New UI must not add** required template sibling ids or new `window.ss*`
+APIs; prefer bootstrap + fetch + React-owned mounts.
 
 Long-term host shape: a single root per page + bootstrap JSON (or equivalent
 config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.

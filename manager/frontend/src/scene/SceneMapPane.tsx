@@ -3,14 +3,13 @@
 
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { fitSceneMapDisplay } from "../lib/legacyBridge";
 import { LEGACY_MAP_IDS, notifyMapHostReady } from "../map/legacyMapHost";
 import { ReactSceneMap } from "./map/ReactSceneMap";
 import "./SceneMapPane.css";
 
 function refitMap(): void {
-  if (typeof window.fitSceneMapDisplay === "function") {
-    window.fitSceneMapDisplay();
-  }
+  fitSceneMapDisplay();
 }
 
 /**
