@@ -24,21 +24,20 @@ remains host. Do **not** start a framework swap.
 | --- | --- |
 | 1. Freeze the contract | [`docs/design/manager-ui-backend-contract.md`](../../docs/design/manager-ui-backend-contract.md); skill/plan pointers |
 | 2. Scene-detail DOM decoupling | Template = root + bootstrap; `ensureSceneDetailDom` builds map host |
-| 3. Portable auth (deletes) | `ss-auth-bootstrap`, `lib/session` / `lib/restDelete`; Token DELETE for scene/cam/sensor/child/asset |
-| 4a. Token model-directory | `ModelDirectory` + `modelDirectoryApi.ts` use Token auth |
-| 4b. Token mesh generate/status | `/api/v1/scene/<uuid>/generate-mesh[-status]/`; shared `mesh_http.py` |
+| 3. Portable auth (deletes) | `ss-auth-bootstrap`, `lib/session` / `lib/restDelete`; Token DELETE for entities |
+| 4a. Token model-directory | Token auth on `ModelDirectory` |
+| 4b. Token mesh generate/status | `/api/v1/scene/<uuid>/generate-mesh[-status]/`; `mesh_http.py` |
+| 4c. Domain service (map) | `manager/services/scene_map.py` — align / thumbnail / finalize; model + serializer thin wrappers |
 
-Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token deletes),
-`25d201950` (model-directory).
+Key commits: `02ed8ce9d`, `847bcf272`, `a8faccb72`, `25d201950`, `0d2cbac74`.
 
 ### Left (ordered)
 
 | # | Item | Notes |
 | --- | --- | --- |
-| **C** | Thin **domain service layer** | Map upload/align/thumbnail callable without Django views importing models into UI path |
 | **D** | Shrink **`window.ss*` / hybrid `sscape.js`** | Runtime hard contracts remain until React owns MQTT/map fully |
 | **E** | **`base.html` shell** (nav/about/login) | Optional; not blocking API swap if SPA is separate later |
-| **F** | **Host independence** (serve SPA off Django) | Only after C–D are green enough |
+| **F** | **Host independence** (serve SPA off Django) | Only after D is green enough |
 | **G** | **Framework swap** (e.g. FastAPI) | Explicitly deferred — optional after F |
 
 ### Progress table
@@ -48,14 +47,13 @@ Key commits: `02ed8ce9d` (contract), `847bcf272` (DOM), `a8faccb72` (Token delet
 | 1. Freeze the contract | ✅ Done |
 | 2. Retire template/DOM coupling (scene detail) | ✅ Done (nav/`window.ss*` debt remains) |
 | 3. Auth as a portable session | ✅ Token CRUD + deletes + model-directory + mesh |
-| 4. Extract domain behind HTTP | 🔶 **Next** — C (service layer); CSRF callers cleared for UI |
-| 5. Host independence / framework swap | ⬜ Deferred (F → G) |
+| 4. Extract domain behind HTTP | ✅ Map upload/align/thumbnail in `services/scene_map.py` |
+| 5. Host independence / framework swap | ⬜ Deferred (F → G); next practical work is **D** |
 
 ### What still binds us to Django
 
 - `base.html` nav/about, session login, static serving.
 - Runtime hard DOM / `window.ss*` for hybrid `sscape.js`.
-- Domain logic in Django models/views (no backend-agnostic service layer).
 - Legacy `/scene/generate-mesh…` session URLs remain for compatibility; UI
   uses Token `/api/v1/…`.
 

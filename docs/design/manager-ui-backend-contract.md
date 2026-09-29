@@ -190,7 +190,16 @@ New ROI / tripwire topics created in UI:
 - `scenescape/event/region/{sceneId}/{uuid}/count`
 - `scenescape/event/tripwire/{sceneId}/{uuid}/objects`
 
-### 5.5 DOM / window debt (retire, do not extend)
+### 5.5 Domain services (map)
+
+Scene map upload processing lives in
+`manager/backend/manager/services/scene_map.py` (`auto_align_uploaded_map`,
+`save_scene_thumbnail`, `finalize_scene_map`, `apply_map_on_scene_create`).
+`Scene.save()` and `SceneSerializer` call these helpers so map/align/thumbnail
+logic is not trapped only inside the model `save()` hook. Mesh **generation**
+alignment remains in `mesh_generator` (honors `_from_generate_mesh`).
+
+### 5.6 DOM / window debt (retire, do not extend)
 
 **Scene detail template** only supplies bootstrap `json_script` nodes and
 `#ss-scene-detail-root`. Map host (`#ss-map-host`, `#map-controls`, `#map`,
