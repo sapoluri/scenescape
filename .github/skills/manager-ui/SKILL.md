@@ -179,7 +179,8 @@ ROI helpers still go through `lib/legacyBridge.ts`.
 `fitSceneMapDisplay`, `numberRois` / `numberTripwires`,
 `stringifyRois` / `stringifyTripwires`, `ssPersistGeometry` (React install;
 sscape `saveRois` still calls it), `ssMap`, `ssRoiEditors`,
-`ssAttachSceneMqttClient` / `ssMqttClient` (shared transport; React connects),
+`ssAttachSceneMqttClient` / `ssMqttClient` (shared transport; React connects;
+Snap child overlays + calibrate still attach),
 `ssToast` / `ssConfirm` (legacy JS only; React uses providers/dialogs),
 `ssSceneTelemetry`, `ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
 
@@ -191,7 +192,8 @@ from React or list as island contracts): `ssEnsureMqttScene`,
 Events: `ss-roi-form-add`, `ss-tripwire-form-add`, `ss-scene-rate`,
 `ss-camera-rate`, `ss-telemetry-clear`, `ss-map-host-ready`,
 `ss-tab-counts`, `ss-scene-tab`, `ss-roi-dirty`, `ss-trip-dirty`,
-`ss-mqtt-status`, `ss-mqtt-connected`, `ss-singleton`.
+`ss-mqtt-status`, `ss-mqtt-connected`, `ss-singleton`, `ss-scene-objects`,
+`ss-show-trails`.
 
 ### REST (Manager persist)
 

@@ -28,7 +28,7 @@ swap until operators use the static path. **G** remains optional.
 | 2. Scene-detail DOM decoupling | Template = root + bootstrap; `ensureSceneDetailDom` |
 | 3. Portable auth (deletes) | Token DELETE for entities |
 | 4a–4c | Token model-directory + mesh; `services/scene_map.py` |
-| **D** | React MQTT + camera strip + sensors; Snap marks via shared client |
+| **D** | React MQTT + camera strip + sensors + live marks; Snap child overlays |
 | **E** | React chrome island (`ui/chrome.js`); `ss-chrome-bootstrap` |
 | **F** | `GET /api/v1/ui-bootstrap/`; `shell.html` + `spa.js`; islands fetch when no `json_script` |
 
@@ -52,9 +52,10 @@ React sign-in, Snap ROI gates, single bootstrap module).
 
 ### What still binds us optionally to Django templates
 
-- Snap marks / calibrate legacy JS still load from `/static/js`.
+- Calibrate pages still use legacy MQTT + Django chrome / Snap.
 - Scene / list / sign-in pages still have thin Django HTML mounts (roots +
   scripts); static `shell.html` / `sign-in.html` can serve the same islands.
+- Snap overlay remains for child ROI/tripwire/sensor on React map scenes.
 
 Gate: UI BAT green on Django thin mounts; static shell smoke for `/`,
 `/<uuid>/`, list paths, and `/sign_in/` against ui-bootstrap.

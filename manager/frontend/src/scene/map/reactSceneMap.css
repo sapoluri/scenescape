@@ -137,6 +137,12 @@ body.ss-use-react-map #ss-map-host .ss-snap-legacy .area-group[id^="sensor_"] {
   display: none !important;
 }
 
+/* Live marks/trails are drawn by React MarksLayer. */
+body.ss-use-react-map #ss-map-host .ss-snap-legacy .mark,
+body.ss-use-react-map #ss-map-host .ss-snap-legacy .trail {
+  display: none !important;
+}
+
 body.ss-use-react-map #ss-map-host .ss-snap-legacy .area-group[id^="child_"] {
   display: block !important;
   pointer-events: none;

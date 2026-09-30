@@ -14,8 +14,8 @@ function refitMap(): void {
 }
 
 /**
- * Marks stay in native map pixels on the Snap overlay. Match the React
- * map's viewBox so resize only changes display scale, not coordinates.
+ * Marks stay in native map pixels on the React map layer when ssUseReactMap.
+ * Match Snap overlay viewBox to React for child overlays.
  */
 function syncSnapToReact(stage: HTMLElement): void {
   const reactSvg = stage.querySelector(
@@ -44,6 +44,7 @@ type Props = {
   mapWidth?: number;
   mapHeight?: number;
   sensors?: SceneSensorBootstrap[];
+  assetMarkColors?: Record<string, string>;
   setupHelper?: ReactNode;
 };
 
@@ -57,6 +58,7 @@ export const SceneMapPane = memo(function SceneMapPane({
   mapWidth = 1280,
   mapHeight = 720,
   sensors = [],
+  assetMarkColors = {},
   setupHelper = null,
 }: Props) {
   const slotRef = useRef<HTMLDivElement>(null);
@@ -203,6 +205,7 @@ export const SceneMapPane = memo(function SceneMapPane({
                 mapWidth={naturalSize.width || mapWidth}
                 mapHeight={naturalSize.height || mapHeight}
                 sensors={sensors}
+                assetMarkColors={assetMarkColors}
               />
             </div>,
             stage,

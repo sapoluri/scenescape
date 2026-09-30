@@ -423,6 +423,7 @@ function SceneDetailInner({ bootstrap }: Props) {
           <SceneMapPane
             mapUrl={mapBitmapUrl}
             sensors={sensors}
+            assetMarkColors={bootstrap.assetMarkColors}
             setupHelper={
               !mapBitmapUrl && isSuperuser ? (
                 <SceneMapSetupHelper

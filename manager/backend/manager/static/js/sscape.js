@@ -133,6 +133,15 @@ function schedulePlot(objects) {
     plotRafId = null;
     var objs = pendingPlotObjects;
     pendingPlotObjects = null;
+    // React map owns live marks; Snap keeps child overlays only.
+    if (window.ssUseReactMap) {
+      window.dispatchEvent(
+        new CustomEvent("ss-scene-objects", {
+          detail: { objects: objs || [] },
+        }),
+      );
+      return;
+    }
     plot(
       objs,
       scale,
@@ -2634,6 +2643,11 @@ $(document).ready(function () {
       show_trails = false;
       clearAllTrails();
     }
+    window.dispatchEvent(
+      new CustomEvent("ss-show-trails", {
+        detail: { show: show_trails },
+      }),
+    );
   });
 
   $(document)

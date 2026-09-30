@@ -268,8 +268,9 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
 - **Drift** — Treat TS bootstrap types + this doc + OpenAPI as one change set
   when fields move.
 - **Mesh via Token only** — UI and setup scripts use `/api/v1/scene/…/generate-mesh[-status]/`.
-- **MQTT shared client** — React owns connect on scene detail; Snap still
-  consumes `ssMqttClient` for marks until a marks epic moves them.
+- **MQTT shared client** — React owns connect and live marks on scene detail;
+  Snap still draws child overlays via `ssAttachSceneMqttClient` until a
+  children/marks epic retires the overlay.
 
 ## 8. Rollout / Migration Plan
 
