@@ -110,7 +110,11 @@ declare global {
       removeListener?: (ev: string, fn: (...args: unknown[]) => void) => void;
       off?: (ev: string, fn: (...args: unknown[]) => void) => void;
       end?: (force?: boolean) => void;
+      connected?: boolean;
     };
+    ssAttachSceneMqttClient?: (client: NonNullable<Window["ssMqttClient"]>) => void;
+    ssReactOwnsMqtt?: boolean;
+    ssReactOwnsCameraStrip?: boolean;
     ssPersistGeometry?: (
       options?: { preferHidden?: boolean } | string[],
     ) => void | Promise<void>;

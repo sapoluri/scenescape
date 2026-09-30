@@ -71,7 +71,7 @@ body.ss-embed .cal-pane {
 
 body.ss-embed .cal-pane-viewport {
   height: auto;
-  min-height: 0;
+  min-height: 12rem;
   flex: 1 1 auto;
 }
 

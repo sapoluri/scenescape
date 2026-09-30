@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef } from "react";
-import type { MqttClientLike } from "./client";
+import {
+  mqttPayloadToJson,
+  type MqttClientLike,
+} from "./client";
 import { APP_NAME, CMD_CAMERA, IMAGE_CAMERA, cameraImageTopic } from "./topics";
 
 function isLiveViewEnabled(): boolean {
@@ -93,13 +96,12 @@ export function useCameraStripMqtt(enabled = true): void {
       if (!t.includes(IMAGE_CAMERA)) {
         return;
       }
-      let msg: { image?: string };
-      try {
-        msg = JSON.parse(String(data)) as { image?: string };
-      } catch {
+      const parsed = mqttPayloadToJson(data);
+      if (!parsed || typeof parsed !== "object") {
         return;
       }
-      if (!msg?.image || !document.querySelector(".snapshot-image")) {
+      const msg = parsed as { image?: string };
+      if (!msg.image || !document.querySelector(".snapshot-image")) {
         return;
       }
       const id = t.split("camera/")[1];

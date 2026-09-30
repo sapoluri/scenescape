@@ -13,7 +13,49 @@ export type MqttClientLike = {
   removeListener?: (ev: string, fn: (...args: unknown[]) => void) => void;
   off?: (ev: string, fn: (...args: unknown[]) => void) => void;
   end?: (force?: boolean) => void;
+  connected?: boolean;
 };
+
+/** Decode mqtt.js Buffer / Uint8Array / string payloads to UTF-8 text. */
+export function mqttPayloadToString(data: unknown): string {
+  if (data == null) {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data;
+  }
+  if (
+    typeof TextDecoder !== "undefined" &&
+    (data instanceof Uint8Array || ArrayBuffer.isView(data))
+  ) {
+    try {
+      return new TextDecoder().decode(data as ArrayBufferView);
+    } catch {
+      /* fall through */
+    }
+  }
+  if (
+    data &&
+    typeof data === "object" &&
+    typeof (data as { toString?: unknown }).toString === "function"
+  ) {
+    try {
+      return (data as { toString: (enc?: string) => string }).toString("utf8");
+    } catch {
+      return (data as { toString: () => string }).toString();
+    }
+  }
+  return String(data);
+}
+
+export function mqttPayloadToJson(data: unknown): unknown {
+  const text = mqttPayloadToString(data);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 type MqttGlobal = {
   connect: (url: string) => MqttClientLike;
@@ -79,13 +121,4 @@ export function connectMqtt(brokerUrl: string): MqttClientLike | null {
 /** Ask legacy sscape.js to bind regulated/event/mark handlers on this client. */
 export function attachLegacySceneHandlers(client: MqttClientLike): void {
   window.ssAttachSceneMqttClient?.(client);
-}
-
-declare global {
-  interface Window {
-    ssMqttClient?: MqttClientLike;
-    ssAttachSceneMqttClient?: (client: MqttClientLike) => void;
-    ssReactOwnsMqtt?: boolean;
-    ssReactOwnsCameraStrip?: boolean;
-  }
 }

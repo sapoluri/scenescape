@@ -626,6 +626,47 @@ window.ssSyncRoiColorSectors = function (uuid, sectorsPayload) {
   }
 };
 
+/** Decode mqtt.js Buffer / Uint8Array / string payloads to text. */
+function mqttPayloadToString(data) {
+  if (data == null) {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data;
+  }
+  if (typeof data.toString === "function") {
+    // Prefer Buffer/Uint8Array utf8; avoid Array.toString comma-join.
+    if (
+      typeof TextDecoder !== "undefined" &&
+      (data instanceof Uint8Array ||
+        (typeof ArrayBuffer !== "undefined" &&
+          ArrayBuffer.isView &&
+          ArrayBuffer.isView(data)))
+    ) {
+      try {
+        return new TextDecoder().decode(data);
+      } catch (e) {
+        /* fall through */
+      }
+    }
+    try {
+      return data.toString("utf8");
+    } catch (e) {
+      return data.toString();
+    }
+  }
+  return String(data);
+}
+
+function mqttPayloadToJson(data) {
+  var text = mqttPayloadToString(data);
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return text;
+  }
+}
+
 /**
  * Bind regulated/event/mark/image handlers on an MQTT client.
  * React scene-detail owns connect and calls this so Snap marks stay live.
@@ -636,7 +677,7 @@ window.ssAttachSceneMqttClient = function (client) {
   }
   client.__ssSceneHandlersBound = true;
 
-  client.on("connect", function () {
+  function onSceneMqttConnected() {
     console.log("MQTT scene handlers connected");
     var topicVal = $("#topic").val();
     if (
@@ -705,7 +746,13 @@ window.ssAttachSceneMqttClient = function (client) {
           }
         });
     }
-  });
+  }
+
+  client.on("connect", onSceneMqttConnected);
+  // mqtt.js does not re-emit "connect" if the socket is already up when we attach.
+  if (client.connected) {
+    onSceneMqttConnected();
+  }
 
   client.on("close", function () {
     $("[id^='mqtt_status']").removeClass("connected");
@@ -730,12 +777,7 @@ window.ssAttachSceneMqttClient = function (client) {
   });
 
   client.on("message", function (topic, data) {
-    var msg;
-    try {
-      msg = JSON.parse(data);
-    } catch (error) {
-      msg = String(data);
-    }
+    var msg = mqttPayloadToJson(data);
 
     if (topic.includes(DATA_REGULATED)) {
       if (show_telemetry) {
@@ -2571,7 +2613,6 @@ $(document).ready(function () {
             }
           });
       }
-    }
 
     setColorForAllROIs();
   }
