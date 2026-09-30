@@ -1480,6 +1480,10 @@ function stopDragTripwire() {
 }
 
 function newTripwire(e, index, type = "tripwire") {
+  // React map owns local tripwires; Snap still draws child overlays.
+  if (window.ssUseReactMap && type === "tripwire") {
+    return;
+  }
   var i = type + "_" + index;
 
   if (type == "child_tripwire" && document.getElementById(i)) {
@@ -1644,6 +1648,9 @@ window.saveRois = saveRois;
 
 if (svgCanvas) {
   svgCanvas.mouseup(function (e) {
+    if (window.ssUseReactMap) {
+      return;
+    }
     if (dragging || !adding) return;
     drawing = true;
 
@@ -1712,6 +1719,10 @@ if (svgCanvas) {
 }
 
 function drawRoi(e, index, type) {
+  // React map owns local rois; Snap still draws child overlays.
+  if (window.ssUseReactMap && type === "roi") {
+    return;
+  }
   var i = type + "_" + index;
 
   if (e.title) {
@@ -2362,7 +2373,11 @@ $(document).ready(function () {
 
         rois = JSON.parse($rois.val());
         rois.forEach(function (e, index) {
-          drawRoi(e, e.uuid, "roi");
+          // Under React map, skip Snap local ROI draw (CSS-hidden anyway);
+          // still seed occupancy sectors for Visualize ROIs.
+          if (!useReactMap) {
+            drawRoi(e, e.uuid, "roi");
+          }
 
           var sectors = normalizeOccupancySectors(e);
           if (sectors && sectors.thresholds.length > 0) {
@@ -2379,10 +2394,12 @@ $(document).ready(function () {
             t.points[1] = metersToPixels(t.points[1], scale, scene_y_max);
           });
 
-          tripwires.forEach(function (e, index) {
-            newTripwire(e, e.uuid, "tripwire");
-          });
-          numberTripwires();
+          if (!useReactMap) {
+            tripwires.forEach(function (e, index) {
+              newTripwire(e, e.uuid, "tripwire");
+            });
+            numberTripwires();
+          }
         }
 
         // Initial Child ROI's //
@@ -2409,7 +2426,7 @@ $(document).ready(function () {
           });
         }
 
-        if (!$("#map").hasClass("singletonCal")) {
+        if (!useReactMap && !$("#map").hasClass("singletonCal")) {
           numberRois();
           numberTripwires();
         }
@@ -2428,77 +2445,67 @@ $(document).ready(function () {
           });
       }
 
-      $(document)
-        .off("click.ssNewRoi", "#new-roi, #empty-new-roi")
-        .on("click.ssNewRoi", "#new-roi, #empty-new-roi", function () {
-          if (window.ssUseReactMap) {
-            return;
-          }
-          addPoly();
-        });
+      if (!useReactMap) {
+        $(document)
+          .off("click.ssNewRoi", "#new-roi, #empty-new-roi")
+          .on("click.ssNewRoi", "#new-roi, #empty-new-roi", function () {
+            addPoly();
+          });
 
-      $(document)
-        .off("click.ssNewTrip", "#new-tripwire, #empty-new-tripwire")
-        .on(
-          "click.ssNewTrip",
-          "#new-tripwire, #empty-new-tripwire",
-          function () {
-            if (window.ssUseReactMap) {
-              return;
+        $(document)
+          .off("click.ssNewTrip", "#new-tripwire, #empty-new-tripwire")
+          .on(
+            "click.ssNewTrip",
+            "#new-tripwire, #empty-new-tripwire",
+            function () {
+              addTripwire();
+            },
+          );
+
+        $(document)
+          .off("click.ssRoiRemove", ".roi-remove")
+          .on("click.ssRoiRemove", ".roi-remove", async function (event) {
+            event.preventDefault();
+            var $group = $(this).closest(".form-roi");
+            var r = await ssAskConfirm(
+              "Are you sure you wish to remove this ROI?",
+              {
+                title: "Remove region?",
+                confirmLabel: "Remove",
+                danger: true,
+              },
+            );
+
+            if (r == true) {
+              $("#" + $group.attr("for")).remove();
+              $group.remove();
+              numberRois();
+              saveRois(getRoiValues("form-control roi-title", "roi"));
             }
-            addTripwire();
-          },
-        );
+          });
 
-      $(document)
-        .off("click.ssRoiRemove", ".roi-remove")
-        .on("click.ssRoiRemove", ".roi-remove", async function (event) {
-          if (window.ssUseReactMap) {
-            return;
-          }
-          event.preventDefault();
-          var $group = $(this).closest(".form-roi");
-          var r = await ssAskConfirm(
-            "Are you sure you wish to remove this ROI?",
-            {
-              title: "Remove region?",
-              confirmLabel: "Remove",
-              danger: true,
-            },
-          );
+        $(document)
+          .off("click.ssTripRemove", ".tripwire-remove")
+          .on("click.ssTripRemove", ".tripwire-remove", async function (event) {
+            event.preventDefault();
+            var $group = $(this).closest(".form-tripwire");
+            var r = await ssAskConfirm(
+              "Are you sure you wish to remove this tripwire?",
+              {
+                title: "Remove tripwire?",
+                confirmLabel: "Remove",
+                danger: true,
+              },
+            );
 
-          if (r == true) {
-            $("#" + $group.attr("for")).remove();
-            $group.remove();
-            numberRois();
-            saveRois(getRoiValues("form-control roi-title", "roi"));
-          }
-        });
-
-      $(document)
-        .off("click.ssTripRemove", ".tripwire-remove")
-        .on("click.ssTripRemove", ".tripwire-remove", async function (event) {
-          if (window.ssUseReactMap) {
-            return;
-          }
-          event.preventDefault();
-          var $group = $(this).closest(".form-tripwire");
-          var r = await ssAskConfirm(
-            "Are you sure you wish to remove this tripwire?",
-            {
-              title: "Remove tripwire?",
-              confirmLabel: "Remove",
-              danger: true,
-            },
-          );
-
-          if (r == true) {
-            $("#" + $group.attr("for")).remove();
-            $group.remove();
-            numberTripwires();
-            saveRois(getRoiValues("form-control tripwire-title", "tripwire"));
-          }
-        });
+            if (r == true) {
+              $("#" + $group.attr("for")).remove();
+              $group.remove();
+              numberTripwires();
+              saveRois(getRoiValues("form-control tripwire-title", "tripwire"));
+            }
+          });
+      }
     }
 
     setColorForAllROIs();
