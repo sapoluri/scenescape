@@ -52,7 +52,7 @@ React sign-in, Snap ROI gates, single bootstrap module).
 
 ### What still binds us optionally to Django templates
 
-- Calibrate pages still use legacy MQTT + Django chrome / Snap.
+- Camera calibrate embed still loads `sscape.js` MQTT + THREE (chrome skipped).
 - Scene / list / sign-in pages still have thin Django HTML mounts (roots +
   scripts); static `shell.html` / `sign-in.html` can serve the same islands.
 - Snap overlay remains for child ROI/tripwire/sensor on React map scenes.

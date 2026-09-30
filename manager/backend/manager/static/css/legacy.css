@@ -25,7 +25,8 @@ body.ss-embed {
 }
 
 body.ss-embed .navbar,
-body.ss-embed .breadcrumb {
+body.ss-embed .breadcrumb,
+body.ss-embed #ss-chrome-root {
   display: none !important;
 }
 

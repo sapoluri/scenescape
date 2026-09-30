@@ -65,9 +65,11 @@ SPDX-License-Identifier: Apache-2.0
   </head>
 
   <body class="{% if embed %}ss-embed{% endif %}">
-    {# Chrome bootstrap via GET /api/v1/ui-bootstrap/?page=chrome (no json_script). #}
-    <div id="ss-chrome-root"></div>
-    <script type="module" src="{% static 'ui/chrome.js' %}?v=chrome-1"></script>
+    {% if not embed %}
+      {# Chrome via GET /api/v1/ui-bootstrap/?page=chrome — skip on calibrate embeds. #}
+      <div id="ss-chrome-root"></div>
+      <script type="module" src="{% static 'ui/chrome.js' %}?v=chrome-1"></script>
+    {% endif %}
 
     <div class="container-fluid wrapper">
       <div class="content">
@@ -98,7 +100,7 @@ SPDX-License-Identifier: Apache-2.0
       type="module"
       src="{% static 'js/sscape.js' %}?v=react-mqtt-d1"
     ></script>
-    {% if user.is_authenticated %}
+    {% if user.is_authenticated and not embed %}
       <script
         type="module"
         src="{% static 'ui/destructive-actions.js' %}?v=actions-1"
