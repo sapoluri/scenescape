@@ -4,18 +4,45 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AdminListApp, type AdminListBootstrap } from "./admin/AdminListApp";
-import { readBootstrapJson } from "./lib/bootstrap";
+import { loadUiBootstrap, type UiBootstrapPage } from "./lib/uiBootstrap";
 import "./tokens/tokens.css";
 
-const bootstrap = readBootstrapJson<AdminListBootstrap>(
-  "ss-admin-list-bootstrap",
-);
-const rootEl = document.getElementById("ss-admin-list-root");
+function listPageFromPath(): UiBootstrapPage | null {
+  const path = window.location.pathname;
+  if (path.includes("/cam/list") || path.startsWith("/cameras")) {
+    return "cameras";
+  }
+  if (
+    path.includes("/singleton_sensor/list") ||
+    path.startsWith("/sensors")
+  ) {
+    return "sensors";
+  }
+  if (path.includes("/asset/list") || path.startsWith("/assets")) {
+    return "assets";
+  }
+  return null;
+}
 
-if (bootstrap && rootEl) {
+async function main(): Promise<void> {
+  const page = listPageFromPath();
+  if (!page) {
+    console.error("admin-list: unrecognized list path");
+    return;
+  }
+  const bootstrap = await loadUiBootstrap<AdminListBootstrap>(
+    "ss-admin-list-bootstrap",
+    page,
+  );
+  const rootEl = document.getElementById("ss-admin-list-root");
+  if (!bootstrap || !rootEl) {
+    return;
+  }
   createRoot(rootEl).render(
     <StrictMode>
       <AdminListApp bootstrap={bootstrap} />
     </StrictMode>,
   );
 }
+
+void main();

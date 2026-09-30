@@ -4,7 +4,15 @@
 import { readBootstrapJson } from "./bootstrap";
 import { readAuthToken } from "./authToken";
 
-export type UiBootstrapPage = "chrome" | "scenes" | "scene";
+export type UiBootstrapPage =
+  | "chrome"
+  | "scenes"
+  | "scene"
+  | "cameras"
+  | "sensors"
+  | "assets"
+  | "models"
+  | "list-sheets";
 
 /**
  * Prefer embedded `json_script`, else GET /api/v1/ui-bootstrap/ (session or Token).

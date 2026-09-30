@@ -12,7 +12,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from manager.models import Asset3D, Scene
+from manager.models import Asset3D, Cam, Scene, SingletonSensor
 
 
 def build_chrome_bootstrap(request) -> dict:
@@ -207,6 +207,224 @@ def build_scene_detail_bootstrap(request, scene_id) -> dict:
   }
 
 
+def _scene_picker() -> list[dict]:
+  return [
+    {"id": str(s.id), "name": s.name}
+    for s in Scene.objects.order_by("name")
+  ]
+
+
+def build_cameras_list_bootstrap(request) -> dict:
+  primary = None
+  if request.user.is_superuser:
+    primary = {
+      "label": "+ New Camera",
+      "href": f"{reverse('cam_list')}?ss=cam-create",
+      "id": "new-camera",
+    }
+  rows = []
+  for cam in Cam.objects.all():
+    scene = cam.scene
+    actions = []
+    if request.user.is_superuser:
+      if scene:
+        actions.append({
+          "label": "Manage",
+          "href": f"{reverse('cam_list')}?ss=calibrate-cam&id={cam.id}",
+        })
+      else:
+        actions.append({
+          "label": "Edit",
+          "href": f"{reverse('cam_list')}?ss=cam-edit&id={cam.sensor_id}",
+        })
+      actions.append({
+        "label": "Delete",
+        "href": reverse("cam_delete", args=[cam.id]),
+        "tone": "danger",
+      })
+    rows.append({
+      "id": str(cam.id),
+      "cells": [
+        {"text": str(cam)},
+        {"text": cam.sensor_id},
+        {
+          "text": str(scene) if scene else "--",
+          "href": (
+            f"{reverse('sceneDetail', args=[scene.id])}?from=cam-list"
+            if scene else None
+          ),
+        },
+      ],
+      "actions": actions,
+    })
+  return {
+    "title": "Cameras",
+    "breadcrumbs": [{"label": "Cameras"}],
+    "primaryAction": primary,
+    "columns": ["Camera Name", "Camera ID", "Scene"],
+    "rows": rows,
+    "emptyMessage": "No cameras are available.",
+    "isSuperuser": request.user.is_superuser,
+  }
+
+
+def build_sensors_list_bootstrap(request) -> dict:
+  primary = None
+  if request.user.is_superuser:
+    primary = {
+      "label": "+ New Sensor",
+      "href": f"{reverse('singleton_sensor_list')}?ss=sensor-create",
+      "id": "new-sensor",
+    }
+  rows = []
+  for sensor in SingletonSensor.objects.all():
+    scene = sensor.scene
+    actions = []
+    if request.user.is_superuser:
+      if scene:
+        actions.append({
+          "label": "Manage",
+          "href": (
+            f"{reverse('singleton_sensor_list')}"
+            f"?ss=calibrate-sensor&id={sensor.id}"
+          ),
+        })
+      else:
+        actions.append({
+          "label": "Edit",
+          "href": (
+            f"{reverse('singleton_sensor_list')}"
+            f"?ss=sensor-edit&id={sensor.sensor_id}"
+          ),
+        })
+      actions.append({
+        "label": "Delete",
+        "href": reverse("singleton_sensor_delete", args=[sensor.id]),
+        "tone": "danger",
+      })
+    rows.append({
+      "id": str(sensor.id),
+      "cells": [
+        {"text": str(sensor)},
+        {"text": sensor.sensor_id},
+        {
+          "text": str(scene) if scene else "--",
+          "href": (
+            f"{reverse('sceneDetail', args=[scene.id])}?from=sensor-list"
+            if scene else None
+          ),
+        },
+        {
+          "text": (
+            sensor.get_singleton_type_display().replace("_", " ").title()
+            if sensor.singleton_type else "—"
+          ),
+        },
+      ],
+      "actions": actions,
+    })
+  return {
+    "title": "Sensors",
+    "breadcrumbs": [{"label": "Sensors"}],
+    "primaryAction": primary,
+    "columns": ["Sensor Name", "Sensor ID", "Scene", "Type"],
+    "rows": rows,
+    "emptyMessage": "No sensors are available.",
+    "isSuperuser": request.user.is_superuser,
+  }
+
+
+def build_assets_list_bootstrap(request) -> dict:
+  primary = None
+  if request.user.is_superuser:
+    primary = {
+      "label": "+ New Object",
+      "href": f"{reverse('asset_list')}?ss=asset-create",
+      "id": "new-asset",
+    }
+  rows = []
+  for asset in Asset3D.objects.all():
+    actions = []
+    if request.user.is_superuser:
+      actions.append({
+        "label": "Update",
+        "href": f"{reverse('asset_list')}?ss=asset-edit&id={asset.id}",
+        "id": f"obj-manage-{asset.name}",
+      })
+      actions.append({
+        "label": "Delete",
+        "href": reverse("asset_delete", args=[asset.id]),
+        "tone": "danger",
+      })
+    mark = (asset.mark_color or "").strip() or "#888888"
+    size_text = f"{asset.x_size:g} × {asset.y_size:g} × {asset.z_size:g}"
+    if asset.model_3d:
+      model_name = asset.model_3d.name.rsplit("/", 1)[-1]
+    else:
+      model_name = "—"
+    rows.append({
+      "id": str(asset.id),
+      "cells": [
+        {"text": asset.name},
+        {"text": size_text},
+        {"text": mark, "swatch": mark},
+        {"text": model_name},
+        {"text": f"{asset.tracking_radius:g} m"},
+      ],
+      "actions": actions,
+    })
+  return {
+    "title": "Object Library",
+    "breadcrumbs": [{"label": "Object Library"}],
+    "primaryAction": primary,
+    "columns": [
+      "Name", "Size", "Mark color", "3D model", "Tracking radius",
+    ],
+    "rows": rows,
+    "emptyMessage": "No objects are available.",
+    "isSuperuser": request.user.is_superuser,
+  }
+
+
+def build_list_sheets_bootstrap(request, kind: str) -> dict:
+  kind = (kind or "").strip().lower()
+  if kind not in ("cam", "sensor", "asset"):
+    raise ValueError("list-sheets bootstrap requires id=cam|sensor|asset")
+  payload = {
+    "authToken": user_auth_token(request.user),
+    "isSuperuser": request.user.is_superuser,
+    "kind": kind,
+    "defaultSceneId": None,
+    "scenes": _scene_picker() if kind in ("cam", "sensor") else [],
+  }
+  if kind == "cam":
+    payload["isKubernetes"] = bool(settings.KUBERNETES_SERVICE_HOST)
+    payload["cameras"] = [
+      {
+        "id": str(cam.id),
+        "sensorId": cam.sensor_id,
+        "name": str(cam),
+        "sceneId": str(cam.scene_id) if cam.scene_id else None,
+      }
+      for cam in Cam.objects.all()
+    ]
+  elif kind == "sensor":
+    payload["sensors"] = [
+      {
+        "id": str(sensor.id),
+        "sensorId": sensor.sensor_id,
+        "name": str(sensor),
+        "sceneId": str(sensor.scene_id) if sensor.scene_id else None,
+      }
+      for sensor in SingletonSensor.objects.all()
+    ]
+  return payload
+
+
+def build_models_directory_bootstrap(request) -> dict:
+  return {"isSuperuser": request.user.is_superuser}
+
+
 def resolve_ui_bootstrap(request, page: str, entity_id: str | None = None) -> dict:
   """Return bootstrap dict for page name. Raises ValueError for bad page/id."""
   page = (page or "").strip().lower()
@@ -218,4 +436,14 @@ def resolve_ui_bootstrap(request, page: str, entity_id: str | None = None) -> di
     if not entity_id:
       raise ValueError("scene bootstrap requires id")
     return build_scene_detail_bootstrap(request, entity_id)
+  if page in ("cameras", "cam-list", "cam"):
+    return build_cameras_list_bootstrap(request)
+  if page in ("sensors", "sensor-list", "singleton-sensor"):
+    return build_sensors_list_bootstrap(request)
+  if page in ("assets", "asset-list", "object-library"):
+    return build_assets_list_bootstrap(request)
+  if page in ("models", "model-list", "models-directory"):
+    return build_models_directory_bootstrap(request)
+  if page in ("list-sheets", "sheets"):
+    return build_list_sheets_bootstrap(request, entity_id or "")
   raise ValueError(f"unknown page: {page}")

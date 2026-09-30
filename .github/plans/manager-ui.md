@@ -47,15 +47,15 @@ Key commits: `02ed8ce9d` … `6fabb3ea5` (E); dual-path retirement through
 | --- | --- |
 | 1–5 | ✅ Done |
 | 6a. React chrome shell (**E**) | ✅ Done |
-| 6b. Host independence (**F**) | ✅ Done (static shell + bootstrap API; list pages still Django dual-path) |
+| 6b. Host independence (**F**) | ✅ Done (static shell + bootstrap API; list pages on ui-bootstrap) |
 | 7. Framework swap (**G**) | ⬜ Optional |
 
 ### What still binds us optionally to Django templates
 
-- Cam / sensor / asset / models list pages still use Django HTML + islands
-  (bootstrap API can be extended the same way).
 - Session `sign_in/` form remains Django.
 - Snap marks / calibrate legacy JS still load from `/static/js`.
+- List / scene pages still have thin Django HTML mounts (roots + scripts);
+  static `shell.html` can serve the same islands via ui-bootstrap.
 
 Gate: UI BAT green on Django dual-path; static shell smoke for `/` and
 `/<uuid>/` against ui-bootstrap.

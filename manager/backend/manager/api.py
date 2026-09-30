@@ -627,10 +627,11 @@ class GenerateSceneMeshStatus(APIView):
 
 class UiBootstrap(APIView):
   """
-  GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>
+  GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene|cameras|sensors|assets|models|list-sheets&id=
 
   Session cookie or Token. Chrome allows anonymous; other pages need auth.
-  Same payloads as Django json_script bootstraps (host-independent UI).
+  Same payloads as former Django json_script bootstraps (host-independent UI).
+  For list-sheets, id is cam|sensor|asset. For scene, id is scene UUID.
   """
   authentication_classes = [
     authentication.TokenAuthentication,

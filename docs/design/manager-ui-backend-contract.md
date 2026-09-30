@@ -53,9 +53,9 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 | Chrome (nav/about/theme) | `#ss-chrome-root` | `ss-chrome-bootstrap` |
 | Scenes home | `#ss-scenes-home-app` | `GET …/ui-bootstrap/?page=scenes` (optional `ss-scenes-home-bootstrap`) |
 | Scene detail | `#ss-scene-detail-root` | `GET …/ui-bootstrap/?page=scene&id=` (optional `ss-scene-detail-bootstrap`) |
-| Admin lists | `#ss-admin-list-root` | `ss-admin-list-bootstrap` |
-| List sheets | (query-driven; no dedicated root) | `ss-list-sheets-bootstrap` |
-| Models directory | `#ss-models-directory-root` | `ss-models-directory-bootstrap` |
+| Admin lists | `#ss-admin-list-root` | `GET …/ui-bootstrap/?page=cameras\|sensors\|assets` |
+| List sheets | (query-driven; no dedicated root) | `GET …/ui-bootstrap/?page=list-sheets&id=cam\|sensor\|asset` |
+| Models directory | `#ss-models-directory-root` | `GET …/ui-bootstrap/?page=models` |
 | Destructive actions | creates `#ss-destructive-actions-root` | none |
 
 #### Chrome (`ss-chrome-bootstrap`)
@@ -68,10 +68,11 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 
 #### Host-independent bootstrap API
 
-`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>` returns the
-same JSON shapes as the `json_script` nodes above (Session or Token).
+`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene|cameras|sensors|assets|models|list-sheets&id=`
+returns the same JSON shapes documented below (Session or Token).
 Static shell: `manager/backend/manager/static/ui/shell.html` + `spa.js`
-(see `manager/frontend/README.md`).
+(see `manager/frontend/README.md`). For `list-sheets`, `id` is
+`cam` \| `sensor` \| `asset`. For `scene`, `id` is the scene UUID.
 
 Scene detail also exposes `google-maps-api-key` and `mapbox-api-key`
 `json_script` nodes (string scalars).
@@ -118,23 +119,25 @@ geospatial plugins / `sscape.js` until those move behind React.
   for legacy child overlay hidden inputs (created by `ensureSceneDetailDom`)
 - `scenes[]` for pickers: `id`, `name`, `georeferenced?`, `mapUrl?`
 
-#### Admin list (`ss-admin-list-bootstrap`)
+#### Admin list (`page=cameras|sensors|assets`)
+
+Manager list pages load via the bootstrap API (no embedded `json_script`).
 
 - `title`, `breadcrumbs[]`, `primaryAction?` `{ label, href, id? }`
 - `columns[]`, `rows[]` (`id`, `cells[]`, `actions[]`), `emptyMessage`,
   `isSuperuser`
 - No `authToken` (sheets bootstrap carries Token)
 
-#### List sheets (`ss-list-sheets-bootstrap`)
+#### List sheets (`page=list-sheets&id=cam|sensor|asset`)
 
 - `authToken`, `isSuperuser`, `kind` (`cam` | `sensor` | `asset`)
 - `defaultSceneId`, `isKubernetes`
 - `cameras?` / `sensors?`: `id`, `sensorId`, `name`, `sceneId?`
 - `scenes[]`: `id`, `name` (empty for assets)
 
-#### Models directory (`ss-models-directory-bootstrap`)
+#### Models directory (`page=models`)
 
-- `isSuperuser` only — tree loaded via session API
+- `isSuperuser` only — tree loaded via Token model-directory API
 
 #### Sheet deep links
 
@@ -268,6 +271,4 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
 
 ## 9. Open Questions
 
-- Extend `ui-bootstrap` for cam/sensor/asset/models list pages and retire
-  those Django templates?
 - Prefer path-based nginx `try_files` vs Django serving `shell.html` for `/`?

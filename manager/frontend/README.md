@@ -60,10 +60,10 @@ build outputs and are not tracked in Git.
 
 ## Django load path
 
-Each page mounts a root + `json_script` bootstrap and loads the matching
-`{% static 'ui/<entry>.js' %}` as `type="module"`. Islands also accept
-`GET /api/v1/ui-bootstrap/?page=…` when the script tag is absent (static
-shell).
+Each page mounts a root and loads the matching
+`{% static 'ui/<entry>.js' %}` as `type="module"`. Islands load bootstrap from
+`GET /api/v1/ui-bootstrap/?page=…` (optional embedded `json_script` still
+works for tests / static smoke).
 
 Scene detail also adopts `#ss-map-host`; control tab panels are React-owned
 inside `SceneSidePanel` (hard-contract pane ids `#cameras`, `#trips`, …).
@@ -74,14 +74,16 @@ Sheets open from `?ss=<action>&id=<optional>` (see `src/lib/sheetQuery.ts`).
 
 Build emits `static/ui/shell.html` + `spa.js`. Point a reverse proxy so that:
 
-- `/` and `/<scene-uuid>/` serve `shell.html` (or redirect to
+- `/` , `/<scene-uuid>/`, `/cam/list/`, `/singleton_sensor/list/`,
+  `/asset/list/`, `/model/list/` serve `shell.html` (or redirect to
   `/static/ui/shell.html` with path preserved via `try_files`)
 - `/static/` → Manager static files (css, js, ui, assets, images, bootstrap)
 - `/api/`, `/media/`, `/sign_in/`, `/sign_out/`, `/mqtt` → API / session host
 
-Chrome, scenes home, and scene detail bootstraps come from
-`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene&id=<uuid>` (session cookie
-or Token). Django page templates remain a dual path until cut over.
+Chrome, scenes, scene detail, and list pages (cameras / sensors / assets /
+models / list-sheets) bootstraps come from
+`GET /api/v1/ui-bootstrap/?page=…` (session cookie or Token). Django page
+templates remain thin mounts (root + script tags) until a static host cutover.
 
 ## Lint
 

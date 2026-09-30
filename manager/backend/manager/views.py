@@ -29,7 +29,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.views.generic import DetailView, ListView, RedirectView, TemplateView
+from django.views.generic import DetailView, RedirectView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.core.files.storage import default_storage
 from django.urls import reverse
@@ -88,11 +88,6 @@ def remove_other_sessions(sender, user, request, **kwargs):
 class SuperUserCheck(UserPassesTestMixin):
   def test_func(self):
     return self.request.user.is_superuser
-
-def _user_auth_token(user):
-  if hasattr(user, "auth_token") and user.auth_token:
-    return str(user.auth_token)
-  return ""
 
 def sheet_redirect(path, action, entity_id=None):
   """Redirect into a host page that opens a React sheet via ?ss=&id=."""
@@ -313,84 +308,9 @@ class CamDetailView(SuperUserCheck, View):
       return sheet_redirect(reverse('cam_list'), 'calibrate-cam', cam.pk)
     return redirect(reverse('cam_list'))
 
-class CamListView(LoginRequiredMixin, ListView):
-  model = Cam
+class CamListView(LoginRequiredMixin, TemplateView):
   template_name = "cam/cam_list.html"
 
-  def get_context_data(self, **kwargs):
-    context = super().get_context_data(**kwargs)
-    primary = None
-    if self.request.user.is_superuser:
-      primary = {
-        'label': '+ New Camera',
-        'href': f"{reverse('cam_list')}?ss=cam-create",
-        'id': 'new-camera',
-      }
-    rows = []
-    for cam in context['object_list']:
-      scene = cam.scene
-      actions = []
-      if self.request.user.is_superuser:
-        if scene:
-          actions.append({
-            'label': 'Manage',
-            'href': f"{reverse('cam_list')}?ss=calibrate-cam&id={cam.id}",
-          })
-        else:
-          actions.append({
-            'label': 'Edit',
-            'href': f"{reverse('cam_list')}?ss=cam-edit&id={cam.sensor_id}",
-          })
-        actions.append({
-          'label': 'Delete',
-          'href': reverse('cam_delete', args=[cam.id]),
-          'tone': 'danger',
-        })
-      rows.append({
-        'id': str(cam.id),
-        'cells': [
-          {'text': str(cam)},
-          {'text': cam.sensor_id},
-          {
-            'text': str(scene) if scene else '--',
-            'href': (
-              f"{reverse('sceneDetail', args=[scene.id])}?from=cam-list"
-              if scene else None
-            ),
-          },
-        ],
-        'actions': actions,
-      })
-    context['admin_list_bootstrap'] = {
-      'title': 'Cameras',
-      'breadcrumbs': [{'label': 'Cameras'}],
-      'primaryAction': primary,
-      'columns': ['Camera Name', 'Camera ID', 'Scene'],
-      'rows': rows,
-      'emptyMessage': 'No cameras are available.',
-      'isSuperuser': self.request.user.is_superuser,
-    }
-    context['list_sheets_bootstrap'] = {
-      'authToken': _user_auth_token(self.request.user),
-      'isSuperuser': self.request.user.is_superuser,
-      'kind': 'cam',
-      'defaultSceneId': None,
-      'isKubernetes': bool(settings.KUBERNETES_SERVICE_HOST),
-      'cameras': [
-        {
-          'id': str(cam.id),
-          'sensorId': cam.sensor_id,
-          'name': str(cam),
-          'sceneId': str(cam.scene_id) if cam.scene_id else None,
-        }
-        for cam in context['object_list']
-      ],
-      'scenes': [
-        {'id': str(s.id), 'name': s.name}
-        for s in Scene.objects.order_by('name')
-      ],
-    }
-    return context
 
 class CamUpdateView(SuperUserCheck, View):
   """React sheet only; URL redirects into ?ss=cam-edit."""
@@ -502,95 +422,9 @@ class SingletonSensorDetailView(SuperUserCheck, View):
       )
     return redirect(reverse('singleton_sensor_list'))
 
-class SingletonSensorListView(LoginRequiredMixin, ListView):
-  model = SingletonSensor
+class SingletonSensorListView(LoginRequiredMixin, TemplateView):
   template_name = "singleton_sensor/singleton_sensor_list.html"
 
-  def get_context_data(self, **kwargs):
-    context = super().get_context_data(**kwargs)
-    primary = None
-    if self.request.user.is_superuser:
-      primary = {
-        'label': '+ New Sensor',
-        'href': f"{reverse('singleton_sensor_list')}?ss=sensor-create",
-        'id': 'new-sensor',
-      }
-    rows = []
-    for sensor in context['object_list']:
-      scene = sensor.scene
-      actions = []
-      if self.request.user.is_superuser:
-        if scene:
-          actions.append({
-            'label': 'Manage',
-            'href': (
-              f"{reverse('singleton_sensor_list')}"
-              f"?ss=calibrate-sensor&id={sensor.id}"
-            ),
-          })
-        else:
-          actions.append({
-            'label': 'Edit',
-            'href': (
-              f"{reverse('singleton_sensor_list')}"
-              f"?ss=sensor-edit&id={sensor.sensor_id}"
-            ),
-          })
-        actions.append({
-          'label': 'Delete',
-          'href': reverse('singleton_sensor_delete', args=[sensor.id]),
-          'tone': 'danger',
-        })
-      rows.append({
-        'id': str(sensor.id),
-        'cells': [
-          {'text': str(sensor)},
-          {'text': sensor.sensor_id},
-          {
-            'text': str(scene) if scene else '--',
-            'href': (
-              f"{reverse('sceneDetail', args=[scene.id])}?from=sensor-list"
-              if scene else None
-            ),
-          },
-          {
-            'text': (
-              sensor.get_singleton_type_display().replace('_', ' ').title()
-              if sensor.singleton_type else '—'
-            ),
-          },
-        ],
-        'actions': actions,
-      })
-    context['admin_list_bootstrap'] = {
-      'title': 'Sensors',
-      'breadcrumbs': [{'label': 'Sensors'}],
-      'primaryAction': primary,
-      'columns': ['Sensor Name', 'Sensor ID', 'Scene', 'Type'],
-      'rows': rows,
-      'emptyMessage': 'No sensors are available.',
-      'isSuperuser': self.request.user.is_superuser,
-    }
-    context['list_sheets_bootstrap'] = {
-      'authToken': _user_auth_token(self.request.user),
-      'isSuperuser': self.request.user.is_superuser,
-      'kind': 'sensor',
-      'defaultSceneId': None,
-      'sensors': [
-        {
-          'id': str(sensor.id),
-          'sensorId': sensor.sensor_id,
-          'name': str(sensor),
-          'sceneId': str(sensor.scene_id) if sensor.scene_id else None,
-        }
-        for sensor in context['object_list']
-      ],
-      'scenes': [
-        {'id': str(s.id), 'name': s.name}
-        for s in Scene.objects.order_by('name')
-      ],
-    }
-    return context
 
 class SingletonSensorUpdateView(SuperUserCheck, View):
   """React sheet only; URL redirects into ?ss=sensor-edit."""
@@ -622,71 +456,9 @@ class AssetDeleteView(SuperUserCheck, DeleteView):
   def get(self, request, *args, **kwargs):
     return redirect(reverse('asset_list'))
 
-class AssetListView(LoginRequiredMixin, ListView):
-  model = Asset3D
+class AssetListView(LoginRequiredMixin, TemplateView):
   template_name = "asset/asset_list.html"
 
-  def get_context_data(self, **kwargs):
-    context = super().get_context_data(**kwargs)
-    primary = None
-    if self.request.user.is_superuser:
-      primary = {
-        'label': '+ New Object',
-        'href': f"{reverse('asset_list')}?ss=asset-create",
-        'id': 'new-asset',
-      }
-    rows = []
-    for asset in context['object_list']:
-      actions = []
-      if self.request.user.is_superuser:
-        actions.append({
-          'label': 'Update',
-          'href': f"{reverse('asset_list')}?ss=asset-edit&id={asset.id}",
-          'id': f'obj-manage-{asset.name}',
-        })
-        actions.append({
-          'label': 'Delete',
-          'href': reverse('asset_delete', args=[asset.id]),
-          'tone': 'danger',
-        })
-      mark = (asset.mark_color or '').strip() or '#888888'
-      size_text = (
-        f"{asset.x_size:g} × {asset.y_size:g} × {asset.z_size:g}"
-      )
-      if asset.model_3d:
-        model_name = asset.model_3d.name.rsplit('/', 1)[-1]
-      else:
-        model_name = '—'
-      rows.append({
-        'id': str(asset.id),
-        'cells': [
-          {'text': asset.name},
-          {'text': size_text},
-          {'text': mark, 'swatch': mark},
-          {'text': model_name},
-          {'text': f"{asset.tracking_radius:g} m"},
-        ],
-        'actions': actions,
-      })
-    context['admin_list_bootstrap'] = {
-      'title': 'Object Library',
-      'breadcrumbs': [{'label': 'Object Library'}],
-      'primaryAction': primary,
-      'columns': [
-        'Name', 'Size', 'Mark color', '3D model', 'Tracking radius',
-      ],
-      'rows': rows,
-      'emptyMessage': 'No objects are available.',
-      'isSuperuser': self.request.user.is_superuser,
-    }
-    context['list_sheets_bootstrap'] = {
-      'authToken': _user_auth_token(self.request.user),
-      'isSuperuser': self.request.user.is_superuser,
-      'kind': 'asset',
-      'defaultSceneId': None,
-      'scenes': [],
-    }
-    return context
 
 class AssetUpdateView(SuperUserCheck, View):
   """React sheet only; URL redirects into ?ss=asset-edit."""
@@ -750,46 +522,6 @@ class ChildUpdateView(SuperUserCheck, View):
 
 class ModelListView(LoginRequiredMixin, TemplateView):
   template_name = "model/model_list.html"
-
-  def get_context_data(self, **kwargs):
-    context = super().get_context_data(**kwargs)
-    dir_structure = {}
-    '''
-    root : Prints out directories only from what you specified.
-    dirs : Prints out sub-directories from root.
-    files : Prints out all files from root and directories.
-    '''
-    for dirpath, dirnames, filenames in os.walk(settings.MODEL_ROOT):
-      # Sort the directories and files alphabetically
-      dirnames.sort(key=lambda s: s.lower())
-      filenames.sort(key=lambda s: s.lower())
-
-      # Relative path value
-      folder = os.path.relpath(dirpath, settings.MODEL_ROOT)
-
-      # Reset to the root directory structure
-      current_level = dir_structure
-
-      if folder != '.': # if not root folder
-        for part in folder.split(os.sep):
-          # Enter deeper level if the current directory exists in the dictionary
-          # Otherwise, create a new entry for the directory
-          current_level = current_level.setdefault(part, {})
-
-      # Add sub-directories to the current level
-      for dirname in dirnames:
-        current_level[dirname] = {}
-
-      # Add files to the current level
-      for filename in filenames:
-        current_level[filename] = None
-
-    context['directory_structure'] = dir_structure
-    context['models_directory_bootstrap'] = {
-      'isSuperuser': self.request.user.is_superuser,
-    }
-
-    return context
 
 def get_login_delay(request):
   log.info(request.META.get('REMOTE_ADDR'))
