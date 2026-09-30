@@ -149,7 +149,7 @@ calibrate-cam|calibrate-sensor`.
 | Mode | How | Used for | Portable? |
 | --- | --- | --- | --- |
 | Token | `Authorization: Token <authToken>` from bootstrap / `ss-auth-bootstrap` | `/api/v1` CRUD, deletes, model-directory, mesh via `lib/rest.ts` / `lib/restDelete.ts` / `modelDirectoryApi.ts` / `meshGeneration.ts` | **Yes** — long-term |
-| Session + CSRF | cookie + `X-CSRFToken` via `lib/session.ts` | DeleteView POST only if no token; legacy `/scene/generate-mesh…` | **No** — transitional |
+| Session + CSRF | cookie + `X-CSRFToken` via `lib/session.ts` | DeleteView POST only if no token | **No** — transitional |
 | Session cookie | `credentials: "same-origin"` | Page shell, media, static | Host concern |
 
 Login today is Django session (`sign_in/`); Token is issued for the signed-in
@@ -183,7 +183,6 @@ Base: `/api/v1`. Client: `manager/frontend/src/lib/rest.ts`.
 | --- | --- | --- |
 | Model directory | `/api/v1/model-directory/` | Token |
 | Mesh generate / status | `/api/v1/scene/{uuid}/generate-mesh/`, `…/generate-mesh-status/` | Token |
-| Mesh (legacy) | `/scene/generate-mesh/{uuid}/`, `/scene/generate-mesh-status/{uuid}/` | Session (compat) |
 | Mapping status | `/mapping-service/status/` | Token |
 | Deletes | bootstrap `deleteUrl` → Token `DELETE /api/v1/...` (CSRF DeleteView fallback) | Token (preferred) |
 | Media | `thumbnailUrl` / `mapUrl` / `/media/…` | Session |
@@ -254,8 +253,7 @@ config endpoint) + Token REST + MQTT — no CSRF deletes, no map parking.
 
 - **Drift** — Treat TS bootstrap types + this doc + OpenAPI as one change set
   when fields move.
-- **Partial auth portability** — Legacy session mesh URLs remain for
-  compatibility; UI uses Token `/api/v1` mesh endpoints.
+- **Mesh via Token only** — UI and setup scripts use `/api/v1/scene/…/generate-mesh[-status]/`.
 - **MQTT shared client** — React owns connect on scene detail; Snap still
   consumes `ssMqttClient` for marks until a marks epic moves them.
 

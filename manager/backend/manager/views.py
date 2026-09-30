@@ -1055,29 +1055,6 @@ def generate_camera_pipeline(request, sensor_id):
     return JsonResponse({"error": "Error generating pipeline"}, status=500)
 
 @superuser_required
-def generate_mesh_status(request, pk):
-  scene = get_object_or_404(Scene, pk=pk)
-  request_id = request.GET.get("request_id")
-  from manager.mesh_http import mesh_generation_status_payload
-  payload, code = mesh_generation_status_payload(scene, request_id)
-  return JsonResponse(payload, status=code)
-
-@superuser_required
-def generate_mesh(request, pk):
-  """Generate 3D mesh from scene cameras using mapping service."""
-  if request.method != 'POST':
-    return JsonResponse({"error": "Only POST method allowed"}, status=405)
-
-  scene = get_object_or_404(Scene, pk=pk)
-  mesh_type = request.POST.get("mesh_type", "mesh")
-  uploaded_map = request.FILES.get("map", None)
-  from manager.mesh_http import start_mesh_generation_payload
-  payload, code = start_mesh_generation_payload(
-    scene, mesh_type, uploaded_map=uploaded_map
-  )
-  return JsonResponse(payload, status=code)
-
-@superuser_required
 def check_mapping_service_status(request):
   """Check if the mapping service is available and ready."""
   if request.method != 'GET':
