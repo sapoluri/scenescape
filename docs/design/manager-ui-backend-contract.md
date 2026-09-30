@@ -196,7 +196,8 @@ change.
 Transport: WSS broker URL (`scene.wssConnection` / `wss://{host}/mqtt`).
 App prefix: `scenescape`. Scene-detail React owns connect (`src/mqtt`) and
 assigns `window.ssMqttClient`; Snap mark/event handlers attach via
-`ssAttachSceneMqttClient`. Calibrate pages still use legacy `ssEnsureMqttScene`.
+`ssAttachSceneMqttClient`. Calibrate / Snap-map pages still wire MQTT in
+`sscape.js` (not a React island contract).
 
 | Direction | Pattern | Role |
 | --- | --- | --- |

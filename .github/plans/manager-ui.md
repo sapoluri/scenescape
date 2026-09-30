@@ -32,7 +32,8 @@ swap until operators use the static path. **G** remains optional.
 | **E** | React chrome island (`ui/chrome.js`); `ss-chrome-bootstrap` |
 | **F** | `GET /api/v1/ui-bootstrap/`; `shell.html` + `spa.js`; islands fetch when no `json_script` |
 
-Key commits: `02ed8ce9d` … `6fabb3ea5` (E).
+Key commits: `02ed8ce9d` … `6fabb3ea5` (E); dual-path retirement through
+`dfaa201be` (Token-only deletes) + skill freeze trim.
 
 ### Left (ordered)
 

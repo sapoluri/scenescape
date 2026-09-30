@@ -111,7 +111,6 @@ declare global {
       off?: (ev: string, fn: (...args: unknown[]) => void) => void;
       end?: (force?: boolean) => void;
     };
-    ssEnsureMqttScene?: () => void;
     ssPersistGeometry?: (
       options?: { preferHidden?: boolean } | string[],
     ) => void | Promise<void>;

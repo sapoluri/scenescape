@@ -174,7 +174,7 @@ React scene-detail owns MQTT connect (`src/mqtt/useSceneMqtt`), camera strip
 frames (`useCameraStripMqtt`), and local sensors (`SensorLayer`). Snap map /
 ROI helpers still go through `lib/legacyBridge.ts`.
 
-Still installed for hybrid / Snap:
+**React freeze (hybrid / Snap still required):**
 
 `fitSceneMapDisplay`, `numberRois` / `numberTripwires`,
 `stringifyRois` / `stringifyTripwires`, `ssPersistGeometry` (React install;
@@ -183,11 +183,10 @@ sscape `saveRois` still calls it), `ssMap`, `ssRoiEditors`,
 `ssToast` / `ssConfirm` (legacy JS only; React uses providers/dialogs),
 `ssSceneTelemetry`, `ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
 
-Calibrate / non-React pages may still use: `ssEnsureMqttScene`,
+**Not React freeze** (sscape-only; calibrate / Snap-map pages — do not call
+from React or list as island contracts): `ssEnsureMqttScene`,
 `ssRefreshCameraSnapshots`, `ssDrawSingletonSensors`,
-`ssRemoveSingletonSensor`.
-
-sscape-internal only (not React-facing): `getRoiValues`, `saveRois`.
+`ssRemoveSingletonSensor`, `getRoiValues`, `saveRois`.
 
 Events: `ss-roi-form-add`, `ss-tripwire-form-add`, `ss-scene-rate`,
 `ss-camera-rate`, `ss-telemetry-clear`, `ss-map-host-ready`,
