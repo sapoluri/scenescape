@@ -122,7 +122,9 @@ export async function deleteViaRest(
   fallbackHref = "/",
 ): Promise<void> {
   if (!token) {
-    throw new Error("Authentication token required to delete");
+    throw new Error(
+      "Authentication token required to delete. Sign out and sign in again, then retry.",
+    );
   }
   const target = parseDeleteTarget(deleteUrl);
   if (!target) {

@@ -28,7 +28,44 @@ import {
   handleAutoCalibrationPose,
 } from "/static/js/calibration.js";
 
-var svgCanvas = Snap("#svgout");
+var svgCanvas = null;
+try {
+  var _svgBoot = document.getElementById("svgout");
+  if (_svgBoot) {
+    svgCanvas = Snap(_svgBoot);
+  }
+} catch (e) {
+  svgCanvas = null;
+}
+
+/** Bind/rebind Snap to the current legacy map SVG (#svgout or #svgout-snap). */
+function ensureSvgCanvas() {
+  var el =
+    document.getElementById("svgout-snap") ||
+    document.querySelector("svg.ss-snap-legacy") ||
+    document.getElementById("svgout");
+  if (!el) {
+    svgCanvas = null;
+    return null;
+  }
+  if (!svgCanvas || svgCanvas.node !== el) {
+    svgCanvas = Snap(el);
+  }
+  return svgCanvas;
+}
+
+/** Scene-detail map host is built async after ui-bootstrap; wait for it. */
+function sceneMapDomReady() {
+  if (
+    !document.getElementById("ss-scene-detail-root") &&
+    !document.getElementById("ss-legacy-map-parking")
+  ) {
+    return true;
+  }
+  return Boolean(
+    document.getElementById("ss-map-host") && document.getElementById("map"),
+  );
+}
 import RESTClient from "/static/js/restclient.js";
 
 // Prefer React toast/confirm hosts when present (ViPPET in-page flows).
@@ -2229,19 +2266,33 @@ $(document).ready(function () {
     setColorForAllROIs();
   });
 
-  // Operations to take after images are loaded
-  $(".content").imagesLoaded(function () {
-    // Camera calibration interface
-    if (isCalibratePage()) {
-      initializeCalibrationSettings();
-      flushPendingCalibrationImage(window.ssMqttClient);
-      window.setTimeout(function () {
-        flushPendingCalibrationImage(window.ssMqttClient);
-      }, 400);
+  // Operations to take after images are loaded (retry until scene-detail map host exists)
+  function ssInitSceneMap(attempt) {
+    attempt = attempt || 0;
+    if (window.__ssSceneMapInited) {
+      return true;
     }
+    if (!sceneMapDomReady() || !ensureSvgCanvas()) {
+      if (attempt < 100) {
+        window.setTimeout(function () {
+          ssInitSceneMap(attempt + 1);
+        }, 50);
+      }
+      return false;
+    }
+    window.__ssSceneMapInited = true;
+    ssRunSceneSvgInit();
+    return true;
+  }
+  window.ssInitSceneMap = ssInitSceneMap;
+
+  function ssRunSceneSvgInit() {
+    // Camera calibration interface is triggered from imagesLoaded wrapper.
 
     // SVG scene implementation
-    if (svgCanvas) {
+    if (!ensureSvgCanvas()) {
+      return;
+    }
       var assetTokenElement = document.getElementById("auth-token");
       if (assetTokenElement) {
         var assetRestClient = new RESTClient(
@@ -2305,6 +2356,11 @@ $(document).ready(function () {
           snapSvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         }
         $(snapSvg).show();
+        ensureSvgCanvas();
+      }
+      if (!image_src || !svgCanvas) {
+        setColorForAllROIs();
+        return;
       }
       var image = svgCanvas.image(image_src, 0, 0, image_w, scene_y_max);
 
@@ -2518,6 +2574,17 @@ $(document).ready(function () {
     }
 
     setColorForAllROIs();
+  }
+
+  $(".content").imagesLoaded(function () {
+    if (isCalibratePage()) {
+      initializeCalibrationSettings();
+      flushPendingCalibrationImage(window.ssMqttClient);
+      window.setTimeout(function () {
+        flushPendingCalibrationImage(window.ssMqttClient);
+      }, 400);
+    }
+    ssInitSceneMap(0);
   });
 
   // MQTT management (see https://github.com/mqttjs/MQTT.js)

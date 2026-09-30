@@ -127,11 +127,19 @@ export function ensureSceneDetailDom(bootstrap: SceneDetailBootstrap): void {
   if (!svg) {
     svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.id = "svgout";
-    const blank = !scene.thumbnailUrl || !scene.mapUrl;
-    svg.classList.add("display-none");
-    if (blank) {
-      svg.classList.add("blank-map-svgout");
-    }
+  }
+  // Template may stub #svgout before sscape.js; adopt it into the map stage.
+  if (svg.parentNode !== stage) {
+    stage.appendChild(svg);
+  }
+  const blank = !scene.thumbnailUrl || !scene.mapUrl;
+  svg.classList.add("display-none");
+  if (blank) {
+    svg.classList.add("blank-map-svgout");
+  } else {
+    svg.classList.remove("blank-map-svgout");
+  }
+  if (!svg.querySelector("title")) {
     const title = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "title",
@@ -144,7 +152,6 @@ export function ensureSceneDetailDom(bootstrap: SceneDetailBootstrap): void {
     desc.textContent =
       "Graphical view of the scene map and objects moving within the scene.";
     svg.append(title, desc);
-    stage.appendChild(svg);
   }
 
   if (!document.getElementById("fullscreen")) {

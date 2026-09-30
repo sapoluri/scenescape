@@ -11,6 +11,13 @@ SPDX-License-Identifier: Apache-2.0
   <input type="hidden" id="scene" value="{{ scene_id }}" />
   {{ google_maps_api_key|json_script:"google-maps-api-key" }}
   {{ mapbox_api_key|json_script:"mapbox-api-key" }}
+  {# Stub #svgout before sscape.js module eval; ensureSceneDetailDom adopts it. #}
+  <svg
+    id="svgout"
+    class="display-none blank-map-svgout"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+  ></svg>
   <div id="ss-scene-detail-root" class="ss-scene-detail-root"></div>
   <link rel="stylesheet" href="{% static 'ui/manager-ui.css' %}?v=api-boot-1" />
   <script

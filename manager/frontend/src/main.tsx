@@ -35,6 +35,7 @@ async function main(): Promise<void> {
   ensureSceneDetailDom(bootstrap);
   document.documentElement.classList.add("ss-scene-workspace");
   document.body.classList.add("ss-scene-workspace");
+  window.ssInitSceneMap?.(0);
   createRoot(rootEl).render(
     <StrictMode>
       <SceneDetailApp bootstrap={bootstrap} />

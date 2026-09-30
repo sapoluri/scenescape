@@ -11,13 +11,12 @@ import "./tokens/tokens.css";
 type Bootstrap = { isSuperuser?: boolean };
 
 async function main(): Promise<void> {
-  const bootstrap =
-    (await loadUiBootstrap<Bootstrap>(
-      "ss-models-directory-bootstrap",
-      "models",
-    )) || {};
+  const bootstrap = await loadUiBootstrap<Bootstrap>(
+    "ss-models-directory-bootstrap",
+    "models",
+  );
   const rootEl = document.getElementById("ss-models-directory-root");
-  if (!rootEl) {
+  if (!bootstrap || !rootEl) {
     return;
   }
   createRoot(rootEl).render(

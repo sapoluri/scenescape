@@ -16,13 +16,16 @@ from manager.models import Asset3D, Cam, Scene, SingletonSensor
 
 
 def user_auth_token(user) -> str:
+  """Return a DRF Token string, creating one if the user has none yet."""
   if user is None or not getattr(user, "is_authenticated", False):
     return ""
   try:
     token = user.auth_token
-    return str(token) if token else ""
+    return str(token.key) if token else ""
   except ObjectDoesNotExist:
-    return ""
+    from rest_framework.authtoken.models import Token
+    token, _ = Token.objects.get_or_create(user=user)
+    return str(token.key)
 
 
 def _chrome_active_nav(request) -> str | None:
@@ -71,8 +74,6 @@ def build_chrome_bootstrap(request) -> dict:
   # model_list is only registered when KUBERNETES_SERVICE_HOST is set.
   if is_kubernetes:
     urls["models"] = reverse("model_list")
-  else:
-    urls["models"] = "/model/list/"
   return {
     "authenticated": authenticated,
     "username": user.username if authenticated else "",

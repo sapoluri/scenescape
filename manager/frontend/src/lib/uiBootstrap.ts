@@ -3,6 +3,7 @@
 
 import { readBootstrapJson } from "./bootstrap";
 import { readAuthToken } from "./authToken";
+import { mountBootstrapError } from "./bootstrapError";
 
 export type UiBootstrapPage =
   | "chrome"
@@ -18,6 +19,7 @@ export type UiBootstrapPage =
 /**
  * Prefer embedded `json_script`, else GET /api/v1/ui-bootstrap/ (session or Token).
  * Enables static shells without Django page templates.
+ * On failure (non-401), mounts a visible error banner and returns null.
  */
 export async function loadUiBootstrap<T>(
   elementId: string,
@@ -37,10 +39,18 @@ export async function loadUiBootstrap<T>(
   if (token) {
     headers.Authorization = `Token ${token}`;
   }
-  const res = await fetch(`/api/v1/ui-bootstrap/?${params.toString()}`, {
-    credentials: "same-origin",
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/v1/ui-bootstrap/?${params.toString()}`, {
+      credentials: "same-origin",
+      headers,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    console.error(`ui-bootstrap failed: ${page}`, err);
+    mountBootstrapError(page, `Could not reach ui-bootstrap (${msg}).`);
+    return null;
+  }
   if (res.status === 401) {
     const next = encodeURIComponent(
       `${window.location.pathname}${window.location.search}`,
@@ -50,6 +60,10 @@ export async function loadUiBootstrap<T>(
   }
   if (!res.ok) {
     console.error(`ui-bootstrap failed: ${res.status} ${page}`);
+    mountBootstrapError(
+      page,
+      `ui-bootstrap returned HTTP ${res.status} for page="${page}".`,
+    );
     return null;
   }
   return (await res.json()) as T;

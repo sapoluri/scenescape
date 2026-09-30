@@ -73,6 +73,7 @@ export function persistGeometry(
 declare global {
   interface Window {
     ssUseReactMap?: boolean;
+    ssInitSceneMap?: (attempt?: number) => boolean;
     ssSyncRoiColorSectors?: (uuid: string, sectors: RoiColorSectors) => void;
     ssReapplyRoiColors?: () => void;
   }

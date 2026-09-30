@@ -23,7 +23,8 @@ export type ChromeBootstrap = {
     scenes: string;
     cameras: string;
     sensors: string;
-    models: string;
+    /** Present only when Models routes are registered (Kubernetes). */
+    models?: string;
     assets: string;
     admin: string;
     signOut: string;

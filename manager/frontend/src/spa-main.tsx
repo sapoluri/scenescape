@@ -91,11 +91,13 @@ async function mountAdminList(
 }
 
 async function mountModels(spaRoot: HTMLElement): Promise<void> {
-  const bootstrap =
-    (await loadUiBootstrap<{ isSuperuser?: boolean }>(
-      "ss-models-directory-bootstrap",
-      "models",
-    )) || {};
+  const bootstrap = await loadUiBootstrap<{ isSuperuser?: boolean }>(
+    "ss-models-directory-bootstrap",
+    "models",
+  );
+  if (!bootstrap) {
+    return;
+  }
   const root = document.createElement("div");
   root.id = "ss-models-directory-root";
   spaRoot.appendChild(root);
@@ -133,6 +135,7 @@ async function mountPage(): Promise<void> {
     ensureSceneDetailDom(bootstrap);
     document.documentElement.classList.add("ss-scene-workspace");
     document.body.classList.add("ss-scene-workspace");
+    window.ssInitSceneMap?.(0);
     createRoot(detailRoot).render(
       <StrictMode>
         <SceneDetailApp bootstrap={bootstrap} />

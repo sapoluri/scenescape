@@ -110,7 +110,7 @@ export function AppChrome({ bootstrap }: Props) {
                   Sensors
                 </a>
               </li>
-              {bootstrap.isKubernetes ? (
+              {bootstrap.isKubernetes && urls.models ? (
                 <li className="nav-item">
                   <a
                     className={navClass("models", active)}
