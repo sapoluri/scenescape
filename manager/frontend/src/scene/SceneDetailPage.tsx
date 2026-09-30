@@ -19,7 +19,7 @@ import { SceneMapSetupHelper } from "./SceneMapSetupHelper";
 import { SceneSidePanel } from "./SceneSidePanel";
 import { RoiTripwireEditors } from "./editors/RoiTripwireEditors";
 import { SceneWorkspaceSheets } from "../sheets/SceneWorkspaceSheets";
-import { deleteViaRestOrDjango } from "../lib/restDelete";
+import { deleteViaRest } from "../lib/restDelete";
 import { useWorkspaceLayout } from "./useWorkspaceLayout";
 import type { WorkspaceLayoutMode } from "./useWorkspaceLayout";
 import { useWorkspaceDensity } from "./useWorkspaceDensity";
@@ -179,7 +179,7 @@ function SceneDetailInner({ bootstrap }: Props) {
     setSceneDeleteBusy(true);
     setSceneDeleteError(null);
     try {
-      await deleteViaRestOrDjango(
+      await deleteViaRest(
         urls.sceneDelete,
         bootstrap.authToken || "",
         urls.scenesHome || "/",

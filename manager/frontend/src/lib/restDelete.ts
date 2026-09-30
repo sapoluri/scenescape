@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { api } from "./rest";
-import { postDjangoDelete } from "./djangoDelete";
 
 export type RestDeleteKind =
   | "camera"
@@ -53,6 +52,41 @@ export function parseDeleteTarget(
   return { kind, uid: decodeURIComponent(uid) };
 }
 
+export function inferDeleteLabel(href: string, linkText: string): string {
+  if (href.includes("/cam/")) {
+    return "camera";
+  }
+  if (href.includes("/singleton_sensor/")) {
+    return "sensor";
+  }
+  if (href.includes("/child/")) {
+    return "child scene link";
+  }
+  if (/\/scene\/delete\//.test(href)) {
+    return "scene";
+  }
+  if (href.includes("/asset/")) {
+    return "asset";
+  }
+  const text = linkText.trim().toLowerCase();
+  if (text.includes("camera")) {
+    return "camera";
+  }
+  if (text.includes("sensor")) {
+    return "sensor";
+  }
+  if (text.includes("child")) {
+    return "child scene link";
+  }
+  if (text.includes("scene")) {
+    return "scene";
+  }
+  if (text.includes("asset")) {
+    return "asset";
+  }
+  return "item";
+}
+
 export async function restDeleteTarget(
   token: string,
   target: ParsedDeleteTarget,
@@ -79,19 +113,21 @@ export async function restDeleteTarget(
 }
 
 /**
- * Prefer Token REST delete; fall back to Django DeleteView POST when no token.
- * Navigates to fallbackHref on success.
+ * Token REST delete only. Navigates to fallbackHref on success.
+ * Django DeleteView URLs remain as hrefs for bookmarks; the UI never POSTs them.
  */
-export async function deleteViaRestOrDjango(
+export async function deleteViaRest(
   deleteUrl: string,
   token: string,
   fallbackHref = "/",
 ): Promise<void> {
-  const target = parseDeleteTarget(deleteUrl);
-  if (token && target) {
-    await restDeleteTarget(token, target);
-    window.location.href = fallbackHref;
-    return;
+  if (!token) {
+    throw new Error("Authentication token required to delete");
   }
-  await postDjangoDelete(deleteUrl, fallbackHref);
+  const target = parseDeleteTarget(deleteUrl);
+  if (!target) {
+    throw new Error("Unrecognized delete URL");
+  }
+  await restDeleteTarget(token, target);
+  window.location.href = fallbackHref;
 }
