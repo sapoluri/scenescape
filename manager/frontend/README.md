@@ -77,8 +77,9 @@ Build emits `static/ui/shell.html` + `spa.js`. Point a reverse proxy so that:
 - `/` , `/<scene-uuid>/`, `/cam/list/`, `/singleton_sensor/list/`,
   `/asset/list/`, `/model/list/` serve `shell.html` (or redirect to
   `/static/ui/shell.html` with path preserved via `try_files`)
+- `/sign_in/` may serve `sign-in.html` (or Django thin mount + `sign-in.js`)
 - `/static/` → Manager static files (css, js, ui, assets, images, bootstrap)
-- `/api/`, `/media/`, `/sign_in/`, `/sign_out/`, `/mqtt` → API / session host
+- `/api/`, `/media/`, `/sign_in/` (POST), `/sign_out/`, `/mqtt` → API / session host
 
 Chrome, scenes, scene detail, and list pages (cameras / sensors / assets /
 models / list-sheets) bootstraps come from

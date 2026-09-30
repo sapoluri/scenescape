@@ -425,6 +425,19 @@ def build_models_directory_bootstrap(request) -> dict:
   return {"isSuperuser": request.user.is_superuser}
 
 
+def build_sign_in_bootstrap(request) -> dict:
+  docs_version = settings.DOCS_VERSION
+  next_url = request.GET.get("next") or ""
+  return {
+    "appName": settings.APP_PROPER_NAME,
+    "appVersion": settings.APP_VERSION_NUMBER,
+    "intelLogo": f"{settings.STATIC_URL}images/intel-logo.svg",
+    "intelHref": "https://www.intel.com/",
+    "nextUrl": next_url,
+    "docsVersion": docs_version,
+  }
+
+
 def resolve_ui_bootstrap(request, page: str, entity_id: str | None = None) -> dict:
   """Return bootstrap dict for page name. Raises ValueError for bad page/id."""
   page = (page or "").strip().lower()
@@ -446,4 +459,6 @@ def resolve_ui_bootstrap(request, page: str, entity_id: str | None = None) -> di
     return build_models_directory_bootstrap(request)
   if page in ("list-sheets", "sheets"):
     return build_list_sheets_bootstrap(request, entity_id or "")
+  if page in ("sign-in", "signin", "login"):
+    return build_sign_in_bootstrap(request)
   raise ValueError(f"unknown page: {page}")

@@ -12,7 +12,8 @@ export type UiBootstrapPage =
   | "sensors"
   | "assets"
   | "models"
-  | "list-sheets";
+  | "list-sheets"
+  | "sign-in";
 
 /**
  * Prefer embedded `json_script`, else GET /api/v1/ui-bootstrap/ (session or Token).

@@ -641,11 +641,13 @@ class UiBootstrap(APIView):
 
   def get(self, request):
     from django.http import Http404
+    from django.middleware.csrf import get_token
     from manager.services.ui_bootstrap import resolve_ui_bootstrap
 
     page = request.query_params.get("page", "").strip()
     entity_id = request.query_params.get("id")
-    if page not in ("chrome",) and not request.user.is_authenticated:
+    # Chrome + sign-in bootstraps are public; other pages need auth.
+    if page not in ("chrome", "sign-in", "signin", "login") and not request.user.is_authenticated:
       return Response(
         {"detail": "Authentication credentials were not provided."},
         status=status.HTTP_401_UNAUTHORIZED,
@@ -662,5 +664,8 @@ class UiBootstrap(APIView):
         {"detail": "Not found."},
         status=status.HTTP_404_NOT_FOUND,
       )
+    # Ensure CSRF cookie for static sign-in shells that never hit Django HTML.
+    if page in ("sign-in", "signin", "login"):
+      get_token(request)
     return Response(payload)
 

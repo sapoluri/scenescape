@@ -28,6 +28,7 @@ from django.http import FileResponse, HttpResponse, HttpResponseNotFound, HttpRe
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -531,9 +532,30 @@ def get_login_delay(request):
   else:
     return 0
 
+def _wants_json(request) -> bool:
+  accept = request.headers.get("Accept", "")
+  return (
+    "application/json" in accept
+    or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+  )
+
+
+def _sign_in_success_url(request, value_next: str | None) -> str:
+  allowed = set(settings.ALLOWED_HOSTS)
+  if value_next:
+    if url_has_allowed_host_and_scheme(url=value_next, allowed_hosts=allowed):
+      return value_next
+    return reverse("index")
+  if Scene.objects.count() == 1:
+    return reverse("sceneDetail", args=[Scene.objects.first().id])
+  return reverse("index")
+
+
+@ensure_csrf_cookie
 def sign_in(request):
   form = AuthenticationForm()
   maxLength = form['username'].field.max_length
+  value_next = request.GET.get('next')
   if request.method == 'POST':
     delay = get_login_delay(request)
     if delay:
@@ -551,18 +573,21 @@ def sign_in(request):
       if user is not None:
         Token.objects.get_or_create(user=user)
         login(request, user)
+        redirect_to = _sign_in_success_url(request, value_next)
+        if _wants_json(request):
+          return JsonResponse({"ok": True, "redirect": redirect_to})
+        return redirect(redirect_to)
 
-        allowed = set(settings.ALLOWED_HOSTS)
-        if value_next:
-          if url_has_allowed_host_and_scheme(url=value_next, allowed_hosts=allowed):
-            return redirect(value_next)
-          else:
-            return redirect('index')
-
-        if Scene.objects.count() == 1:
-          return redirect('sceneDetail', Scene.objects.first().id)
-
-        return redirect('index')
+    if _wants_json(request):
+      errors = [str(e) for e in form.non_field_errors()]
+      for field, field_errors in form.errors.items():
+        if field == "__all__":
+          continue
+        for err in field_errors:
+          errors.append(str(err))
+      if not errors:
+        errors = ["Invalid username or password."]
+      return JsonResponse({"ok": False, "errors": errors}, status=400)
 
   return render(request, 'sscape/sign_in.html', {'form': form})
 

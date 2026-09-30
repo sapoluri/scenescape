@@ -56,6 +56,7 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 | Admin lists | `#ss-admin-list-root` | `GET …/ui-bootstrap/?page=cameras\|sensors\|assets` |
 | List sheets | (query-driven; no dedicated root) | `GET …/ui-bootstrap/?page=list-sheets&id=cam\|sensor\|asset` |
 | Models directory | `#ss-models-directory-root` | `GET …/ui-bootstrap/?page=models` |
+| Sign-in | `#ss-sign-in-root` | `GET …/ui-bootstrap/?page=sign-in` |
 | Destructive actions | creates `#ss-destructive-actions-root` | none |
 
 #### Chrome (`ss-chrome-bootstrap`)
@@ -68,11 +69,12 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 
 #### Host-independent bootstrap API
 
-`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene|cameras|sensors|assets|models|list-sheets&id=`
+`GET /api/v1/ui-bootstrap/?page=chrome|scenes|scene|cameras|sensors|assets|models|list-sheets|sign-in&id=`
 returns the same JSON shapes documented below (Session or Token).
 Static shell: `manager/backend/manager/static/ui/shell.html` + `spa.js`
-(see `manager/frontend/README.md`). For `list-sheets`, `id` is
-`cam` \| `sensor` \| `asset`. For `scene`, `id` is the scene UUID.
+(and `sign-in.html` + `sign-in.js`; see `manager/frontend/README.md`).
+For `list-sheets`, `id` is `cam` \| `sensor` \| `asset`. For `scene`, `id`
+is the scene UUID. `chrome` and `sign-in` are anonymous.
 
 Scene detail also exposes `google-maps-api-key` and `mapbox-api-key`
 `json_script` nodes (string scalars).
@@ -138,6 +140,12 @@ Manager list pages load via the bootstrap API (no embedded `json_script`).
 #### Models directory (`page=models`)
 
 - `isSuperuser` only — tree loaded via Token model-directory API
+
+#### Sign-in (`page=sign-in`)
+
+- `appName`, `appVersion`, `intelLogo`, `intelHref`, `nextUrl?`, `docsVersion?`
+- Island posts to `POST /sign_in/` with `Accept: application/json` (session +
+  CSRF); success returns `{ ok, redirect }`
 
 #### Sheet deep links
 

@@ -52,10 +52,9 @@ Key commits: `02ed8ce9d` … `6fabb3ea5` (E); dual-path retirement through
 
 ### What still binds us optionally to Django templates
 
-- Session `sign_in/` form remains Django.
 - Snap marks / calibrate legacy JS still load from `/static/js`.
-- List / scene pages still have thin Django HTML mounts (roots + scripts);
-  static `shell.html` can serve the same islands via ui-bootstrap.
+- Scene / list / sign-in pages still have thin Django HTML mounts (roots +
+  scripts); static `shell.html` / `sign-in.html` can serve the same islands.
 
 Gate: UI BAT green on Django dual-path; static shell smoke for `/` and
 `/<uuid>/` against ui-bootstrap.
