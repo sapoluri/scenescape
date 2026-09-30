@@ -65,7 +65,7 @@ SPDX-License-Identifier: Apache-2.0
   </head>
 
   <body class="{% if embed %}ss-embed{% endif %}">
-    {{ chrome_bootstrap|json_script:"ss-chrome-bootstrap" }}
+    {# Chrome bootstrap via GET /api/v1/ui-bootstrap/?page=chrome (no json_script). #}
     <div id="ss-chrome-root"></div>
     <script type="module" src="{% static 'ui/chrome.js' %}?v=chrome-1"></script>
 

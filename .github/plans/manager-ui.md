@@ -32,8 +32,8 @@ swap until operators use the static path. **G** remains optional.
 | **E** | React chrome island (`ui/chrome.js`); `ss-chrome-bootstrap` |
 | **F** | `GET /api/v1/ui-bootstrap/`; `shell.html` + `spa.js`; islands fetch when no `json_script` |
 
-Key commits: `02ed8ce9d` … `6fabb3ea5` (E); dual-path retirement through
-`dfaa201be` (Token-only deletes) + skill freeze trim.
+Key commits: `02ed8ce9d` … medium-item retirement (list ui-bootstrap,
+React sign-in, Snap ROI gates, single bootstrap module).
 
 ### Left (ordered)
 
@@ -56,8 +56,8 @@ Key commits: `02ed8ce9d` … `6fabb3ea5` (E); dual-path retirement through
 - Scene / list / sign-in pages still have thin Django HTML mounts (roots +
   scripts); static `shell.html` / `sign-in.html` can serve the same islands.
 
-Gate: UI BAT green on Django dual-path; static shell smoke for `/` and
-`/<uuid>/` against ui-bootstrap.
+Gate: UI BAT green on Django thin mounts; static shell smoke for `/`,
+`/<uuid>/`, list paths, and `/sign_in/` against ui-bootstrap.
 
 Out of scope for trickle PRs: rewriting the tracker/controller stack, or
 replacing Django in one shot (**G**).

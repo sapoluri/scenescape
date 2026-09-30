@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-"""UI island bootstrap payloads — shared by Django templates and /api/v1/ui-bootstrap."""
+"""UI island bootstrap payloads — single source for Django templates and /api/v1/ui-bootstrap."""
 
 from __future__ import annotations
 
@@ -15,12 +15,6 @@ from django.urls import reverse
 from manager.models import Asset3D, Cam, Scene, SingletonSensor
 
 
-def build_chrome_bootstrap(request) -> dict:
-  from manager.context_processors import chrome_bootstrap
-
-  return chrome_bootstrap(request)
-
-
 def user_auth_token(user) -> str:
   if user is None or not getattr(user, "is_authenticated", False):
     return ""
@@ -29,6 +23,62 @@ def user_auth_token(user) -> str:
     return str(token) if token else ""
   except ObjectDoesNotExist:
     return ""
+
+
+def _chrome_active_nav(request) -> str | None:
+  match = getattr(request, "resolver_match", None)
+  name = getattr(match, "url_name", None) if match else None
+  if name in ("index", "sceneDetail"):
+    return "scenes"
+  if name in ("cam_list", "cam_create", "cam_update", "cam_calibrate", "cam_delete"):
+    return "cameras"
+  if name in (
+      "singleton_sensor_list",
+      "singleton_sensor_create",
+      "singleton_sensor_update",
+      "singleton_sensor_delete",
+  ):
+    return "sensors"
+  if name == "model_list":
+    return "models"
+  if name in ("asset_list", "asset_create", "asset_update", "asset_delete"):
+    return "assets"
+  return None
+
+
+def build_chrome_bootstrap(request) -> dict:
+  """JSON payload for the React chrome island (`ss-chrome-bootstrap`)."""
+  user = getattr(request, "user", None)
+  authenticated = bool(user and getattr(user, "is_authenticated", False))
+  docs_version = settings.DOCS_VERSION
+  return {
+    "authenticated": authenticated,
+    "username": user.username if authenticated else "",
+    "isStaff": bool(authenticated and getattr(user, "is_staff", False)),
+    "isKubernetes": bool(settings.KUBERNETES_SERVICE_HOST),
+    "appName": settings.APP_PROPER_NAME,
+    "appVersion": settings.APP_VERSION_NUMBER,
+    "appGitCommit": settings.APP_GIT_COMMIT,
+    "docsVersion": docs_version,
+    "urls": {
+      "home": "/",
+      "scenes": "/",
+      "cameras": reverse("cam_list"),
+      "sensors": reverse("singleton_sensor_list"),
+      "models": reverse("model_list"),
+      "assets": reverse("asset_list"),
+      "admin": "/admin",
+      "signOut": "/sign_out",
+      "docs": (
+        f"https://docs.openedgeplatform.intel.com/{docs_version}"
+        "/scenescape/index.html"
+      ),
+      "support": "https://github.com/open-edge-platform/scenescape/issues",
+      "intel": "https://www.intel.com/",
+      "intelLogo": f"{settings.STATIC_URL}images/intel-logo.svg",
+    },
+    "activeNav": _chrome_active_nav(request),
+  }
 
 
 def build_scenes_home_bootstrap(request) -> dict:

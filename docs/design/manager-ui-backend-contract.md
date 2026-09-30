@@ -50,7 +50,7 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 
 | Island | Mount | Bootstrap `id` |
 | --- | --- | --- |
-| Chrome (nav/about/theme) | `#ss-chrome-root` | `ss-chrome-bootstrap` |
+| Chrome (nav/about/theme) | `#ss-chrome-root` | `GET …/ui-bootstrap/?page=chrome` |
 | Scenes home | `#ss-scenes-home-app` | `GET …/ui-bootstrap/?page=scenes` (optional `ss-scenes-home-bootstrap`) |
 | Scene detail | `#ss-scene-detail-root` | `GET …/ui-bootstrap/?page=scene&id=` (optional `ss-scene-detail-bootstrap`) |
 | Admin lists | `#ss-admin-list-root` | `GET …/ui-bootstrap/?page=cameras\|sensors\|assets` |
@@ -59,7 +59,9 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 | Sign-in | `#ss-sign-in-root` | `GET …/ui-bootstrap/?page=sign-in` |
 | Destructive actions | creates `#ss-destructive-actions-root` | none |
 
-#### Chrome (`ss-chrome-bootstrap`)
+#### Chrome (`page=chrome`)
+
+Manager pages load chrome via the bootstrap API (no embedded `json_script`).
 
 - `authenticated`, `username`, `isStaff`, `isKubernetes`
 - `appName`, `appVersion`, `appGitCommit`, `docsVersion`
