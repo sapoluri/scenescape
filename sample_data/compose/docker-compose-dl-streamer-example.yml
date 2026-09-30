@@ -190,8 +190,14 @@ services:
       - SCENESCAPE_ALLOWED_HOSTS=${SCENESCAPE_ALLOWED_HOSTS}
       - DBHOST=pgserver
       - DBPORT=5432
-      - no_proxy=${no_proxy},.scenescape.intel.com
-      - NO_PROXY=${NO_PROXY},.scenescape.intel.com
+      # Clear host HTTP(S)_PROXY so the healthcheck curl to 127.0.0.1 is not
+      # forced through a corporate CONNECT proxy (which returns 403).
+      - http_proxy=
+      - https_proxy=
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - no_proxy=127.0.0.1,localhost,.scenescape.intel.com
+      - NO_PROXY=127.0.0.1,localhost,.scenescape.intel.com
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
       - MAPBOX_API_KEY=${MAPBOX_API_KEY}
       # Max upload size for scene map files (blueprints, .glb meshes). Default

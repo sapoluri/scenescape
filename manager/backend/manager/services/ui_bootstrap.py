@@ -51,32 +51,38 @@ def build_chrome_bootstrap(request) -> dict:
   user = getattr(request, "user", None)
   authenticated = bool(user and getattr(user, "is_authenticated", False))
   docs_version = settings.DOCS_VERSION
+  is_kubernetes = bool(settings.KUBERNETES_SERVICE_HOST)
+  urls = {
+    "home": "/",
+    "scenes": "/",
+    "cameras": reverse("cam_list"),
+    "sensors": reverse("singleton_sensor_list"),
+    "assets": reverse("asset_list"),
+    "admin": "/admin",
+    "signOut": "/sign_out",
+    "docs": (
+      f"https://docs.openedgeplatform.intel.com/{docs_version}"
+      "/scenescape/index.html"
+    ),
+    "support": "https://github.com/open-edge-platform/scenescape/issues",
+    "intel": "https://www.intel.com/",
+    "intelLogo": f"{settings.STATIC_URL}images/intel-logo.svg",
+  }
+  # model_list is only registered when KUBERNETES_SERVICE_HOST is set.
+  if is_kubernetes:
+    urls["models"] = reverse("model_list")
+  else:
+    urls["models"] = "/model/list/"
   return {
     "authenticated": authenticated,
     "username": user.username if authenticated else "",
     "isStaff": bool(authenticated and getattr(user, "is_staff", False)),
-    "isKubernetes": bool(settings.KUBERNETES_SERVICE_HOST),
+    "isKubernetes": is_kubernetes,
     "appName": settings.APP_PROPER_NAME,
     "appVersion": settings.APP_VERSION_NUMBER,
     "appGitCommit": settings.APP_GIT_COMMIT,
     "docsVersion": docs_version,
-    "urls": {
-      "home": "/",
-      "scenes": "/",
-      "cameras": reverse("cam_list"),
-      "sensors": reverse("singleton_sensor_list"),
-      "models": reverse("model_list"),
-      "assets": reverse("asset_list"),
-      "admin": "/admin",
-      "signOut": "/sign_out",
-      "docs": (
-        f"https://docs.openedgeplatform.intel.com/{docs_version}"
-        "/scenescape/index.html"
-      ),
-      "support": "https://github.com/open-edge-platform/scenescape/issues",
-      "intel": "https://www.intel.com/",
-      "intelLogo": f"{settings.STATIC_URL}images/intel-logo.svg",
-    },
+    "urls": urls,
     "activeNav": _chrome_active_nav(request),
   }
 
