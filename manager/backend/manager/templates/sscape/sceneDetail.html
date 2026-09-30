@@ -6,18 +6,16 @@ SPDX-License-Identifier: Apache-2.0
 {% extends 'sscape/base.html' %}
 {% load static %}
 {% block content %}
-  {{ scene_detail_bootstrap|json_script:"ss-scene-detail-bootstrap" }}
+  {# Island loads scene via /api/v1/ui-bootstrap/?page=scene&id=… #}
+  {# #scene must exist before sscape.js so MQTT topic wiring has scene_id. #}
+  <input type="hidden" id="scene" value="{{ scene_id }}" />
   {{ google_maps_api_key|json_script:"google-maps-api-key" }}
   {{ mapbox_api_key|json_script:"mapbox-api-key" }}
-  {# Map host, toggles, and geometry hiddens are created from bootstrap by
-     scene-detail.js (ensureSceneDetailDom) — template only supplies the root.
-     Load the island module here (before base.html sscape.js) so #scene and
-     the map host exist when sscape initializes. #}
   <div id="ss-scene-detail-root" class="ss-scene-detail-root"></div>
-  <link rel="stylesheet" href="{% static 'ui/manager-ui.css' %}?v=actions-18" />
+  <link rel="stylesheet" href="{% static 'ui/manager-ui.css' %}?v=api-boot-1" />
   <script
     type="module"
-    src="{% static 'ui/scene-detail.js' %}?v=actions-16"
+    src="{% static 'ui/scene-detail.js' %}?v=api-boot-1"
   ></script>
 {% endblock %}
 {% block scripts %}

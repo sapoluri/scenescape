@@ -51,8 +51,8 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 | Island | Mount | Bootstrap `id` |
 | --- | --- | --- |
 | Chrome (nav/about/theme) | `#ss-chrome-root` | `ss-chrome-bootstrap` |
-| Scenes home | `#ss-scenes-home-app` | `ss-scenes-home-bootstrap` |
-| Scene detail | `#ss-scene-detail-root` | `ss-scene-detail-bootstrap` |
+| Scenes home | `#ss-scenes-home-app` | `GET …/ui-bootstrap/?page=scenes` (optional `ss-scenes-home-bootstrap`) |
+| Scene detail | `#ss-scene-detail-root` | `GET …/ui-bootstrap/?page=scene&id=` (optional `ss-scene-detail-bootstrap`) |
 | Admin lists | `#ss-admin-list-root` | `ss-admin-list-bootstrap` |
 | List sheets | (query-driven; no dedicated root) | `ss-list-sheets-bootstrap` |
 | Models directory | `#ss-models-directory-root` | `ss-models-directory-bootstrap` |
@@ -80,7 +80,10 @@ Canonical TypeScript shapes live under `manager/frontend/src/`
 (`scene/types.ts`, `scenes/ScenesHomeApp.tsx`, list entry modules). Hosts
 must keep field names below stable or update islands + this doc together.
 
-#### Scenes home (`ss-scenes-home-bootstrap`)
+#### Scenes home (`page=scenes` / optional `ss-scenes-home-bootstrap`)
+
+Manager Django pages load this via the bootstrap API (no embedded
+`json_script`). Static shells and tests may still embed the script tag.
 
 - `authToken` (string) — DRF Token key
 - `isSuperuser` (boolean)
@@ -88,7 +91,11 @@ must keep field names below stable or update islands + this doc together.
   `detailUrl`, `detail3dUrl`, `manageUrl`, `deleteUrl` (nullable),
   `counts` `{ sensors, regions, tripwires }`
 
-#### Scene detail (`ss-scene-detail-bootstrap`)
+#### Scene detail (`page=scene` / optional `ss-scene-detail-bootstrap`)
+
+Manager Django pages load this via the bootstrap API. Template still
+supplies `#scene` (hidden) and map API key `json_script` nodes for legacy
+geospatial plugins / `sscape.js` until those move behind React.
 
 - `scene`: `id`, `name`, `scale`, `mapUrl`, `thumbnailUrl`, `wssConnection?`,
   `outputLla?`, `georeferenced?`

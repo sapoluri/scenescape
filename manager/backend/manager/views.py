@@ -119,14 +119,7 @@ def superuser_required(view_func=None, redirect_field_name=REDIRECT_FIELD_NAME,
 
 @login_required(login_url="sign_in")
 def index(request):
-  from manager.services.ui_bootstrap import build_scenes_home_bootstrap
-
-  scenes = Scene.objects.order_by('name')
-  context = {
-    'scenes': scenes,
-    'scenes_home_bootstrap': build_scenes_home_bootstrap(request),
-  }
-  return render(request, 'sscape/index.html', context)
+  return render(request, 'sscape/index.html', {})
 
 def protected_media(request, path, media_root):
   if request.user.is_authenticated:
@@ -155,11 +148,10 @@ def list_resources(request, folder_name):
 
 @login_required(login_url="sign_in")
 def sceneDetail(request, scene_id):
-  from manager.services.ui_bootstrap import build_scene_detail_bootstrap
-
-  scene_detail_bootstrap = build_scene_detail_bootstrap(request, scene_id)
+  # Ensure scene exists (404) without embedding full island bootstrap.
+  get_object_or_404(Scene, pk=scene_id)
   return render(request, 'sscape/sceneDetail.html', {
-    'scene_detail_bootstrap': scene_detail_bootstrap,
+    'scene_id': str(scene_id),
     'google_maps_api_key': getattr(settings, "GOOGLE_MAPS_API_KEY", "") or "",
     'mapbox_api_key': getattr(settings, "MAPBOX_API_KEY", "") or "",
   })
