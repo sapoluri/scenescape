@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Typed React → hybrid `sscape.js` bridges for Snap map / ROI helpers.
+ * Typed React → hybrid bridges.
  *
- * MQTT connect, camera strip, and local sensor draw are React-owned
- * (`src/mqtt/`, `SensorLayer`). Do not reintroduce those via this module.
+ * Under `ssUseReactMap`, fit / number helpers use only `window.ssMap`
+ * (installed by React). Snap `window.fitSceneMapDisplay` / `numberRois`
+ * fallbacks run only for non-React map pages (calibrate / Snap-map scenes).
+ *
+ * Occupancy color helpers still call into `sscape.js` (sectors apply to
+ * React polygons). Geometry persist uses React-installed `ssPersistGeometry`.
  */
 
 type PersistOptions = { preferHidden?: boolean } | string[];
@@ -15,12 +19,18 @@ type RoiColorSectors = {
   range_max: number;
 };
 
+function useReactMap(): boolean {
+  return Boolean(window.ssUseReactMap);
+}
+
 export function fitSceneMapDisplay(): void {
   if (typeof window.ssMap?.fit === "function") {
     window.ssMap.fit();
     return;
   }
-  window.fitSceneMapDisplay?.();
+  if (!useReactMap()) {
+    window.fitSceneMapDisplay?.();
+  }
 }
 
 export function numberRois(): void {
@@ -28,7 +38,9 @@ export function numberRois(): void {
     window.ssMap.numberRois();
     return;
   }
-  window.numberRois?.();
+  if (!useReactMap()) {
+    window.numberRois?.();
+  }
 }
 
 export function numberTripwires(): void {
@@ -36,7 +48,9 @@ export function numberTripwires(): void {
     window.ssMap.numberTripwires();
     return;
   }
-  window.numberTripwires?.();
+  if (!useReactMap()) {
+    window.numberTripwires?.();
+  }
 }
 
 export function syncRoiColorSectors(
@@ -58,6 +72,7 @@ export function persistGeometry(
 
 declare global {
   interface Window {
+    ssUseReactMap?: boolean;
     ssSyncRoiColorSectors?: (uuid: string, sectors: RoiColorSectors) => void;
     ssReapplyRoiColors?: () => void;
   }

@@ -55,7 +55,8 @@ React sign-in, Snap ROI gates, single bootstrap module).
 - Camera calibrate embed still loads `sscape.js` MQTT + THREE (chrome skipped).
 - Scene / list / sign-in pages still have thin Django HTML mounts (roots +
   scripts); static `shell.html` / `sign-in.html` can serve the same islands.
-- Snap overlay remains for child ROI/tripwire/sensor on React map scenes.
+- Snap overlay remains for child ROI/tripwire/sensor on React map scenes;
+  `legacyBridge` Snap fallbacks only run when `!ssUseReactMap`.
 
 Gate: UI BAT green on Django thin mounts; static shell smoke for `/`,
 `/<uuid>/`, list paths, and `/sign_in/` against ui-bootstrap.

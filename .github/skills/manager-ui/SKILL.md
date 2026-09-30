@@ -171,21 +171,22 @@ Owned by the React **chrome** island (`ui/chrome.js`, `#ss-chrome-root` +
 ### `window` APIs
 
 React scene-detail owns MQTT connect (`src/mqtt/useSceneMqtt`), camera strip
-frames (`useCameraStripMqtt`), and local sensors (`SensorLayer`). Snap map /
-ROI helpers still go through `lib/legacyBridge.ts`.
+frames (`useCameraStripMqtt`), local sensors (`SensorLayer`), and live marks
+(`MarksLayer`). Call sites use `lib/legacyBridge.ts` — under `ssUseReactMap`
+fit/number go only through `window.ssMap` (no Snap `window.fitSceneMapDisplay`
+/ `numberRois` fallbacks).
 
-**React freeze (hybrid / Snap still required):**
+**React freeze (hybrid still required):**
 
-`fitSceneMapDisplay`, `numberRois` / `numberTripwires`,
-`stringifyRois` / `stringifyTripwires`, `ssPersistGeometry` (React install;
-sscape `saveRois` still calls it), `ssMap`, `ssRoiEditors`,
-`ssAttachSceneMqttClient` / `ssMqttClient` (shared transport; React connects;
-Snap child overlays + calibrate still attach),
+`ssMap` / `ssRoiEditors` / `ssPersistGeometry` (React install; sscape
+`saveRois` still calls persist), `ssAttachSceneMqttClient` / `ssMqttClient`
+(shared transport; Snap child overlays + calibrate still attach),
 `ssToast` / `ssConfirm` (legacy JS only; React uses providers/dialogs),
 `ssSceneTelemetry`, `ssSyncRoiColorSectors` / `ssReapplyRoiColors`.
 
 **Not React freeze** (sscape-only; calibrate / Snap-map pages — do not call
-from React or list as island contracts): `ssEnsureMqttScene`,
+from React or list as island contracts): `fitSceneMapDisplay`, `numberRois` /
+`numberTripwires`, `stringifyRois` / `stringifyTripwires`, `ssEnsureMqttScene`,
 `ssRefreshCameraSnapshots`, `ssDrawSingletonSensors`,
 `ssRemoveSingletonSensor`, `getRoiValues`, `saveRois`.
 
