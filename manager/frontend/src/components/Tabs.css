@@ -139,11 +139,23 @@
 .ss-tabs-tab .scene-detail-mqtt-pill {
   margin: 0;
   min-width: 0.95rem;
+  width: 0.95rem;
   height: 0.95rem;
   padding: 0;
   border-radius: 50%;
   flex: none;
-  font-size: 0.65rem;
+  font-size: 0.55rem;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ss-status-bad);
+  border: 1px solid var(--ss-status-bad);
+  background: transparent;
+}
+
+.ss-tabs-tab .scene-detail-mqtt-pill.connected,
+.ss-tabs-tab .scene-detail-mqtt-pill[data-ss-mqtt="connected"] {
+  color: var(--ss-status-ok);
+  border-color: var(--ss-status-ok);
 }
 
 .ss-tabs-panels {

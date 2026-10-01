@@ -87,10 +87,14 @@ export function setMqttConnected(connected: boolean): void {
   const el = document.getElementById("mqtt_status");
   if (el) {
     el.classList.toggle("connected", connected);
+    el.setAttribute("data-ss-mqtt", connected ? "connected" : "disconnected");
   }
   document.querySelectorAll("[id^='mqtt_status']").forEach((node) => {
     if (!connected) {
       node.classList.remove("connected");
+      if (node instanceof HTMLElement && node.id.startsWith("mqtt_status")) {
+        node.setAttribute("data-ss-mqtt", "disconnected");
+      }
     }
   });
   window.dispatchEvent(

@@ -755,6 +755,10 @@ window.ssAttachSceneMqttClient = function (client) {
   }
 
   client.on("close", function () {
+    // Reconnect replaces the client; ignore close from the superseded socket.
+    if (window.ssMqttClient && window.ssMqttClient !== client) {
+      return;
+    }
     $("[id^='mqtt_status']").removeClass("connected");
     $(".rate").text("--");
     $("#scene-rate").text("--");

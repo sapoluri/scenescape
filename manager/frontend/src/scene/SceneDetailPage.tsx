@@ -221,11 +221,9 @@ function SceneDetailInner({ bootstrap }: Props) {
           className={`scene-detail-mqtt-pill${mqttConnected ? " connected" : ""}`}
           title={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
           data-ss-mqtt={mqttConnected ? "connected" : "disconnected"}
+          aria-label={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
         >
           <i className="bi bi-arrow-down-up" aria-hidden="true" />
-          <span className="ss-mqtt-label">
-            {mqttConnected ? "MQTT" : "MQTT"}
-          </span>
         </span>
       ),
     },

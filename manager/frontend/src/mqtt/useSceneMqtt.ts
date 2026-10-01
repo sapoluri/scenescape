@@ -50,6 +50,26 @@ export function useSceneMqtt({
       brokerAddress.textContent = window.location.hostname;
     }
 
+    const wireStatus = (client: MqttClientLike) => {
+      const onUp = () => {
+        if (window.ssMqttClient === client) {
+          setMqttConnected(true);
+        }
+      };
+      const onDown = () => {
+        // Ignore close from a client that was already replaced.
+        if (window.ssMqttClient && window.ssMqttClient !== client) {
+          return;
+        }
+        setMqttConnected(false);
+      };
+      client.on("connect", onUp);
+      client.on("close", onDown);
+      if (client.connected) {
+        onUp();
+      }
+    };
+
     const connect = () => {
       const url =
         rewriteBrokerUrl(brokerInput?.value || wssConnection || "") ||
@@ -67,6 +87,7 @@ export function useSceneMqtt({
       clientRef.current = client;
       window.ssMqttClient = client;
       sessionStorage.setItem("connectToMqtt", "true");
+      wireStatus(client);
       attachLegacySceneHandlers(client);
     };
 
