@@ -476,6 +476,33 @@ class Scene(models.Model):
     log.info("Getting wss connection string.")
     return "wss://localhost/mqtt"
 
+
+class MeshGenerationRequest(models.Model):
+  """Idempotency record for mapping-service mesh jobs (keyed by request_id)."""
+
+  STATE_IN_PROGRESS = "in_progress"
+  STATE_COMPLETE = "complete"
+  STATE_FAILED = "failed"
+  STATE_CHOICES = (
+    (STATE_IN_PROGRESS, "In progress"),
+    (STATE_COMPLETE, "Complete"),
+    (STATE_FAILED, "Failed"),
+  )
+
+  request_id = models.CharField(max_length=128, primary_key=True)
+  scene = models.ForeignKey(
+    Scene, on_delete=models.CASCADE, related_name="mesh_generation_requests"
+  )
+  state = models.CharField(
+    max_length=32, choices=STATE_CHOICES, default=STATE_IN_PROGRESS
+  )
+  created_at = models.DateTimeField(auto_now_add=True)
+  updated_at = models.DateTimeField(auto_now=True)
+
+  def __str__(self):
+    return f"{self.request_id} ({self.state})"
+
+
 class ChildScene(models.Model):
   child = models.OneToOneField(Scene, default=None, null=True, blank=True,
                                on_delete=models.CASCADE, related_name="parent")

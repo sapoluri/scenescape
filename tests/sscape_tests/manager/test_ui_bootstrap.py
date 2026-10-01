@@ -9,7 +9,11 @@ from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from manager.services.ui_bootstrap import build_chrome_bootstrap, user_auth_token
+from manager.services.ui_bootstrap import (
+  build_chrome_bootstrap,
+  build_models_directory_bootstrap,
+  user_auth_token,
+)
 
 TEST_NAME = "NEX-T18750"
 
@@ -60,3 +64,20 @@ class AuthTokenProvisionTests(TestCase):
   def test_user_auth_token_anonymous_empty(self):
     self.assertEqual(user_auth_token(AnonymousUser()), "")
     self.assertEqual(user_auth_token(None), "")
+
+
+@override_settings(KUBERNETES_SERVICE_HOST=False)
+class ModelsDirectoryBootstrapTests(TestCase):
+  def setUp(self):
+    self.factory = RequestFactory()
+    self.user = User.objects.create_superuser(
+      "models_user", "models@example.com", "testpassword",
+    )
+
+  def test_models_bootstrap_includes_auth_token(self):
+    request = self.factory.get("/")
+    request.user = self.user
+    payload = build_models_directory_bootstrap(request)
+    self.assertTrue(payload["isSuperuser"])
+    self.assertTrue(payload["authToken"])
+    self.assertEqual(payload["authToken"], user_auth_token(self.user))

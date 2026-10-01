@@ -479,7 +479,10 @@ def build_list_sheets_bootstrap(request, kind: str) -> dict:
 
 
 def build_models_directory_bootstrap(request) -> dict:
-  return {"isSuperuser": request.user.is_superuser}
+  return {
+    "authToken": user_auth_token(request.user),
+    "isSuperuser": request.user.is_superuser,
+  }
 
 
 def build_sign_in_bootstrap(request) -> dict:

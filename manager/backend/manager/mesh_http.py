@@ -14,16 +14,25 @@ def start_mesh_generation_payload(scene, mesh_type="mesh", uploaded_map=None):
   """Run mesh generation start. Returns (payload_dict, http_status)."""
   try:
     from manager.mesh_generator import MeshGenerator
+    from manager.models import MeshGenerationRequest
 
     mesh_generator = MeshGenerator()
     result = mesh_generator.startMeshGeneration(
       scene, mesh_type, uploaded_map=uploaded_map
     )
     if result.get("success"):
+      request_id = result["request_id"]
+      MeshGenerationRequest.objects.update_or_create(
+        request_id=request_id,
+        defaults={
+          "scene": scene,
+          "state": MeshGenerationRequest.STATE_IN_PROGRESS,
+        },
+      )
       return {
         "success": True,
         "message": "Mesh generated successfully",
-        "request_id": result["request_id"],
+        "request_id": request_id,
         "processing_time": result.get("processing_time", 0),
       }, 200
 
@@ -50,6 +59,7 @@ def mesh_generation_status_payload(scene, request_id):
 
   try:
     from manager.mesh_generator import MeshGenerator
+    from manager.models import MeshGenerationRequest
 
     mesh_generator = MeshGenerator()
     status_data = mesh_generator.mapping_client.getReconstructionStatus(
@@ -64,11 +74,26 @@ def mesh_generation_status_payload(scene, request_id):
       return status_data, 200
 
     with transaction.atomic():
-      from manager.models import Scene
+      MeshGenerationRequest.objects.get_or_create(
+        request_id=request_id,
+        defaults={
+          "scene": scene,
+          "state": MeshGenerationRequest.STATE_IN_PROGRESS,
+        },
+      )
+      job = (
+        MeshGenerationRequest.objects.select_for_update().get(
+          request_id=request_id
+        )
+      )
 
-      scene = Scene.objects.select_for_update().get(pk=scene.pk)
+      if job.scene_id != scene.pk:
+        return {
+          "success": False,
+          "error": "request_id does not belong to this scene",
+        }, 400
 
-      if hasattr(scene, "mesh_state") and scene.mesh_state == "complete":
+      if job.state == MeshGenerationRequest.STATE_COMPLETE:
         status_data["finalized"] = True
         return status_data, 200
 
@@ -77,14 +102,12 @@ def mesh_generation_status_payload(scene, request_id):
       )
 
       if not finalize_result.get("success"):
-        if hasattr(scene, "mesh_state"):
-          scene.mesh_state = "failed"
-          scene.save(update_fields=["mesh_state"])
+        job.state = MeshGenerationRequest.STATE_FAILED
+        job.save(update_fields=["state", "updated_at"])
         return finalize_result, 500
 
-      if hasattr(scene, "mesh_state"):
-        scene.mesh_state = "complete"
-        scene.save(update_fields=["mesh_state"])
+      job.state = MeshGenerationRequest.STATE_COMPLETE
+      job.save(update_fields=["state", "updated_at"])
 
     status_data["finalized"] = True
     if finalize_result.get("unanchored_cameras"):

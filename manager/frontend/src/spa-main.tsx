@@ -133,6 +133,7 @@ async function mountPage(): Promise<void> {
     window.ssReactOwnsMqtt = Boolean(window.ssUseReactMap);
     window.ssReactOwnsCameraStrip = Boolean(window.ssUseReactMap);
     ensureSceneDetailDom(bootstrap);
+    window.ssRefreshSceneId?.();
     document.documentElement.classList.add("ss-scene-workspace");
     document.body.classList.add("ss-scene-workspace");
     window.ssInitSceneMap?.(0);

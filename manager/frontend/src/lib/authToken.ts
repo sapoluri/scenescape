@@ -8,14 +8,32 @@ const BOOTSTRAP_TOKEN_IDS = [
   "ss-scene-detail-bootstrap",
   "ss-scenes-home-bootstrap",
   "ss-list-sheets-bootstrap",
+  "ss-models-directory-bootstrap",
+  "ss-admin-list-bootstrap",
 ] as const;
 
+/** In-memory token from ui-bootstrap API (static shells have no json_script). */
+let persistedAuthToken = "";
+
 /**
- * DRF Token for portable `/api/v1` calls. Prefers the page-wide
- * `ss-auth-bootstrap` from base.html, then island bootstraps, then legacy
- * `#auth-token`.
+ * Remember a Token from fetched ui-bootstrap payloads so later REST calls
+ * (e.g. model-directory) do not depend on Django `ss-auth-bootstrap`.
+ */
+export function persistAuthToken(token: string): void {
+  if (token) {
+    persistedAuthToken = token;
+  }
+}
+
+/**
+ * DRF Token for portable `/api/v1` calls. Prefers an in-memory token from
+ * ui-bootstrap, then page-wide `ss-auth-bootstrap`, then island bootstraps,
+ * then legacy `#auth-token`.
  */
 export function readAuthToken(): string {
+  if (persistedAuthToken) {
+    return persistedAuthToken;
+  }
   for (const id of BOOTSTRAP_TOKEN_IDS) {
     if (id === "ss-auth-bootstrap") {
       const el = document.getElementById(id);

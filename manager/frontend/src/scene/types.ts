@@ -113,6 +113,7 @@ declare global {
       connected?: boolean;
     };
     ssAttachSceneMqttClient?: (client: NonNullable<Window["ssMqttClient"]>) => void;
+    ssRefreshSceneId?: () => string;
     ssReactOwnsMqtt?: boolean;
     ssReactOwnsCameraStrip?: boolean;
     ssPersistGeometry?: (

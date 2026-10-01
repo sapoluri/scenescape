@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { readBootstrapJson } from "./bootstrap";
-import { readAuthToken } from "./authToken";
+import { persistAuthToken, readAuthToken } from "./authToken";
 import { mountBootstrapError } from "./bootstrapError";
 
 export type UiBootstrapPage =
@@ -16,6 +16,16 @@ export type UiBootstrapPage =
   | "list-sheets"
   | "sign-in";
 
+function rememberBootstrapToken(payload: unknown): void {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    typeof (payload as { authToken?: unknown }).authToken === "string"
+  ) {
+    persistAuthToken((payload as { authToken: string }).authToken);
+  }
+}
+
 /**
  * Prefer embedded `json_script`, else GET /api/v1/ui-bootstrap/ (session or Token).
  * Enables static shells without Django page templates.
@@ -28,6 +38,7 @@ export async function loadUiBootstrap<T>(
 ): Promise<T | null> {
   const embedded = readBootstrapJson<T>(elementId);
   if (embedded) {
+    rememberBootstrapToken(embedded);
     return embedded;
   }
   const params = new URLSearchParams({ page });
@@ -66,5 +77,7 @@ export async function loadUiBootstrap<T>(
     );
     return null;
   }
-  return (await res.json()) as T;
+  const payload = (await res.json()) as T;
+  rememberBootstrapToken(payload);
+  return payload;
 }

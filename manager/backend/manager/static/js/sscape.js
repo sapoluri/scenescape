@@ -155,7 +155,25 @@ function sceneIdFromBootstrap() {
 }
 
 // Prefer #scene when present (ensureSceneDetailDom / calibrate pages); else bootstrap.
-var scene_id = $("#scene").val() || sceneIdFromBootstrap();
+function resolveSceneId() {
+  return $("#scene").val() || sceneIdFromBootstrap() || "";
+}
+
+var scene_id = resolveSceneId();
+
+/** Re-read scene id after static-shell bootstrap creates #scene. */
+function refreshSceneId() {
+  var next = resolveSceneId();
+  if (next) {
+    var changed = next !== scene_id;
+    scene_id = next;
+    if (changed && typeof socket !== "undefined" && socket.connected) {
+      socket.emit("register_scene", { scene_id });
+    }
+  }
+  return scene_id;
+}
+window.ssRefreshSceneId = refreshSceneId;
 var icon_size = 24;
 var show_telemetry = false;
 var show_trails = false;
@@ -315,7 +333,10 @@ const socket = io({
 
 socket.on("connect", async () => {
   console.log("Connected to WebSocket:", socket.id);
-  socket.emit("register_scene", { scene_id });
+  refreshSceneId();
+  if (scene_id) {
+    socket.emit("register_scene", { scene_id });
+  }
 });
 
 socket.on("calibration_result", async (notification) => {
@@ -676,9 +697,11 @@ window.ssAttachSceneMqttClient = function (client) {
     return;
   }
   client.__ssSceneHandlersBound = true;
+  refreshSceneId();
 
   function onSceneMqttConnected() {
     console.log("MQTT scene handlers connected");
+    refreshSceneId();
     var topicVal = $("#topic").val();
     if (
       (topicVal === undefined || topicVal === null || topicVal === "") &&
@@ -691,6 +714,10 @@ window.ssAttachSceneMqttClient = function (client) {
       console.log("Subscribed to " + topicVal);
     }
 
+    if (!scene_id) {
+      console.warn("MQTT scene handlers: scene_id empty; skipping event subscribe");
+      return;
+    }
     client.subscribe(APP_NAME + "/event/" + "+/" + scene_id + "/+/+");
     console.log(
       "Subscribed to " + APP_NAME + "/event/" + "+/" + scene_id + "/+/+",
@@ -2236,6 +2263,7 @@ function setSensorColor(sensor_id, value, area) {
 }
 
 $(document).ready(function () {
+  refreshSceneId();
   const tokenElement = document.getElementById("auth-token");
 
   $(document).on("click", "#export-scene", async function (e) {

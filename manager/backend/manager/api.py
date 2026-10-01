@@ -308,8 +308,21 @@ class PreviewGeospatialChildTransform(APIView):
       return Response(missing, status=status.HTTP_400_BAD_REQUEST)
 
     errors = {}
-    parent_scene = Scene.objects.filter(pk=parent_uid).first()
-    child_scene = Scene.objects.filter(pk=child_uid).first()
+    parent_pk = None
+    child_pk = None
+    try:
+      parent_pk = uuid.UUID(str(parent_uid))
+    except (ValueError, TypeError, AttributeError):
+      errors['parent'] = ['Must be a valid UUID.']
+    try:
+      child_pk = uuid.UUID(str(child_uid))
+    except (ValueError, TypeError, AttributeError):
+      errors['child'] = ['Must be a valid UUID.']
+    if errors:
+      return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+    parent_scene = Scene.objects.filter(pk=parent_pk).first()
+    child_scene = Scene.objects.filter(pk=child_pk).first()
     if parent_scene is None:
       errors['parent'] = ['Scene not found.']
     if child_scene is None:
