@@ -18,6 +18,7 @@ import "./ScenesHomeApp.css";
 export type SceneHomeCard = {
   id: string;
   name: string;
+  georeferenced?: boolean;
   thumbnailUrl: string | null;
   mapUrl: string | null;
   detailUrl: string;
@@ -229,7 +230,13 @@ function ScenesHomeInner({ bootstrap }: Props) {
 
   const openCreate = useCallback(() => open("scene-create"), [open]);
   const sceneOptions = useMemo(
-    () => (bootstrap.scenes || []).map((s) => ({ id: s.id, name: s.name })),
+    () =>
+      (bootstrap.scenes || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        georeferenced: Boolean(s.georeferenced),
+        mapUrl: s.mapUrl || null,
+      })),
     [bootstrap.scenes],
   );
   const manageSceneId =
@@ -277,9 +284,11 @@ function ScenesHomeInner({ bootstrap }: Props) {
             sceneUid={null}
             authToken={bootstrap.authToken}
             onClose={close}
-            onSaved={(uid) => {
+            onSaved={(uid, opts) => {
               if (uid) {
-                window.location.href = `/${uid}/`;
+                const q =
+                  opts?.setup === "reconstruct" ? "?setup=reconstruct" : "";
+                window.location.href = `/${uid}/${q}`;
                 return;
               }
               reload();
