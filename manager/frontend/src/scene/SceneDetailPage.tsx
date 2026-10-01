@@ -318,16 +318,21 @@ function SceneDetailInner({ bootstrap }: Props) {
       <button
         type="button"
         className={`ss-layout-toggle-btn ss-map-focus-btn${mapFocus ? " is-active" : ""}`}
-        title={mapFocus ? "Show control panel (Esc)" : "Map only focus"}
+        title={
+          mapFocus ? "Show control panel (Esc)" : "Hide control panel"
+        }
+        aria-label={
+          mapFocus ? "Show control panel" : "Hide control panel"
+        }
         aria-pressed={mapFocus}
         onClick={toggleMapFocus}
       >
         <i
-          className={`bi ${mapFocus ? "bi-layout-sidebar" : "bi-arrows-fullscreen"}`}
+          className={`bi ${mapFocus ? "bi-layout-sidebar-reverse" : "bi-layout-sidebar"}`}
           aria-hidden="true"
         />
         <span className="ss-layout-toggle-label">
-          {mapFocus ? "Panel" : "Map"}
+          {mapFocus ? "Show panel" : "Hide panel"}
         </span>
       </button>
     </div>
