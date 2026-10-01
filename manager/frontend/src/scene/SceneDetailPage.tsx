@@ -170,7 +170,7 @@ function SceneDetailInner({ bootstrap }: Props) {
       fitSceneMapDisplay();
     });
     return () => window.cancelAnimationFrame(id);
-  }, [mapFocus, panelSizePx, layout]);
+  }, [layout]);
 
   const confirmSceneDelete = useCallback(async () => {
     if (!urls.sceneDelete) {
@@ -230,7 +230,6 @@ function SceneDetailInner({ bootstrap }: Props) {
   ];
 
   const back = sceneDetailBack(urls);
-  const layoutInSideColumn = layout === "row" && !mapFocus;
 
   const sceneActions = (
     <div className="ss-scene-header-actions" role="group" aria-label="Scene">
@@ -404,22 +403,10 @@ function SceneDetailInner({ bootstrap }: Props) {
             id="ss-map-toggles-slot"
             className="ss-scene-map-toggles-slot"
           />
-          {!layoutInSideColumn ? (
-            <div className="ss-scene-chrome-end hide-fullscreen">
-              {layoutActions}
-            </div>
-          ) : (
-            <div className="ss-scene-chrome-end-spacer" aria-hidden="true" />
-          )}
+          <div className="ss-scene-chrome-end hide-fullscreen">
+            {layoutActions}
+          </div>
         </div>
-        {layoutInSideColumn ? (
-          <>
-            <div className="ss-scene-chrome-gap" aria-hidden="true" />
-            <div className="ss-scene-chrome-side hide-fullscreen">
-              {layoutActions}
-            </div>
-          </>
-        ) : null}
       </div>
       <div className="ss-workspace-body">
         <div className="ss-workspace-main">
