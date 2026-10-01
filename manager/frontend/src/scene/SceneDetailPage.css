@@ -414,7 +414,11 @@ body.is-map-fullscreen .ss-scene-chrome-gap {
   overflow: hidden;
 }
 
-/* Map stays full-bleed; Side/Below only change overlay panel placement. */
+/*
+ * Map stays full-bleed; Side/Below only change overlay panel placement.
+ * The panel sits above the map — ROI / tripwire / vertex edits under it
+ * need Hide panel (or a narrower panel) to reach. Intentional trade-off.
+ */
 .ss-workspace--stack .ss-workspace-body,
 .ss-workspace--row .ss-workspace-body {
   flex-direction: column;

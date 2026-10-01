@@ -57,6 +57,8 @@ React sign-in, Snap ROI gates, single bootstrap module).
   scripts); static `shell.html` / `sign-in.html` can serve the same islands.
 - Snap overlay remains for child ROI/tripwire/sensor on React map scenes;
   `legacyBridge` Snap fallbacks only run when `!ssUseReactMap`.
+- Scene side panel overlays the full-bleed map (Side/Below). Map geometry
+  under the panel is unreachable until Hide panel (or resize); intentional.
 
 Gate: UI BAT green on Django thin mounts; static shell smoke for `/`,
 `/<uuid>/`, list paths, and `/sign_in/` against ui-bootstrap.

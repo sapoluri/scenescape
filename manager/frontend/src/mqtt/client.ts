@@ -24,28 +24,21 @@ export function mqttPayloadToString(data: unknown): string {
   if (typeof data === "string") {
     return data;
   }
-  if (
-    typeof TextDecoder !== "undefined" &&
-    (data instanceof Uint8Array || ArrayBuffer.isView(data))
-  ) {
-    try {
+  if (typeof TextDecoder === "undefined") {
+    return "";
+  }
+  try {
+    if (data instanceof ArrayBuffer) {
+      return new TextDecoder().decode(data);
+    }
+    if (ArrayBuffer.isView(data)) {
       return new TextDecoder().decode(data as ArrayBufferView);
-    } catch {
-      /* fall through */
     }
+  } catch {
+    return "";
   }
-  if (
-    data &&
-    typeof data === "object" &&
-    typeof (data as { toString?: unknown }).toString === "function"
-  ) {
-    try {
-      return (data as { toString: (enc?: string) => string }).toString("utf8");
-    } catch {
-      return (data as { toString: () => string }).toString();
-    }
-  }
-  return String(data);
+  // Fail closed: avoid Buffer.toString / Object.toString false positives.
+  return "";
 }
 
 export function mqttPayloadToJson(data: unknown): unknown {

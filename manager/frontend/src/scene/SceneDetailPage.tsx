@@ -318,10 +318,14 @@ function SceneDetailInner({ bootstrap }: Props) {
         type="button"
         className={`ss-layout-toggle-btn ss-map-focus-btn${mapFocus ? " is-active" : ""}`}
         title={
-          mapFocus ? "Show control panel (Esc)" : "Hide control panel"
+          mapFocus
+            ? "Show control panel (Esc)"
+            : "Hide panel to edit map geometry underneath"
         }
         aria-label={
-          mapFocus ? "Show control panel" : "Hide control panel"
+          mapFocus
+            ? "Show control panel"
+            : "Hide panel to edit map geometry underneath"
         }
         aria-pressed={mapFocus}
         onClick={toggleMapFocus}

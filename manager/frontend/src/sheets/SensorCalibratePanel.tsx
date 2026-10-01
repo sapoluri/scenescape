@@ -532,7 +532,7 @@ export function SensorCalibratePanel({
                 title="Format: [[x,y], …]"
                 aria-label="Points JSON format: [[x,y], …]"
               >
-                <i className="bi bi-question-circle" aria-hidden="true" />
+                <i className="bi bi-info-circle" aria-hidden="true" />
               </button>
             </div>
             <div className="ss-text-field-control">

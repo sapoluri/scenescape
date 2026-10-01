@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import "./Modal.css";
 
@@ -15,15 +15,14 @@ type Props = {
 
 /**
  * Lightweight modal chrome; show/hide via Bootstrap data API or .show class.
- * Portaled to document.body so a parent stacking context (e.g. overlay panel)
- * cannot trap the dialog under Bootstrap’s backdrop.
+ * Portaled to document.body synchronously so a parent stacking context
+ * (e.g. overlay panel) cannot trap the dialog under Bootstrap’s backdrop,
+ * and data-toggle targets exist on first paint.
  */
 export function Modal({ id, title, children, footer, onClose }: Props) {
-  const [mount, setMount] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setMount(document.body);
-  }, []);
+  if (typeof document === "undefined") {
+    return null;
+  }
 
   const node = (
     <div
@@ -57,8 +56,5 @@ export function Modal({ id, title, children, footer, onClose }: Props) {
     </div>
   );
 
-  if (!mount) {
-    return null;
-  }
-  return createPortal(node, mount);
+  return createPortal(node, document.body);
 }

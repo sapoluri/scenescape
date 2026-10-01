@@ -114,6 +114,25 @@ export function useSceneMqtt({
     connectBtn?.addEventListener("click", onConnectClick);
     disconnectBtn?.addEventListener("click", onDisconnectClick);
 
+    let retryTimer: number | undefined;
+
+    const teardown = () => {
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+      connectBtn?.removeEventListener("click", onConnectClick);
+      disconnectBtn?.removeEventListener("click", onDisconnectClick);
+      // Tear down on leave; StrictMode remount reconnects via wantConnect.
+      const owned = clientRef.current;
+      endMqttClient(owned);
+      if (window.ssMqttClient === owned) {
+        window.ssMqttClient = undefined;
+      }
+      clientRef.current = null;
+      setMqttConnected(false);
+      window.ssReactOwnsMqtt = false;
+    };
+
     const wantConnect = sessionStorage.getItem("connectToMqtt") !== "false";
     if (wantConnect) {
       // Broker input may appear when MQTT tab portals in; retry briefly.
@@ -129,25 +148,12 @@ export function useSceneMqtt({
         return false;
       };
       if (!tryConnect()) {
-        const t = window.setTimeout(() => {
+        retryTimer = window.setTimeout(() => {
           tryConnect();
         }, 200);
-        return () => {
-          window.clearTimeout(t);
-          connectBtn?.removeEventListener("click", onConnectClick);
-          disconnectBtn?.removeEventListener("click", onDisconnectClick);
-          window.ssReactOwnsMqtt = false;
-        };
       }
     }
 
-    return () => {
-      connectBtn?.removeEventListener("click", onConnectClick);
-      disconnectBtn?.removeEventListener("click", onDisconnectClick);
-      // Keep ownership while React map is active (StrictMode remounts).
-      if (!window.ssUseReactMap) {
-        window.ssReactOwnsMqtt = false;
-      }
-    };
+    return teardown;
   }, [enabled, sceneId, wssConnection]);
 }
