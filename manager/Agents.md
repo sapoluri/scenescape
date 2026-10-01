@@ -300,11 +300,11 @@ docker compose exec manager python manage.py showmigrations
 - UI conventions, layout shells, and hard DOM contracts:
   [`.github/skills/manager-ui/SKILL.md`](../.github/skills/manager-ui/SKILL.md)
   (includes `static/css/` domain split + token sync)
-- Remaining epics (3D viewport, how-to follow-ups):
-  [`.github/plans/manager-ui.md`](../.github/plans/manager-ui.md)
+- Host-independent Manager UI decision:
+  [`docs/adr/0019-host-independent-manager-ui.md`](../docs/adr/0019-host-independent-manager-ui.md)
 - Package notes: [`manager/frontend/README.md`](frontend/README.md)
-- Legacy Three.js 3D viewport remains under `static/js/` until the 3D React
-  epic lands
+- Legacy Three.js 3D viewport remains under `static/js/` until a dedicated
+  React 3D epic (see ADR 19); thin placement widget is ADR 18.
 
 ## File Structure
 

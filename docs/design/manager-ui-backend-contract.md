@@ -8,8 +8,8 @@ SPDX-License-Identifier: Apache-2.0
 - **Author(s)**: SceneScape maintainers
 - **Date**: 2026-09-29
 - **Status**: `Accepted`
-- **Related**: [`.github/plans/manager-ui.md`](../../.github/plans/manager-ui.md)
-  §2 (swappable backend), [`.github/skills/manager-ui/SKILL.md`](../../.github/skills/manager-ui/SKILL.md)
+- **Related**: [ADR 19: Host-Independent Manager UI](../adr/0019-host-independent-manager-ui.md),
+  [`.github/skills/manager-ui/SKILL.md`](../../.github/skills/manager-ui/SKILL.md)
 
 ---
 

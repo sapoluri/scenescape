@@ -20,7 +20,8 @@ SPDX-License-Identifier: Apache-2.0
   `{% static 'ui/…' %}`
 - Build: `make -C manager ui-build` (or `SKIP_UI=1`). Details:
   `manager/frontend/README.md`
-- Remaining epics: `.github/plans/manager-ui.md`
+- Architecture decision (host-independent islands):
+  `docs/adr/0019-host-independent-manager-ui.md`
 - UI↔backend contract (bootstrap / REST / auth / MQTT):
   `docs/design/manager-ui-backend-contract.md`
 
