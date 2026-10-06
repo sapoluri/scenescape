@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { persistGeometry } from "../lib/legacyBridge";
+import { CameraStripOverlay } from "../panels/CameraStripOverlay";
 import type {
   SceneCameraBootstrap,
   SceneSensorBootstrap,
@@ -36,6 +37,7 @@ interface SceneViewportProps {
   assetMarkColors?: Record<string, string>;
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
+  cameraRates?: Record<string, string>;
   authToken: string;
 }
 
@@ -229,6 +231,7 @@ export function SceneViewport({
   assetMarkColors,
   cameras,
   sensors,
+  cameraRates = {},
   authToken,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -384,6 +387,13 @@ export function SceneViewport({
         ref={labelLayerRef}
         aria-hidden="true"
       />
+      {cameras.length > 0 && (
+        <CameraStripOverlay
+          cameras={cameras}
+          cameraRates={cameraRates}
+          authToken={authToken}
+        />
+      )}
     </div>
   );
 }

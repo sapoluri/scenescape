@@ -1,0 +1,233 @@
+/*
+ * SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Floating camera strip overlay — bottom-left of the 3D viewport.
+ * Mount inside .ss-viewport (position: relative). The root also carries
+ * .ss-camera-strip so the shared card rules in ../scene/CameraStrip.css
+ * (card chrome, live/offline badges) apply verbatim. */
+
+.ss-camera-strip-overlay {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 30;
+  max-width: min(44rem, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ss-elevated) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--ss-card-border);
+  border-radius: var(--ss-radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  color: var(--ss-text);
+  font-size: var(--ss-type-workspace-body, 0.8125rem);
+}
+
+/* Header: collapse toggle + count badge */
+.ss-strip-overlay-head {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ss-card-border);
+  background: color-mix(in srgb, var(--ss-surface) 55%, transparent);
+}
+
+.ss-strip-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ss-text);
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--ss-type-workspace-section, 0.875rem);
+  cursor: pointer;
+}
+
+.ss-strip-collapse:hover {
+  background: color-mix(in srgb, var(--ss-text) 8%, transparent);
+}
+
+.ss-strip-collapse:focus-visible {
+  outline: 2px solid var(--ss-brand-soft);
+  outline-offset: 1px;
+}
+
+.ss-strip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ss-brand) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ss-brand) 40%, transparent);
+  color: var(--ss-text);
+  font-size: var(--ss-type-workspace-micro, 0.625rem);
+  font-weight: 700;
+}
+
+/* Horizontal card strip */
+.ss-strip-cards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 10px;
+  scrollbar-width: thin;
+}
+
+.ss-strip-empty {
+  margin: 4px 2px;
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-body, 0.8125rem);
+  white-space: nowrap;
+}
+
+/* Cards are buttons: reset native button chrome, keep .card/.camera-card
+ * visuals from the shared stylesheets. */
+button.ss-strip-card {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 10.5rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+button.ss-strip-card:hover {
+  border-color: var(--ss-brand-soft);
+}
+
+button.ss-strip-card:focus-visible {
+  outline: 2px solid var(--ss-brand-soft);
+  outline-offset: 1px;
+}
+
+button.ss-strip-card.is-selected {
+  border-color: var(--ss-brand);
+  box-shadow: 0 0 0 1px var(--ss-brand);
+}
+
+.ss-camera-strip-overlay .camera-card .card-header {
+  padding: 0.3rem 0.4rem;
+  font-size: 0.72rem;
+  background: transparent;
+}
+
+.ss-strip-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ss-camera-strip-overlay .card-image {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ss-surface) 70%, var(--ss-elevated));
+}
+
+.ss-camera-strip-overlay .snapshot-image {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.ss-camera-strip-overlay .card-image img,
+.ss-camera-strip-overlay .snapshot-image img {
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+
+/* Keep previews hidden until MQTT sets a frame (scoped fallback; the
+ * page-level rule is scoped under .ss-scene-detail--workspace). */
+.ss-camera-strip-overlay .card-image img.display-none,
+.ss-camera-strip-overlay .snapshot-image img.display-none {
+  display: none !important;
+}
+
+.ss-camera-strip-overlay .cam-offline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-micro, 0.625rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Expanded inline live feed ("in place" preview) */
+.ss-strip-expanded {
+  padding: 8px 10px 0;
+}
+
+.ss-strip-expanded .snapshot-image {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--ss-card-border);
+  border-radius: calc(var(--ss-radius) - 4px);
+  background: color-mix(in srgb, var(--ss-surface) 70%, var(--ss-elevated));
+}
+
+.ss-strip-expanded-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 2px;
+}
+
+.ss-strip-expanded-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-strip-expanded-meta .rate {
+  margin-left: auto;
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-micro, 0.625rem);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Collapsed: header only */
+.ss-camera-strip-overlay.is-collapsed .ss-strip-overlay-head {
+  border-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .ss-camera-strip-overlay {
+    max-width: calc(100% - 24px);
+  }
+  button.ss-strip-card {
+    flex-basis: 8.5rem;
+  }
+}

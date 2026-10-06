@@ -15,7 +15,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ToastProvider } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
 import { SceneMapPane } from "./SceneMapPane";
-import { SceneViewport } from "../viewport/SceneViewport";
+import { SinglePaneView } from "../panels/SinglePaneView";
 import { SceneMapSetupHelper } from "./SceneMapSetupHelper";
 import { SceneSidePanel } from "./SceneSidePanel";
 import { RoiTripwireEditors } from "./editors/RoiTripwireEditors";
@@ -444,11 +444,13 @@ function SceneDetailInner({ bootstrap }: Props) {
       <div className="ss-workspace-body">
         <div className="ss-workspace-main">
           {view3d ? (
-            <SceneViewport
+            <SinglePaneView
               sceneId={scene.id}
+              sceneName={scene.name}
               assetMarkColors={bootstrap.assetMarkColors}
               cameras={cameras}
               sensors={sensors}
+              cameraRates={cameraRates}
               authToken={bootstrap.authToken}
             />
           ) : (
@@ -479,22 +481,24 @@ function SceneDetailInner({ bootstrap }: Props) {
           layout={layout}
           panelSizePx={panelSizePx}
           onResize={setPanelSizePx}
-          disabled={mapFocus}
+          disabled={mapFocus || view3d}
         />
-        <SceneSidePanel
-          tabs={tabs}
-          cameraRates={cameraRates}
-          cameras={cameras}
-          sensors={sensors}
-          childrenLinks={childrenLinks}
-          isSuperuser={isSuperuser}
-          sceneId={scene.id}
-          wssConnection={bootstrap.scene.wssConnection || ""}
-          authToken={bootstrap.authToken}
-          onCamerasChange={setCameras}
-          onSensorsChange={setSensors}
-          onChildrenChange={setChildrenLinks}
-        />
+        {!view3d && (
+          <SceneSidePanel
+            tabs={tabs}
+            cameraRates={cameraRates}
+            cameras={cameras}
+            sensors={sensors}
+            childrenLinks={childrenLinks}
+            isSuperuser={isSuperuser}
+            sceneId={scene.id}
+            wssConnection={bootstrap.scene.wssConnection || ""}
+            authToken={bootstrap.authToken}
+            onCamerasChange={setCameras}
+            onSensorsChange={setSensors}
+            onChildrenChange={setChildrenLinks}
+          />
+        )}
       </div>
       <RoiTripwireEditors
         sceneId={scene.id}

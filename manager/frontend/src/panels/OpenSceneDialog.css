@@ -1,0 +1,255 @@
+/*
+ * SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Open Scene dialog — Compositor-style floating gallery. Light/dark safe
+   through the --ss-* token layer (html[data-theme="dark"] overrides). */
+
+.ss-open-scene-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 1rem 1rem;
+  background: rgb(0 0 0 / 0.45);
+  overflow-y: auto;
+}
+
+.ss-open-scene-dialog {
+  width: min(46rem, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ss-elevated);
+  color: var(--ss-text);
+  border: 1px solid var(--ss-card-border);
+  border-radius: var(--ss-radius);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.35);
+  outline: none;
+}
+
+.ss-open-scene-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem 0.5rem;
+}
+
+.ss-open-scene-title {
+  margin: 0;
+  font-family: var(--ss-font-heading);
+  font-size: var(--ss-type-workspace-title);
+  font-weight: 600;
+}
+
+.ss-open-scene-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ss-text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.ss-open-scene-close:hover {
+  color: var(--ss-text);
+  background: var(--ss-surface);
+}
+
+.ss-open-scene-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem 0.75rem;
+}
+
+.ss-open-scene-search {
+  flex: 1;
+  font: inherit;
+  color: var(--ss-text);
+  background: var(--ss-surface);
+  border: 1px solid var(--ss-input-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.ss-open-scene-search:focus {
+  outline: 2px solid var(--ss-brand-soft);
+  outline-offset: 1px;
+  border-color: var(--ss-brand);
+}
+
+.ss-open-scene-hint {
+  flex: none;
+  font-size: var(--ss-type-workspace-micro);
+  color: var(--ss-text-muted);
+  border: 1px solid var(--ss-card-border);
+  border-radius: 0.375rem;
+  padding: 0.2rem 0.45rem;
+  background: var(--ss-surface);
+}
+
+.ss-open-scene-status {
+  margin: 0;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-body);
+}
+
+.ss-open-scene-error {
+  color: var(--ss-status-bad);
+}
+
+.ss-open-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+  gap: 0.75rem;
+  padding: 0.25rem 1rem 1rem;
+  overflow-y: auto;
+}
+
+.ss-open-scene-card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  text-align: start;
+  background: var(--ss-card-bg);
+  color: var(--ss-text);
+  border: 1px solid var(--ss-card-border);
+  border-radius: 0.625rem;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ss-open-scene-card:hover {
+  border-color: var(--ss-brand);
+  box-shadow: 0 0.25rem 0.9rem rgb(0 0 0 / 0.12);
+}
+
+.ss-open-scene-card:focus-visible {
+  outline: 2px solid var(--ss-brand-soft);
+  outline-offset: 2px;
+}
+
+.ss-open-scene-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 6.5rem;
+  background:
+    linear-gradient(135deg, var(--ss-brand) 0%, var(--ss-brand-soft) 100%);
+  opacity: 0.9;
+}
+
+.ss-open-scene-thumb-initials {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--ss-on-brand);
+  letter-spacing: 0.05em;
+}
+
+.ss-open-scene-thumb-new {
+  background: transparent;
+  border-bottom: 1px dashed var(--ss-card-border);
+  opacity: 1;
+}
+
+.ss-open-scene-plus {
+  font-size: 2.25rem;
+  font-weight: 300;
+  color: var(--ss-text-muted);
+}
+
+.ss-open-scene-new {
+  border-style: dashed;
+}
+
+.ss-open-scene-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem 0.75rem;
+}
+
+.ss-open-scene-name {
+  font-weight: 600;
+  font-size: var(--ss-type-workspace-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-open-scene-stats {
+  font-size: var(--ss-type-workspace-meta);
+  color: var(--ss-text-muted);
+}
+
+.ss-open-scene-modified {
+  font-size: var(--ss-type-workspace-micro);
+  color: var(--ss-text-muted);
+}
+
+.ss-open-scene-new-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--ss-card-bg);
+  border: 1px dashed var(--ss-card-border);
+  border-radius: 0.625rem;
+  padding: 0.75rem;
+}
+
+.ss-open-scene-new-form .ss-open-scene-status {
+  padding: 0;
+  text-align: start;
+}
+
+.ss-open-scene-new-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ss-open-scene-btn-primary {
+  appearance: none;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ss-on-brand);
+  background: var(--ss-brand);
+  cursor: pointer;
+}
+
+.ss-open-scene-btn-primary:hover:not(:disabled) {
+  background: var(--ss-brand-hover);
+}
+
+.ss-open-scene-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ss-open-scene-btn-ghost {
+  appearance: none;
+  border: 1px solid var(--ss-card-border);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  color: var(--ss-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.ss-open-scene-btn-ghost:hover {
+  background: var(--ss-surface);
+}

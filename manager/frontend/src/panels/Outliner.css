@@ -1,0 +1,91 @@
+/* SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+   SPDX-License-Identifier: Apache-2.0 */
+
+.ss-outliner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 4px;
+  overflow-y: auto;
+  font-size: 12.5px;
+}
+
+.ss-outliner-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-outliner-badge {
+  min-width: 20px;
+  text-align: center;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--ss-fill-tertiary, rgba(120, 120, 128, 0.16));
+  color: var(--ss-text-secondary, #aeaeb2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ss-outliner-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ss-text, #f5f5f7);
+  outline: none;
+}
+
+.ss-outliner-row:hover {
+  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.12));
+}
+
+.ss-outliner-row.is-selected {
+  background: var(--ss-accent-fill, rgba(10, 132, 255, 0.22));
+}
+
+.ss-outliner-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--ss-accent, #0a84ff);
+}
+
+.ss-outliner-eye {
+  border: none;
+  background: none;
+  padding: 2px;
+  color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ss-outliner-eye:hover {
+  color: var(--ss-text, #f5f5f7);
+}
+
+.ss-outliner-icon {
+  color: var(--ss-text-muted, #8e8e93);
+  font-size: 12px;
+  flex: none;
+}
+
+.ss-outliner-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-outliner-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}

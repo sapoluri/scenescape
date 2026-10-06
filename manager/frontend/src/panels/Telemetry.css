@@ -1,0 +1,167 @@
+/* SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+   SPDX-License-Identifier: Apache-2.0 */
+
+/* Telemetry pane — Compositor-style dark editor chrome. Tokens come from the
+   app-level tokens.css import; both light and dark themes work via vars. */
+
+.tl-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 12px;
+  color: var(--ss-text);
+  font-size: var(--ss-type-workspace-body, 0.8125rem);
+}
+
+.tl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tl-now {
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  white-space: nowrap;
+}
+
+.tl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ss-card-border);
+  background: var(--ss-card-bg);
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ss-status-bad);
+  flex: none;
+}
+
+.tl-mqtt.is-ok .tl-dot {
+  background: var(--ss-status-ok);
+  box-shadow: 0 0 6px var(--ss-status-ok);
+}
+
+.tl-mqtt.is-bad {
+  color: var(--ss-text-muted);
+}
+
+.tl-classes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tl-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.tl-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--ss-input-border-subtle);
+  padding-top: 6px;
+}
+
+.tl-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  line-height: 1.5;
+}
+
+.tl-event:hover {
+  background: var(--ss-elevated);
+}
+
+.tl-time {
+  color: var(--ss-text-muted);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.tl-kind {
+  flex: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.625rem;
+}
+
+.tl-track-new .tl-kind {
+  color: var(--ss-status-ok);
+}
+
+.tl-track-lost .tl-kind {
+  color: var(--ss-status-bad);
+}
+
+.tl-track {
+  color: var(--ss-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-pos,
+.tl-speed {
+  margin-left: auto;
+  color: var(--ss-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex: none;
+}
+
+.tl-speed + .tl-pos,
+.tl-pos + .tl-speed {
+  margin-left: 0;
+}
+
+.tl-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  color: var(--ss-text-muted);
+  border: 1px dashed var(--ss-input-border);
+  border-radius: var(--ss-radius);
+  padding: 16px;
+  min-height: 120px;
+}
+
+.tl-empty p {
+  margin: 0;
+}
+
+.tl-empty-hint {
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  max-width: 22em;
+}
