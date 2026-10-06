@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@rerun-io/web-viewer-react": "^0.38.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "three": "^0.185.1",

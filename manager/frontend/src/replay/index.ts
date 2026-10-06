@@ -8,10 +8,12 @@
  */
 
 import { StubProvider } from "./StubProvider";
+import { RerunProvider } from "./RerunProvider";
 import type { ReplayProvider } from "./types";
 
 export type { RecordingMeta, ReplayProvider } from "./types";
 export { StubProvider } from "./StubProvider";
+export { RerunProvider } from "./RerunProvider";
 
 const providers = new Map<string, ReplayProvider>();
 
@@ -23,17 +25,16 @@ export function getReplayProvider(id: string): ReplayProvider | undefined {
   return providers.get(id);
 }
 
-/** Provider id from deployment config; falls back to the stub. */
+/** Provider id from deployment config; defaults to the Rerun reference backend. */
 export function resolveReplayProvider(): ReplayProvider {
   const configured =
     typeof window !== "undefined"
       ? (window as unknown as { ssReplayProvider?: string }).ssReplayProvider
       : undefined;
-  if (configured) {
-    const found = providers.get(configured);
-    if (found) {
-      return found;
-    }
+  const want = configured || "rerun";
+  const found = providers.get(want);
+  if (found) {
+    return found;
   }
   let stub = providers.get("stub");
   if (!stub) {
@@ -43,5 +44,6 @@ export function resolveReplayProvider(): ReplayProvider {
   return stub;
 }
 
-// The stub is always available.
+// The stub is always available; Rerun is the reference backend (2.6).
 registerReplayProvider(new StubProvider());
+registerReplayProvider(new RerunProvider());

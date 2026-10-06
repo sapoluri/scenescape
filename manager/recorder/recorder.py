@@ -65,16 +65,94 @@ RRD_SDK_VERSION = "0.38.1"
 
 
 # ---------------------------------------------------------------------------
+# Recorder sinks (Phase 2.6 backend seam)
+#
+# The recorder writes through a pluggable sink: RrdSink (rerun-sdk) today;
+# JsonlSink / McapSink later. Sink choice is deployment config via
+# RECORDER_SINK (default: rrd).
+# ---------------------------------------------------------------------------
+
+class Sink:
+    """Abstract recording sink."""
+
+    def open_partition(self, scene_id: str, partition: str, path: Path) -> None:
+        raise NotImplementedError
+
+    def log_tracks(self, scene_id: str, tracks: list[dict]) -> None:
+        raise NotImplementedError
+
+    def log_frame(self, scene_id: str, camera_id: str, image_bytes: bytes) -> None:
+        raise NotImplementedError
+
+    def close_partition(self, scene_id: str) -> None:
+        raise NotImplementedError
+
+
+class RrdSink(Sink):
+    """Writes .rrd files via rerun-sdk (reference backend)."""
+
+    def __init__(self):
+        self.streams: dict[str, object] = {}
+
+    def open_partition(self, scene_id: str, partition: str, path: Path) -> None:
+        import rerun as rr
+
+        rec = rr.RecordingStream(
+            application_id=scene_id,
+            recording_id=f"{scene_id}-{partition}",
+        )
+        rec.save(path)
+        rec.log("recorder/meta", rr.TextLog(f"rerun-sdk {RRD_SDK_VERSION}"),
+                timeless=True)
+        self.streams[scene_id] = rec
+
+    def log_tracks(self, scene_id: str, tracks: list[dict]) -> None:
+        import rerun as rr
+        from datetime import datetime, timezone
+
+        rec = self.streams.get(scene_id)
+        if rec is None:
+            return
+        rec.set_time("log_time", timestamp=datetime.now(timezone.utc))
+        for t in tracks:
+            tid = str(t.get("id", "unknown"))
+            x = float(t.get("x", 0))
+            y = float(t.get("y", 0))
+            rec.log(f"scene/{scene_id}/objects/{tid}", rr.Points3D([[x, y, 0]]))
+
+    def log_frame(self, scene_id: str, camera_id: str, image_bytes: bytes) -> None:
+        import rerun as rr
+        from datetime import datetime, timezone
+
+        rec = self.streams.get(scene_id)
+        if rec is None:
+            return
+        rec.set_time("log_time", timestamp=datetime.now(timezone.utc))
+        rec.log(f"scene/{scene_id}/cameras/{camera_id}/image",
+                rr.EncodedImage(contents=image_bytes))
+
+    def close_partition(self, scene_id: str) -> None:
+        self.streams.pop(scene_id, None)
+
+
+def create_sink() -> Sink:
+    name = os.environ.get("RECORDER_SINK", "rrd").lower()
+    if name == "rrd":
+        return RrdSink()
+    raise ValueError(f"Unknown recorder sink: {name}")
+
+
+# ---------------------------------------------------------------------------
 # Per-scene .rrd writer
 # ---------------------------------------------------------------------------
 
 class SceneRecorder:
-    """Writes one scene's stream to hourly .rrd files via rerun-sdk."""
+    """Writes one scene's stream via the configured sink."""
 
-    def __init__(self, scene_id: str):
+    def __init__(self, scene_id: str, sink: Sink):
         self.scene_id = scene_id
+        self.sink = sink
         self.lock = Lock()
-        self.rec = None
         self.current_partition: str | None = None
         self._open_partition()
 
@@ -88,31 +166,14 @@ class SceneRecorder:
         return d / f"{partition}.rrd"
 
     def _open_partition(self) -> None:
-        import rerun as rr
-
         now = datetime.now(timezone.utc)
         partition = self._partition_name(now)
-        if partition == self.current_partition and self.rec is not None:
+        if partition == self.current_partition:
             return
-        if self.rec is not None:
-            try:
-                self.rec.save(self._path_for(self.current_partition))
-            except Exception:
-                logger.exception("Failed to save .rrd for %s", self.scene_id)
+        if self.current_partition is not None:
+            self.sink.close_partition(self.scene_id)
         path = self._path_for(partition)
-        # Append if the file already exists (restarts within the hour).
-        self.rec = rr.RecordingStream(
-            application_id=self.scene_id,
-            recording_id=f"{self.scene_id}-{partition}",
-            make_default=path.exists(),
-        )
-        if path.exists():
-            # Reopen existing file for append by saving to it on rotation.
-            pass
-        self.rec.save(path)
-        # Record SDK version in metadata for the version-lock caveat (2.5).
-        self.rec.log("recorder/meta", rr.TextLog(f"rerun-sdk {RRD_SDK_VERSION}"),
-                     timeless=True)
+        self.sink.open_partition(self.scene_id, partition, path)
         self.current_partition = partition
         logger.info("Recording %s -> %s", self.scene_id, path)
 
@@ -123,38 +184,20 @@ class SceneRecorder:
                 self._open_partition()
 
     def log_tracks(self, tracks: list[dict]) -> None:
-        """Log object tracks as Points3D. tracks: [{id, x, y, class}]."""
-        import rerun as rr
-
+        """Log object tracks. tracks: [{id, x, y, class}]."""
         self._maybe_rotate()
-        now = datetime.now(timezone.utc)
         with self.lock:
-            self.rec.set_time("log_time", timestamp=now)
-            for t in tracks:
-                tid = str(t.get("id", "unknown"))
-                x = float(t.get("x", 0))
-                y = float(t.get("y", 0))
-                self.rec.log(
-                    f"scene/{self.scene_id}/objects/{tid}",
-                    rr.Points3D([[x, y, 0]]),
-                )
+            self.sink.log_tracks(self.scene_id, tracks)
 
-    def log_frame(self, camera_id: string, image_bytes: bytes) -> None:
-        """Log a camera frame as a Rerun Image archetype."""
-        import rerun as rr
-
+    def log_frame(self, camera_id: str, image_bytes: bytes) -> None:
+        """Log a camera frame."""
         self._maybe_rotate()
-        now = datetime.now(timezone.utc)
         with self.lock:
-            self.rec.set_time("log_time", timestamp=now)
-            self.rec.log(
-                f"scene/{self.scene_id}/cameras/{camera_id}/image",
-                rr.EncodedImage(contents=image_bytes),
-            )
+            self.sink.log_frame(self.scene_id, camera_id, image_bytes)
 
     def close(self) -> None:
         with self.lock:
-            self.rec = None
+            self.sink.close_partition(self.scene_id)
             self.current_partition = None
 
 
@@ -164,6 +207,7 @@ class SceneRecorder:
 
 recorders: dict[str, SceneRecorder] = {}
 recorders_lock = Lock()
+_sink: Sink | None = None
 
 
 def get_recorder(scene_id: str) -> SceneRecorder | None:
@@ -172,7 +216,7 @@ def get_recorder(scene_id: str) -> SceneRecorder | None:
     with recorders_lock:
         rec = recorders.get(scene_id)
         if rec is None:
-            rec = SceneRecorder(scene_id)
+            rec = SceneRecorder(scene_id, _sink)
             recorders[scene_id] = rec
         return rec
 
@@ -288,12 +332,14 @@ def enforce_retention() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
+    global _sink
     try:
         import rerun  # noqa: F401
     except ImportError:
         logger.error("rerun-sdk is not installed. pip install rerun-sdk==%s", RRD_SDK_VERSION)
         return 1
 
+    _sink = create_sink()
     STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     logger.info(
         "Recorder starting: broker=%s:%d storage=%s retention=%.1fd scenes=%s",
