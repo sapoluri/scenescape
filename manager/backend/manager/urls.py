@@ -84,6 +84,8 @@ urlpatterns += [
   re_path(r'api/v1/(scene)$', api.ManageThing.as_view()),
   re_path(r'api/v1/(scene)/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$', api.ManageThing.as_view()),
   re_path(r'api/v1/(cameras)$', api.ListThings.as_view()),
+  path('api/v1/recordings/', api.RecordingsView.as_view(), name='recordings'),
+  path('api/v1/recordings/<uuid:scene_id>/<str:filename>', api.RecordingDownloadView.as_view(), name='recording_download'),
   re_path(r'api/v1/(camera)$', api.ManageThing.as_view()),
   re_path(r'api/v1/(camera)/([^/]+)$', api.ManageThing.as_view()),
   re_path(r'api/v1/(sensors)$', api.ListThings.as_view()),

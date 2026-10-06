@@ -13,6 +13,7 @@ import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
 import { Telemetry } from "./Telemetry";
+import { ReplayPanel } from "../replay/ReplayPanel";
 import "./Outliner.css";
 import "./Properties.css";
 import "./SinglePaneView.css";
@@ -62,23 +63,30 @@ export function SinglePaneView({
     undefined,
   );
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
+  const [replayMode, setReplayMode] = useState(false);
 
   useOpenSceneHotkey(() => setSceneDialogOpen(true));
 
   return (
     <div className="ss-single-pane">
       <div className="ss-sp-viewport">
-        <SceneViewport
-          sceneId={sceneId}
-          assetMarkColors={assetMarkColors}
-          cameras={cameras}
-          sensors={sensors}
-          cameraRates={cameraRates}
-          authToken={authToken}
-          isSuperuser={isSuperuser}
-          onOpenLibrary={() => setLibraryOpen(true)}
-          onOpenScene={() => setSceneDialogOpen(true)}
-        />
+        {replayMode ? (
+          <ReplayPanel sceneId={sceneId} onClose={() => setReplayMode(false)} />
+        ) : (
+          <SceneViewport
+            sceneId={sceneId}
+            assetMarkColors={assetMarkColors}
+            cameras={cameras}
+            sensors={sensors}
+            cameraRates={cameraRates}
+            authToken={authToken}
+            isSuperuser={isSuperuser}
+            onOpenLibrary={() => setLibraryOpen(true)}
+            onOpenScene={() => setSceneDialogOpen(true)}
+            mode="live"
+            onModeChange={(m) => setReplayMode(m === "replay")}
+          />
+        )}
       </div>
 
       <aside className="ss-sp-dock" aria-label="Scene panels">

@@ -372,6 +372,87 @@ class DatabaseReady(APIView):
     return Response({'databaseReady': database_ready}, status=status.HTTP_200_OK)
 
 
+class RecordingsView(APIView):
+  """Phase 2.0: list .rrd recordings written by the recorder service.
+
+  GET /api/v1/recordings/?scene=<uuid> ->
+    {recordings: [{id, scene, start, end, size, provider, url}]}
+  """
+  authentication_classes = [authentication.TokenAuthentication]
+  permission_classes = [permissions.IsAuthenticated]
+
+  def get(self, request):
+    from pathlib import Path
+
+    scene_id = request.query_params.get("scene", "").strip()
+    if not scene_id:
+      return Response({"detail": "scene query param required"},
+                      status=status.HTTP_400_BAD_REQUEST)
+    try:
+      scene = Scene.objects.get(pk=scene_id)
+    except (Scene.DoesNotExist, ValueError):
+      return Response({"detail": "scene not found"},
+                      status=status.HTTP_404_NOT_FOUND)
+
+    storage = Path(os.environ.get("RECORDER_STORAGE_DIR", "/data/recordings"))
+    scene_dir = storage / str(scene.id)
+    recordings = []
+    if scene_dir.is_dir():
+      for rrd in sorted(scene_dir.glob("*.rrd")):
+        try:
+          stat = rrd.stat()
+        except OSError:
+          continue
+        # Hourly partitions: YYYY-MM-DD-HH.rrd — start = hour start (UTC).
+        start_ms = 0
+        end_ms = int(stat.st_mtime * 1000)
+        try:
+          dt = datetime.strptime(rrd.stem, "%Y-%m-%d-%H").replace(tzinfo=timezone.utc)
+          start_ms = int(dt.timestamp() * 1000)
+          end_ms = min(end_ms, start_ms + 3600 * 1000)
+        except ValueError:
+          pass
+        recordings.append({
+          "id": f"{scene.id}/{rrd.name}",
+          "scene": str(scene.id),
+          "start": start_ms,
+          "end": end_ms,
+          "size": stat.st_size,
+          "provider": "rerun",
+          "url": f"/api/v1/recordings/{scene.id}/{rrd.name}",
+        })
+    return Response({"recordings": recordings})
+
+
+class RecordingDownloadView(APIView):
+  """Serve a single .rrd file for the Rerun web viewer."""
+  authentication_classes = [authentication.TokenAuthentication]
+  permission_classes = [permissions.IsAuthenticated]
+
+  def get(self, request, scene_id, filename):
+    from pathlib import Path
+
+    try:
+      Scene.objects.get(pk=scene_id)
+    except (Scene.DoesNotExist, ValueError):
+      return Response({"detail": "scene not found"},
+                      status=status.HTTP_404_NOT_FOUND)
+    # Prevent path traversal.
+    if "/" in filename or "\\" in filename or not filename.endswith(".rrd"):
+      return Response({"detail": "invalid filename"},
+                      status=status.HTTP_400_BAD_REQUEST)
+    storage = Path(os.environ.get("RECORDER_STORAGE_DIR", "/data/recordings"))
+    path = storage / str(scene_id) / filename
+    if not path.is_file():
+      return Response({"detail": "recording not found"},
+                      status=status.HTTP_404_NOT_FOUND)
+    response = HttpResponse(path.open("rb"), content_type="application/octet-stream")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    # The self-hosted Rerun viewer fetches .rrd cross-origin.
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 class ServiceHealth(APIView):
   def checkDatabase(self):
     try:

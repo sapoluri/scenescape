@@ -42,6 +42,8 @@ interface SceneViewportProps {
   isSuperuser?: boolean;
   onOpenLibrary?: () => void;
   onOpenScene?: () => void;
+  mode?: "live" | "replay";
+  onModeChange?: (mode: "live" | "replay") => void;
 }
 
 function readTheme(): ViewportTheme {
@@ -232,6 +234,8 @@ export function SceneViewport({
   isSuperuser = false,
   onOpenLibrary,
   onOpenScene,
+  mode = "live",
+  onModeChange,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -336,6 +340,26 @@ export function SceneViewport({
             <span>Library</span>
           </button>
         )}
+        <span className="ss-viewport-bar-sep" aria-hidden="true" />
+        <span className="ss-viewport-bar-label">Mode</span>
+        <div className="seg" role="group" aria-label="Live or replay">
+          <button
+            type="button"
+            className={mode === "live" ? "on" : ""}
+            onClick={() => onModeChange?.("live")}
+            title="Live view (MQTT)"
+          >
+            Live
+          </button>
+          <button
+            type="button"
+            className={mode === "replay" ? "on" : ""}
+            onClick={() => onModeChange?.("replay")}
+            title="Replay a recording"
+          >
+            Replay
+          </button>
+        </div>
         <span className="ss-viewport-bar-sep" aria-hidden="true" />
         <span className="ss-viewport-bar-label">View</span>
         <div className="seg" role="group" aria-label="Projection">
