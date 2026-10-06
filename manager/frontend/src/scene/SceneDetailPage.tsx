@@ -447,6 +447,9 @@ function SceneDetailInner({ bootstrap }: Props) {
             <SceneViewport
               sceneId={scene.id}
               assetMarkColors={bootstrap.assetMarkColors}
+              cameras={cameras}
+              sensors={sensors}
+              authToken={bootstrap.authToken}
             />
           ) : (
             <SceneMapPane

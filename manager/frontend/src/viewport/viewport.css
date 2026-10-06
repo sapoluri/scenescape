@@ -174,3 +174,86 @@
   padding: 24px;
   color: var(--ss-text, #fff);
 }
+
+/* ---- Phase 1.2 tool header ------------------------------------------- */
+
+.ss-viewport-tools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--ss-card-bg, #23262b);
+  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  font-size: 12px;
+  z-index: 5;
+  overflow-x: auto;
+}
+
+.ss-tools-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--ss-surface, #1b1f23);
+  border: 1px solid var(--ss-card-border, #2d333b);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.ss-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--ss-text-muted, #a0a0a0);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ss-tool-btn:hover:not(:disabled) {
+  color: var(--ss-text, #fff);
+  background: rgb(128 128 128 / 0.15);
+}
+
+.ss-tool-btn.on {
+  background: var(--ss-brand, #0a84ff);
+  color: #fff;
+}
+
+.ss-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ss-tool-btn .bi {
+  font-size: 13px;
+}
+
+.ss-tool-save.is-dirty {
+  color: var(--ss-brand-soft, #0099ec);
+  font-weight: 700;
+}
+
+.ss-tool-hint {
+  margin-left: auto;
+  color: var(--ss-text-muted, #808080);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
+.ss-vlabel--entity {
+  background: rgb(20 22 26 / 0.7);
+  font-weight: 500;
+}
+
+.ss-vlabel--measure {
+  background: rgb(10 132 255 / 0.9);
+  border-color: transparent;
+}

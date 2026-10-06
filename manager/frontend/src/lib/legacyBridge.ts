@@ -12,6 +12,8 @@
  * React polygons). Geometry persist uses React-installed `ssPersistGeometry`.
  */
 
+import type { PersistGeometryResult } from "./roiPersist";
+
 type PersistOptions = { preferHidden?: boolean } | string[];
 
 type RoiColorSectors = {
@@ -66,7 +68,7 @@ export function reapplyRoiColors(): void {
 
 export function persistGeometry(
   options?: PersistOptions,
-): void | Promise<void> {
+): void | Promise<PersistGeometryResult | void> {
   return window.ssPersistGeometry?.(options);
 }
 

@@ -276,6 +276,6 @@ declare global {
     ssUseReactMap?: boolean;
     ssPersistGeometry?: (
       options?: PersistGeometryOptions | string[],
-    ) => void | Promise<void>;
+    ) => void | Promise<PersistGeometryResult | void>;
   }
 }

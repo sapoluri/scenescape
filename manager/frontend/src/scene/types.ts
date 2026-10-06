@@ -118,7 +118,7 @@ declare global {
     ssReactOwnsCameraStrip?: boolean;
     ssPersistGeometry?: (
       options?: { preferHidden?: boolean } | string[],
-    ) => void | Promise<void>;
+    ) => void | Promise<import("../lib/roiPersist").PersistGeometryResult | void>;
     ssRoiEditors?: {
       addRoi: (payload: {
         svgId: string;

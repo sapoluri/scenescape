@@ -132,7 +132,7 @@ export function useViewportMarks({ assetMarkColors }: MarkHookOptions): void {
         });
       }
       if (entities.length > 0) {
-        getViewportState().upsertEntities(entities);
+        getViewportState().upsertEntities(entities, { fromMarks: true });
       }
     };
 

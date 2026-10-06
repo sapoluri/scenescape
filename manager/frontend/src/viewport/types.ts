@@ -27,7 +27,9 @@ export interface ViewportEntityBase {
 
 export interface RegionEntity extends ViewportEntityBase {
   type: "region";
-  /** Floor-plane corners in meters: [x, y]. */
+  /** Floor-plane polygon corners in meters: [x, y]. */
+  points: [number, number][];
+  /** Derived bbox of points in meters: [x, y]. */
   min: [number, number];
   max: [number, number];
   height: number;
@@ -38,6 +40,8 @@ export interface RegionEntity extends ViewportEntityBase {
 
 export interface TripwireEntity extends ViewportEntityBase {
   type: "tripwire";
+  /** Polyline points on the floor plane in meters: [x, y]. */
+  points: [number, number][];
   /** Endpoints on the floor plane in meters: [x, y]. */
   a: [number, number];
   b: [number, number];
@@ -50,6 +54,8 @@ export interface CameraEntity extends ViewportEntityBase {
   position: [number, number, number];
   /** Look-at target [x, y, z] meters. */
   target: [number, number, number];
+  /** Orientation as XYZ euler degrees, Z-up (from calibration when known). */
+  rotation: [number, number, number];
   fov: number;
   color: string;
 }
@@ -57,6 +63,8 @@ export interface CameraEntity extends ViewportEntityBase {
 export interface SensorEntity extends ViewportEntityBase {
   type: "sensor";
   position: [number, number, number];
+  /** Coverage radius in meters. */
+  radius: number;
   color: string;
 }
 
@@ -93,6 +101,19 @@ export type ViewportEntity =
   | ChildSceneEntity;
 
 export type ViewPreset = "persp" | "top" | "front" | "side";
+
+/** Phase 1.2 tool ids. `live` is the default navigation+select tool. */
+export type ToolId =
+  | "select"
+  | "move"
+  | "rotate"
+  | "scale"
+  | "region"
+  | "tripwire"
+  | "camera"
+  | "sensor"
+  | "measure"
+  | "live";
 
 export function isMark(e: ViewportEntity): e is MarkEntity {
   return e.type === "mark";

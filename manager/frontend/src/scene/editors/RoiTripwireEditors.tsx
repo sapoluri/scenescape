@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RegionEditorCard } from "./RegionEditorCard";
 import { TripwireEditorCard } from "./TripwireEditorCard";
-import { persistSceneGeometry, type PersistIdMap } from "../../lib/roiPersist";
+import { persistSceneGeometry, type PersistGeometryResult, type PersistIdMap } from "../../lib/roiPersist";
 import { useAppToast } from "../../components/ToastProvider";
 import { installSsMapFacade } from "../map/ssMap";
 import {
@@ -125,7 +125,9 @@ export function RoiTripwireEditors({
   const roiBaseRef = useRef("");
   const tripBaseRef = useRef("");
   const persistImplRef = useRef<
-    (options?: { preferHidden?: boolean } | string[]) => Promise<void> | void
+    (
+      options?: { preferHidden?: boolean } | string[],
+    ) => Promise<PersistGeometryResult | void> | void
   >(() => undefined);
   toastRef.current = toast;
   roisRef.current = rois;
@@ -192,6 +194,9 @@ export function RoiTripwireEditors({
         setRoiDirty(false);
         setTripDirty(false);
         toastRef.current.show("Regions saved", "ok");
+        // Return the id remap so other surfaces (the 3D viewport) can rekey
+        // temp ids to server uids after save.
+        return result;
       } catch (err) {
         const message =
           err && typeof err === "object" && "message" in err
