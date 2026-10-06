@@ -15,6 +15,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ToastProvider } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
 import { SceneMapPane } from "./SceneMapPane";
+import { SceneViewport } from "../viewport/SceneViewport";
 import { SceneMapSetupHelper } from "./SceneMapSetupHelper";
 import { SceneSidePanel } from "./SceneSidePanel";
 import { RoiTripwireEditors } from "./editors/RoiTripwireEditors";
@@ -87,6 +88,9 @@ function SceneDetailInner({ bootstrap }: Props) {
   const { panelSizePx, setPanelSizePx, mapFocus, toggleMapFocus } =
     useWorkspaceDensity(layout);
   const [sceneRate, setSceneRate] = useState("--");
+  /** Single-pane 3D viewport (Phase 1.1, beta). Defaults to the 2D map so all
+      frozen map contracts keep working; the 3D view is opt-in. */
+  const [view3d, setView3d] = useState(false);
   const [sceneDeleteOpen, setSceneDeleteOpen] = useState(false);
   const [sceneDeleteBusy, setSceneDeleteBusy] = useState(false);
   const [sceneDeleteError, setSceneDeleteError] = useState<string | null>(null);
@@ -408,30 +412,62 @@ function SceneDetailInner({ bootstrap }: Props) {
             className="ss-scene-map-toggles-slot"
           />
           <div className="ss-scene-chrome-end hide-fullscreen">
+            <div
+              className="ss-layout-toggle"
+              role="group"
+              aria-label="Map view mode"
+              title="Switch between the 2D map and the 3D viewport (beta)"
+            >
+              <button
+                type="button"
+                className={`ss-layout-toggle-btn${!view3d ? " is-active" : ""}`}
+                aria-pressed={!view3d}
+                onClick={() => setView3d(false)}
+              >
+                <i className="bi bi-map" aria-hidden="true" />
+                <span className="ss-layout-toggle-label">2D</span>
+              </button>
+              <button
+                type="button"
+                className={`ss-layout-toggle-btn${view3d ? " is-active" : ""}`}
+                aria-pressed={view3d}
+                onClick={() => setView3d(true)}
+              >
+                <i className="bi bi-box" aria-hidden="true" />
+                <span className="ss-layout-toggle-label">3D</span>
+              </button>
+            </div>
             {layoutActions}
           </div>
         </div>
       </div>
       <div className="ss-workspace-body">
         <div className="ss-workspace-main">
-          <SceneMapPane
-            mapUrl={mapBitmapUrl}
-            sensors={sensors}
-            assetMarkColors={bootstrap.assetMarkColors}
-            setupHelper={
-              !mapBitmapUrl && isSuperuser ? (
-                <SceneMapSetupHelper
-                  sceneId={scene.id}
-                  authToken={bootstrap.authToken}
-                  cameraCount={cameras.length}
-                  setupReconstruct={setupReconstruct}
-                  onMeshComplete={() => {
-                    window.location.href = window.location.pathname;
-                  }}
-                />
-              ) : null
-            }
-          />
+          {view3d ? (
+            <SceneViewport
+              sceneId={scene.id}
+              assetMarkColors={bootstrap.assetMarkColors}
+            />
+          ) : (
+            <SceneMapPane
+              mapUrl={mapBitmapUrl}
+              sensors={sensors}
+              assetMarkColors={bootstrap.assetMarkColors}
+              setupHelper={
+                !mapBitmapUrl && isSuperuser ? (
+                  <SceneMapSetupHelper
+                    sceneId={scene.id}
+                    authToken={bootstrap.authToken}
+                    cameraCount={cameras.length}
+                    setupReconstruct={setupReconstruct}
+                    onMeshComplete={() => {
+                      window.location.href = window.location.pathname;
+                    }}
+                  />
+                ) : null
+              }
+            />
+          )}
           <div className="scene-rate ss-scene-rate telemetry-hide">
             Rate: &nbsp;<span id="scene-rate">{sceneRate}</span>&nbsp; Hz
           </div>

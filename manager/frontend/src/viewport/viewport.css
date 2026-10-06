@@ -1,0 +1,176 @@
+/* SPDX-FileCopyrightText: (C) 2026 Intel Corporation */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Single-pane 3D viewport (Phase 1.1). Chrome follows the Compositor
+   options-bar language: slim docked bar, blue pill for the active choice,
+   checkboxes for overlay options. */
+
+.ss-viewport {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  background: var(--ss-card-bg, #1b1f23);
+  overflow: hidden;
+}
+
+.ss-viewport-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--ss-card-bg, #23262b);
+  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  font-size: 12px;
+  z-index: 5;
+}
+
+.ss-viewport-bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ss-text-muted, #808080);
+}
+
+.ss-viewport-bar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--ss-card-border, #2d333b);
+}
+
+.ss-viewport-bar .seg {
+  display: flex;
+  background: var(--ss-surface, #1b1f23);
+  border: 1px solid var(--ss-card-border, #2d333b);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.ss-viewport-bar .seg button {
+  border: 0;
+  background: transparent;
+  color: var(--ss-text-muted, #a0a0a0);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ss-viewport-bar .seg button:hover {
+  color: var(--ss-text, #fff);
+  background: rgb(128 128 128 / 0.15);
+}
+
+.ss-viewport-bar .seg button.on {
+  background: var(--ss-brand, #0a84ff);
+  color: #fff;
+}
+
+.ss-viewport-bar .vchk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ss-text-muted, #a0a0a0);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.ss-viewport-bar .vchk:hover {
+  background: rgb(128 128 128 / 0.15);
+  color: var(--ss-text, #fff);
+}
+
+.ss-viewport-bar .vchk input {
+  display: none;
+}
+
+.ss-viewport-bar .vchk .box {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--ss-card-border, #4b5563);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff;
+  flex: 0 0 14px;
+}
+
+.ss-viewport-bar .vchk .box::after {
+  content: "✓";
+  opacity: 0;
+  font-weight: 700;
+}
+
+.ss-viewport-bar .vchk.on {
+  color: var(--ss-text, #fff);
+}
+
+.ss-viewport-bar .vchk.on .box {
+  background: var(--ss-brand, #0a84ff);
+  border-color: var(--ss-brand, #0a84ff);
+}
+
+.ss-viewport-bar .vchk.on .box::after {
+  opacity: 1;
+}
+
+.ss-viewport-beta {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ss-brand-soft, #0099ec);
+  border: 1px solid var(--ss-brand-soft, #0099ec);
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+.ss-viewport-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ss-viewport-host canvas {
+  display: block;
+}
+
+.ss-viewport-labels {
+  position: absolute;
+  inset: 0;
+  top: 33px; /* below the header bar */
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ss-vlabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: rgb(20 22 26 / 0.82);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.ss-viewport-error {
+  padding: 24px;
+  color: var(--ss-text, #fff);
+}
