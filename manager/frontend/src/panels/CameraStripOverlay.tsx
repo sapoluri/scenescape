@@ -38,16 +38,15 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
  * Floating camera panel for the single-pane 3D viewport.
  *
  * Compositor-style floating panel, bottom-left of the viewport: a header
- * ("Cameras" + count + collapse), a Rerun-style live preview viewer for the
- * selected camera (name, Live/Offline pill, frame rate, calibration
- * launcher, close), and a horizontal strip of camera cards.
+ * ("Cameras" + count + Live View toggle + collapse), a Rerun-style live
+ * preview viewer for the selected camera, and a horizontal strip of cards.
  *
- * Live frames reuse the side-panel card structure so the existing MQTT frame
- * machinery (refreshCameraStrip / applyCameraFrame, keyed on
- * img[data-ss-card-sensor] and .snapshot-image anchors) feeds it without
- * changes. The calibration launcher is a plain `?ss=calibrate-cam&id=…`
- * link, intercepted by SceneWorkspaceSheets which opens CameraCalibratePanel
- * as an overlay — no navigation.
+ * `#live-view` is the hard-contract checkbox that `useCameraStripMqtt` /
+ * `sscape.js` use to gate continuous `getimage` polling. Live frames still
+ * land on `img[data-ss-card-sensor]` / `.snapshot-image` anchors.
+ *
+ * Calibrate still opens `?ss=calibrate-cam` → CameraCalibratePanel sheet
+ * (Phase 1). Phase 2.3 replaces that with an in-viewport 3D+feed split.
  *
  * Mount inside the viewport container element:
  *
@@ -63,12 +62,21 @@ export function CameraStripOverlay({
   onSelectCamera,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  const [liveView, setLiveView] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [onlineBySensor, setOnlineBySensor] = useState<Record<string, boolean>>(
     {},
   );
   const selectedId = useViewportStore((s) => s.selectedId);
   const stripRef = useRef<HTMLDivElement>(null);
+
+  const onLiveViewChange = (checked: boolean) => {
+    setLiveView(checked);
+    if (checked) {
+      setCollapsed(false);
+      refreshCameraStrip();
+    }
+  };
 
   // Drop the preview if its camera leaves the scene.
   useEffect(() => {
@@ -179,6 +187,22 @@ export function CameraStripOverlay({
             {cameras.length}
           </span>
         </button>
+        <label
+          className={`ss-camera-live-toggle${liveView ? " is-on" : ""}`}
+          title="Continuously refresh camera JPEG previews over MQTT"
+        >
+          <input
+            type="checkbox"
+            id="live-view"
+            className="ss-camera-live-input"
+            checked={liveView}
+            onChange={(ev) => onLiveViewChange(ev.target.checked)}
+            aria-labelledby="live-view-label"
+          />
+          <span id="live-view-label" className="ss-camera-live-label">
+            Live View
+          </span>
+        </label>
       </div>
 
       {!collapsed && (
