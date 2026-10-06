@@ -155,6 +155,8 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 
 ## Phase 2 — Rerun integration & replayability
 
+**Status: complete** (shipped October 2026). Testing guide: `phase2-testing.md`.
+
 **Goal:** add time as a first-class citizen — record scene telemetry *and* camera frames, replay them scrubbed on a Rerun-style timeline, and use multi-view layouts for calibration. This is the one Phase-2 item that adds capability, not just chrome.
 
 **Why Rerun:** its core strength is multimodal synchronized playback — 3D entities and image/video frames logged with timestamps onto one timeline, scrubbed together. That is exactly "MQTT telemetry + camera frames in one replay." `rerun-sdk` is Python/Rust, Apache-2.0/MIT — license-compatible with this repo.

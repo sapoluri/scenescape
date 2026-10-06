@@ -50,3 +50,8 @@ docker run -d \
 
 The manager lists recordings via `GET /api/v1/recordings/?scene=<id>`
 and serves `.rrd` files for the Rerun web viewer.
+
+## Testing
+
+See `docs/design/phase2-testing.md` for the end-to-end testing guide
+(starting the recorder, verifying `.rrd` files, using Replay mode).
