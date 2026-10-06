@@ -28,7 +28,7 @@ Result: users context-switch between a 2D form-driven page and a separate 3D vie
 ┌────────────────────────────────────────────────────────────────┐
 │ Menu bar: File Edit Scene Camera Sensor View Window Help   MQTT │
 ├────────────────────────────────────────────────────────────────┤
-│ [Dock 7 · Warehouse] [North Parking Lot] [+]                   │  scene tabs
+│ [Dock 7 · Warehouse] [North Parking Lot] [+]                   │  scene tabs (Phase 3)
 ├────────────────────────────────────────────────────────────────┤
 │ Tool name │  contextual tool options (like Compositor's header) │  tool header
 ├────┬───────────────────────────────────────────────┬───────────┤
@@ -79,13 +79,13 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 
 | Today (hybrid) | Single-pane |
 |---|---|
-| Scenes Home thumbnail gallery | Scene tab strip for switching + **Open Scene… browser** (`⌘O`): a Compositor-style floating dialog with search, live viewport thumbnails, per-scene stats (objects · cameras · modified), and a New Scene card — no separate page, by design |
+| Scenes Home thumbnail gallery | **Open Scene… browser** (`⌘O`, Phase 1): a Compositor-style floating dialog — same-page gallery control with search, live viewport thumbnails, per-scene stats (objects · cameras · modified), and a New Scene card. No separate page, by design. **Multi-scene tab strip** (Phase 3): tabs are *opened* scenes for instant switching; the gallery dialog browses *all* scenes and opening one adds a tab. The mockup's tab strip illustrates the Phase 3 target UX. |
 | Scene detail 2D SVG map (`SceneMapPane`) | The 3D viewport itself; ROIs/tripwires drawn as volumetric overlays |
 | Side panel tabs (Regions/Tripwires/Cameras/Sensors/Children/MQTT) | Outliner tree (left-grouped, badge counts) — same data, one list |
 | ROI/tripwire Django form cards (`#form-roi_{uuid}`) | In-viewport creation (click-drag) + Properties inspector for exact values |
 | Camera strip (`CameraStrip`) | Camera strip overlay, bottom-left of viewport; click → live feed in place |
 | Calibrate pages (`?ss=calibrate-*`) | In-viewport calibrate mode — split multi-view layout (3D + camera feed), wizard in tool header, same REST calls (see Phase 2.3) |
-| Admin lists (Cameras, Sensors, Models) | Outliner groups + a Models browser drawer (still REST-backed) |
+| Admin lists (Cameras, Sensors, Models) | **Folded fully into the single pane** (decided): Cameras/Sensors as Outliner groups, Models as a browser drawer — all REST-backed. The SPA never navigates away to a list page. The actual Django admin site stays outside the SPA and opens in a new tab when needed. |
 | Object Library = `Asset3D` rows (Django admin list — class name, GLB file, rotation/translation/scale, sizes, buffers, mark color, tracking/physics params — all as blind forms, no visualization) | **Library drawer** (`B`): searchable per-class cards (mark color, GLB filename), docked left. **Mark editor** (click a card): the scene isolates to a stage showing the class's GLB with its **default pose applied**, exactly as the 3D view composes marks — *tracker transform (scene controller) × default pose × GLB*. The old form's rotation/translation/scale fields become a rotate/move/scale **gizmo on the pose frame** with the fields syncing live underneath; size/buffer render as footprint overlays; a **“Simulate tracker”** toggle drives the mark around a path with velocity heading (honoring `rotation_from_velocity`) so the default orientation can be verified against travel direction — the white arrow marks the tracker forward. Properties sections mirror the model: Model (class name, GLB + Replace), Default pose, Mark (color, size, buffer, tracking radius, shift type, project-to-map), Physics (geometric center, mass, center of mass, is-static, TTL). Save → REST `PUT /api/asset3d`. Live viewport marks also read the library (mark color, footprint size, default rotation, velocity heading). |
 | Sheets (`ChildSheet`, manage sheets) | Properties panel modes — no modal sheets for scene content |
 | Legacy 3D view (`base_3d.html`) | **Deleted** — the viewport *is* the app |
@@ -124,7 +124,7 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
   1. `ReplayProvider` (frontend): `listRecordings(sceneId)` / `createReplayView(recording)` — Phase 1 ships a stub; Phase 2 provides the Rerun-backed implementation.
   2. Recorder sinks (backend): `RrdSink` first, `McapSink`/`JsonlSink` later — the recordings API carries a `provider` field so formats can mix.
 - **The mockup's in-memory 10 Hz recorder is a Phase 2 prototype only.** It must not be mistaken for the Phase 2 recorder service and must not be wired into Phase 1 editing paths. Replay mode is view-only in both phases: it never mutates Scenescape entities.
-- Ordering rule: no Phase 2 work starts until Phase 1.4 cutover is merged. The calibration split-view (2.3) reuses the Phase 1 viewport component — it does not fork it.
+- Ordering rule: no Phase 2 work starts until Phase 1.4 cutover is merged. Phase 3 (multi-scene tabs) starts after Phase 2; it reuses the Phase 1 viewport component and scene-graph store per tab — it does not fork them. The calibration split-view (2.3) reuses the Phase 1 viewport component — it does not fork it.
 
 ## Phase 1 — single-pane rebuild
 
@@ -143,7 +143,7 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 ### Phase 1.3 — panels
 - Outliner (replaces side-panel tabs), Properties inspector (replaces Django form cards + sheets), Telemetry pane (replaces MQTT tab), camera strip overlay.
 - **Object Library drawer** (`B`, docked left): per-class (`Asset3D`) cards; clicking one opens the **mark editor** — an isolated stage showing the class GLB with its default pose applied (tracker × pose × GLB, exactly like the live view), gizmo-manipulable default pose with live-synced fields, footprint overlays, a “Simulate tracker” toggle that drives the mark with velocity heading so orientation can be verified, and Properties sections mirroring the model (Model / Default pose / Mark / Physics). Save → REST `PUT /api/asset3d`. This replaces the blind transform forms.
-- Scene tabs replace Scenes Home as the primary switcher (keep the gallery as File → Open).
+- Scene switching in Phase 1 is the **Open Scene… dialog** (`⌘O`) — the same-page gallery control. The multi-scene tab strip is Phase 3.
 
 ### Phase 1.4 — cutover
 - Route `/scene/:id` renders only the single-pane app. Delete `base_3d.html`/legacy 3D CSS, Snap/SVG map code, and the Django form-card templates once the React editors reach parity. Keep `manager-ui/SKILL.md` contracts until then.
@@ -239,11 +239,19 @@ interface ReplayProvider {
 
 Net: swapping Rerun for another backend = implement one provider + one sink, no UI rewrite.
 
+## Phase 3 — multi-scene tabs
+
+- Tab strip under the menu bar: each tab is an **opened scene** (scene-graph store instance per tab, viewport component reused). Switching tabs is instant — no reload, no route change.
+- The **Open Scene… dialog** (Phase 1) becomes the gallery: it browses *all* scenes; opening one from the gallery adds a tab (or focuses it if already open). Tabs = working set, gallery = library.
+- Tab interactions: `+` opens the gallery dialog, middle-click/`⌘W` closes a tab (dirty state blocks with a Compositor-style confirm), drag to reorder, right-click for duplicate/rename/close-others.
+- Deep-linking stays per-scene (`/scene/:id` focuses or opens the tab); the SPA still never navigates away to a list page.
+- Starts after Phase 2; touches only the shell (tab strip + per-tab store scoping), not the viewport, tools, or panels.
+
 ## 9. Open questions for the user
 
 1. Ortho top-down as the *default* view (faithful to today's 2D map) or perspective (Blender-like)? Mockup defaults to perspective.
-2. Keep the Django admin lists as separate pages, or fold Cameras/Sensors/Models fully into the Outliner + a models drawer?
-3. Multi-scene tabs vs. the existing Scenes Home gallery — tabs, gallery, or both?
+2. ~~Keep the Django admin lists as separate pages, or fold Cameras/Sensors/Models fully into the Outliner + a models drawer?~~ — **Decided:** fold fully into the single pane (Outliner groups + Models drawer); the SPA never navigates away; Django admin itself opens in a new tab.
+3. ~~Multi-scene tabs vs. the existing Scenes Home gallery — tabs, gallery, or both?~~ — **Decided:** same-page gallery dialog in Phase 1; multi-scene tab strip (tabs = opened scenes) is **Phase 3**.
 4. Light theme: keep the existing theme toggle, or dark-only like Compositor?
 
 ## 10. Files in this folder
