@@ -3,6 +3,7 @@
 
 import {
   AmbientLight,
+  AxesHelper,
   Color,
   DirectionalLight,
   GridHelper,
@@ -123,6 +124,10 @@ export function createViewportWorld(
     scene.add(grid);
   };
   rebuildGrid();
+
+  // Axis helpers: RGB XYZ axes at the world origin (Z-up).
+  const axes = new AxesHelper(4);
+  scene.add(axes);
 
   const markRoot = new Group();
   markRoot.name = "marks";

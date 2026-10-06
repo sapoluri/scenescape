@@ -257,3 +257,25 @@
   background: rgb(10 132 255 / 0.9);
   border-color: transparent;
 }
+
+.ss-viewport-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--ss-text, #f5f5f7);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ss-viewport-bar-btn:hover {
+  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
+  border-color: var(--ss-card-border, #2d333b);
+}
+.ss-viewport-bar-btn .bi {
+  font-size: 14px;
+}

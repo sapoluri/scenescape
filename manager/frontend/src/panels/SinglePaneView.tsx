@@ -76,6 +76,8 @@ export function SinglePaneView({
           cameraRates={cameraRates}
           authToken={authToken}
           isSuperuser={isSuperuser}
+          onOpenLibrary={() => setLibraryOpen(true)}
+          onOpenScene={() => setSceneDialogOpen(true)}
         />
       </div>
 

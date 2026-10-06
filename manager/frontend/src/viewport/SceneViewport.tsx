@@ -13,7 +13,7 @@ import { useViewportMarks } from "./marks";
 import { attachMarkRenderer } from "./renderMarks";
 import { getViewportState, useViewportStore } from "./store";
 import { TOOLS, toolDef } from "./tools";
-import type { ToolId, ViewPreset } from "./types";
+import type { ToolId } from "./types";
 import { useViewportTools } from "./useViewportTools";
 import "./viewport.css";
 import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./world";
@@ -40,6 +40,8 @@ interface SceneViewportProps {
   cameraRates?: Record<string, string>;
   authToken: string;
   isSuperuser?: boolean;
+  onOpenLibrary?: () => void;
+  onOpenScene?: () => void;
 }
 
 function readTheme(): ViewportTheme {
@@ -58,13 +60,6 @@ function useTheme(): ViewportTheme {
   }, []);
   return theme;
 }
-
-const PRESET_LABELS: Record<ViewPreset, string> = {
-  top: "Top",
-  front: "Front",
-  side: "Side",
-  persp: "Persp",
-};
 
 function OverlayCheck({
   checked,
@@ -235,6 +230,8 @@ export function SceneViewport({
   cameraRates = {},
   authToken,
   isSuperuser = false,
+  onOpenLibrary,
+  onOpenScene,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -286,7 +283,7 @@ export function SceneViewport({
     });
   }, [world]);
 
-  // Keyboard: 1/3/7 views, 5 persp/ortho (tool keys live in useViewportTools).
+  // Keyboard: 5 toggles persp/ortho (tool keys live in useViewportTools).
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       const t = ev.target as HTMLElement | null;
@@ -299,13 +296,7 @@ export function SceneViewport({
         return;
       }
       const s = getViewportState();
-      if (ev.key === "1") {
-        s.setViewPreset("front");
-      } else if (ev.key === "3") {
-        s.setViewPreset("side");
-      } else if (ev.key === "7") {
-        s.setViewPreset("top");
-      } else if (ev.key === "5") {
+      if (ev.key === "5") {
         s.setOrtho(!s.ortho);
       }
     };
@@ -313,32 +304,40 @@ export function SceneViewport({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const viewPreset = useViewportStore((s) => s.viewPreset);
   const ortho = useViewportStore((s) => s.ortho);
   const showGrid = useViewportStore((s) => s.showGrid);
   const showLabels = useViewportStore((s) => s.showLabels);
   const showTrails = useViewportStore((s) => s.showTrails);
-  const setViewPreset = useViewportStore((s) => s.setViewPreset);
   const setOrtho = useViewportStore((s) => s.setOrtho);
   const toggleOverlay = useViewportStore((s) => s.toggleOverlay);
 
   return (
     <div className="ss-viewport" data-scene-id={sceneId}>
       <div className="ss-viewport-bar" role="toolbar" aria-label="Viewport">
+        {onOpenScene && (
+          <button
+            type="button"
+            className="ss-viewport-bar-btn"
+            onClick={onOpenScene}
+            title="Open scene gallery (⌘O)"
+          >
+            <i className="bi bi-folder2-open" aria-hidden="true" />
+            <span>Open</span>
+          </button>
+        )}
+        {onOpenLibrary && (
+          <button
+            type="button"
+            className="ss-viewport-bar-btn"
+            onClick={onOpenLibrary}
+            title="Object library (B)"
+          >
+            <i className="bi bi-collection" aria-hidden="true" />
+            <span>Library</span>
+          </button>
+        )}
+        <span className="ss-viewport-bar-sep" aria-hidden="true" />
         <span className="ss-viewport-bar-label">View</span>
-        <div className="seg" role="group" aria-label="View preset">
-          {(Object.keys(PRESET_LABELS) as ViewPreset[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={viewPreset === p ? "on" : ""}
-              onClick={() => setViewPreset(p)}
-              title={`${PRESET_LABELS[p]} view`}
-            >
-              {PRESET_LABELS[p]}
-            </button>
-          ))}
-        </div>
         <div className="seg" role="group" aria-label="Projection">
           <button
             type="button"
