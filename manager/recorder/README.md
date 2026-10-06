@@ -11,13 +11,16 @@ to a local disk volume.
 
 - `scenescape/regulated/scene/+` — telemetry / object tracks (from the
   dlstreamer pipeline; same topics the manager UI uses)
-- `scenescape/image/camera/+` — camera frames (JPEG bytes)
+- `scenescape/image/camera/+` — camera frames (JSON `{image: base64 jpeg}`
+  from the pipeline; raw JPEG also accepted)
 
 ## Entity mapping (Phase 2.1)
 
 - Application ID = scene id; timeline = `log_time` (wall clock)
 - `scene/<id>/objects/<track_id>` → `Points3D` (per-frame positions)
-- `scene/<id>/cameras/<cam_id>/image` → `EncodedImage` (frames)
+- `scene/<id>/cameras/<cam_id>` → static `Pinhole` (+ `Transform3D` pose)
+- `scene/<id>/cameras/<cam_id>/image` → `EncodedImage` (frames; needs the
+  Pinhole ancestor so Rerun can show them in a 3D view)
 
 ## Configuration (environment)
 

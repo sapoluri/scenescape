@@ -104,6 +104,7 @@ Expect:
 | No `.rrd` files appear | MQTT broker reachable? Topics publishing? Check `docker logs recorder` for "Connected to MQTT" |
 | Picker shows "No recordings yet" | API reachable? Auth token valid? `curl` the endpoint directly |
 | Viewer shows blank / CORS error | Download endpoint must return `Access-Control-Allow-Origin`; check browser network tab for the `.rrd` fetch |
+| "Failed to load Rerun" / Wasm 404 | Vite must build with `base: /static/ui/` so `re_viewer_bg.wasm` resolves under `/static/ui/assets/…`. Confirm that URL returns 200. |
 | Frames missing in replay | Camera→scene map: recorder logs "Camera map refreshed" on startup; verify `RECORDER_MANAGER_API` and token |
 | `.rrd` won't open in viewer | Version lock: recorder writes with `rerun-sdk` 0.38.1; viewer is `@rerun-io/web-viewer-react` 0.38.1. Mismatched versions cannot read each other's files. |
 

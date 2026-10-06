@@ -425,8 +425,15 @@ class RecordingsView(APIView):
 
 
 class RecordingDownloadView(APIView):
-  """Serve a single .rrd file for the Rerun web viewer."""
-  authentication_classes = [authentication.TokenAuthentication]
+  """Serve a single .rrd file for the Rerun web viewer.
+
+  Token auth is used by the React island (fetch + blob URL). Session auth
+  covers same-origin cookie GETs if the viewer ever loads the URL directly.
+  """
+  authentication_classes = [
+    authentication.TokenAuthentication,
+    authentication.SessionAuthentication,
+  ]
   permission_classes = [permissions.IsAuthenticated]
 
   def get(self, request, scene_id, filename):
@@ -446,9 +453,10 @@ class RecordingDownloadView(APIView):
     if not path.is_file():
       return Response({"detail": "recording not found"},
                       status=status.HTTP_404_NOT_FOUND)
+    # Inline so the Rerun web viewer can stream/parse the body as an .rrd.
     response = HttpResponse(path.open("rb"), content_type="application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    # The self-hosted Rerun viewer fetches .rrd cross-origin.
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    # The self-hosted Rerun viewer may fetch .rrd cross-origin.
     response["Access-Control-Allow-Origin"] = "*"
     return response
 

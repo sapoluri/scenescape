@@ -69,6 +69,9 @@ function copyStaticShell(): Plugin {
 }
 
 export default defineConfig({
+  // Django serves built assets under /static/ui/. Absolute asset URLs emitted
+  // for WASM (Rerun web-viewer) must include that prefix or the viewer 404s.
+  base: "/static/ui/",
   plugins: [react(), spdxLicenseHeaders(), copyStaticShell()],
   build: {
     outDir: path.resolve(__dirname, "../backend/manager/static/ui"),

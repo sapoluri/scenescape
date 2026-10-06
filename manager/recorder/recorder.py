@@ -21,6 +21,7 @@ Runs in a container on the same machine as the manager (may split later).
 Recordings are listed via the manager's GET /api/v1/recordings/ endpoint.
 """
 
+import base64
 import json
 import logging
 import os
@@ -83,11 +84,33 @@ class Sink:
     def log_tracks(self, scene_id: str, tracks: list[dict]) -> None:
         raise NotImplementedError
 
-    def log_frame(self, scene_id: str, camera_id: str, image_bytes: bytes) -> None:
+    def log_frame(
+        self,
+        scene_id: str,
+        camera_id: str,
+        image_bytes: bytes,
+        camera_meta: dict | None = None,
+    ) -> None:
         raise NotImplementedError
 
     def close_partition(self, scene_id: str) -> None:
         raise NotImplementedError
+
+
+def _euler_xyz_deg_to_quat_xyzw(rx: float, ry: float, rz: float) -> list[float]:
+    """XYZ intrinsic Euler (degrees) → quaternion xyzw for Rerun."""
+    import math
+
+    ax, ay, az = (math.radians(rx), math.radians(ry), math.radians(rz))
+    cx, sx = math.cos(ax / 2.0), math.sin(ax / 2.0)
+    cy, sy = math.cos(ay / 2.0), math.sin(ay / 2.0)
+    cz, sz = math.cos(az / 2.0), math.sin(az / 2.0)
+    return [
+        sx * cy * cz + cx * sy * sz,
+        cx * sy * cz - sx * cy * sz,
+        cx * cy * sz + sx * sy * cz,
+        cx * cy * cz - sx * sy * sz,
+    ]
 
 
 class RrdSink(Sink):
@@ -95,6 +118,8 @@ class RrdSink(Sink):
 
     def __init__(self):
         self.streams: dict[str, object] = {}
+        # Cameras that already have a static Pinhole/Transform in the open partition.
+        self._camera_rigs: set[tuple[str, str]] = set()
 
     def open_partition(self, scene_id: str, partition: str, path: Path) -> None:
         import rerun as rr
@@ -107,6 +132,7 @@ class RrdSink(Sink):
         rec.log("recorder/meta", rr.TextLog(f"rerun-sdk {RRD_SDK_VERSION}"),
                 static=True)
         self.streams[scene_id] = rec
+        self._camera_rigs = {k for k in self._camera_rigs if k[0] != scene_id}
 
     def log_tracks(self, scene_id: str, tracks: list[dict]) -> None:
         import rerun as rr
@@ -121,19 +147,82 @@ class RrdSink(Sink):
             x, y = _track_xy(t)
             rec.log(f"scene/{scene_id}/objects/{tid}", rr.Points3D([[x, y, 0]]))
 
-    def log_frame(self, scene_id: str, camera_id: str, image_bytes: bytes) -> None:
+    def _ensure_camera_rig(
+        self, scene_id: str, camera_id: str, camera_meta: dict | None
+    ) -> None:
+        """Log static Pinhole (+ pose) so EncodedImage has a 3D-viewable ancestor."""
+        import rerun as rr
+
+        key = (scene_id, camera_id)
+        if key in self._camera_rigs:
+            return
+        rec = self.streams.get(scene_id)
+        if rec is None:
+            return
+
+        meta = camera_meta or {}
+        intr = meta.get("intrinsics") if isinstance(meta.get("intrinsics"), dict) else {}
+        res = meta.get("resolution") if isinstance(meta.get("resolution"), (list, tuple)) else None
+        width = int(res[0]) if res and len(res) >= 2 else 640
+        height = int(res[1]) if res and len(res) >= 2 else 480
+        fx = float(intr.get("fx") or width)
+        fy = float(intr.get("fy") or fx)
+        cx = float(intr.get("cx") if intr.get("cx") is not None else width / 2.0)
+        cy = float(intr.get("cy") if intr.get("cy") is not None else height / 2.0)
+
+        cam_path = f"scene/{scene_id}/cameras/{camera_id}"
+        # RDF: X right, Y down, Z forward — matches typical camera image axes.
+        rec.log(
+            cam_path,
+            rr.Pinhole(
+                focal_length=[fx, fy],
+                principal_point=[cx, cy],
+                width=width,
+                height=height,
+                camera_xyz=rr.ViewCoordinates.RDF,
+            ),
+            static=True,
+        )
+
+        trans = meta.get("translation")
+        rot = meta.get("rotation")
+        if isinstance(trans, (list, tuple)) and len(trans) >= 3:
+            kwargs: dict = {
+                "translation": [float(trans[0]), float(trans[1]), float(trans[2])],
+            }
+            if isinstance(rot, (list, tuple)) and len(rot) >= 3:
+                kwargs["quaternion"] = rr.Quaternion(
+                    xyzw=_euler_xyz_deg_to_quat_xyzw(
+                        float(rot[0]), float(rot[1]), float(rot[2])
+                    )
+                )
+            rec.log(cam_path, rr.Transform3D(**kwargs), static=True)
+
+        self._camera_rigs.add(key)
+
+    def log_frame(
+        self,
+        scene_id: str,
+        camera_id: str,
+        image_bytes: bytes,
+        camera_meta: dict | None = None,
+    ) -> None:
         import rerun as rr
         from datetime import datetime, timezone
 
         rec = self.streams.get(scene_id)
         if rec is None:
             return
+        self._ensure_camera_rig(scene_id, camera_id, camera_meta)
         rec.set_time("log_time", timestamp=datetime.now(timezone.utc))
-        rec.log(f"scene/{scene_id}/cameras/{camera_id}/image",
-                rr.EncodedImage(contents=image_bytes, media_type="image/jpeg"))
+        rec.log(
+            f"scene/{scene_id}/cameras/{camera_id}/image",
+            rr.EncodedImage(contents=image_bytes, media_type="image/jpeg"),
+        )
 
     def close_partition(self, scene_id: str) -> None:
         self.streams.pop(scene_id, None)
+        self._camera_rigs = {k for k in self._camera_rigs if k[0] != scene_id}
 
 
 def create_sink() -> Sink:
@@ -190,11 +279,13 @@ class SceneRecorder:
         with self.lock:
             self.sink.log_tracks(self.scene_id, tracks)
 
-    def log_frame(self, camera_id: str, image_bytes: bytes) -> None:
+    def log_frame(
+        self, camera_id: str, image_bytes: bytes, camera_meta: dict | None = None
+    ) -> None:
         """Log a camera frame."""
         self._maybe_rotate()
         with self.lock:
-            self.sink.log_frame(self.scene_id, camera_id, image_bytes)
+            self.sink.log_frame(self.scene_id, camera_id, image_bytes, camera_meta)
 
     def close(self) -> None:
         with self.lock:
@@ -244,6 +335,50 @@ def _flatten_tracks(payload: dict) -> list[dict]:
     return []
 
 
+def _jpeg_bytes_from_image_payload(payload: bytes) -> bytes | None:
+    """Decode scenescape/image/camera payloads to raw JPEG bytes.
+
+    Pipelines publish JSON ``{"id":…, "image":"<base64 jpeg>", …}`` (same shape
+    the Manager camera strip expects). Tests/tools may publish raw JPEG bytes.
+    """
+    if not payload:
+        return None
+    # Raw JPEG SOI marker.
+    if payload[:2] == b"\xff\xd8":
+        return payload
+    try:
+        text = payload.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+    if text[0] == "{":
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(data, dict):
+            return None
+        b64 = data.get("image") or data.get("original_image")
+        if not isinstance(b64, str) or not b64:
+            return None
+        # Allow data-URL prefix if present.
+        if "," in b64 and b64.lower().startswith("data:"):
+            b64 = b64.split(",", 1)[1]
+        try:
+            raw = base64.b64decode(b64, validate=False)
+        except Exception:
+            return None
+        return raw if raw[:2] == b"\xff\xd8" else None
+    # Bare base64 JPEG string.
+    try:
+        raw = base64.b64decode(text, validate=False)
+    except Exception:
+        return None
+    return raw if raw[:2] == b"\xff\xd8" else None
+
+
 def scene_id_from_topic(topic: str) -> str | None:
     # scenescape/regulated/scene/<scene_id>
     parts = topic.split("/")
@@ -268,15 +403,22 @@ def on_message(client, userdata, msg) -> None:
             if tracks:
                 rec.log_tracks(tracks)
         elif msg.topic.startswith(f"{APP_NAME}/image/camera/"):
-            # scenescape/image/camera/<camera_id> — JPEG bytes.
+            # scenescape/image/camera/<camera_id> — JSON {image: base64} or raw JPEG.
             camera_id = msg.topic.rsplit("/", 1)[-1]
-            scene_id = (userdata or {}).get("camera_scene", {}).get(camera_id)
+            camera_info = (userdata or {}).get("camera_info", {})
+            meta = camera_info.get(camera_id) or {}
+            scene_id = meta.get("scene_id") or (userdata or {}).get(
+                "camera_scene", {}
+            ).get(camera_id)
             if not scene_id:
+                return
+            jpeg = _jpeg_bytes_from_image_payload(msg.payload)
+            if not jpeg:
                 return
             rec = get_recorder(scene_id)
             if rec is None:
                 return
-            rec.log_frame(camera_id, msg.payload)
+            rec.log_frame(camera_id, jpeg, meta)
     except Exception:
         logger.exception("Error handling MQTT message on %s", msg.topic)
 
@@ -295,8 +437,8 @@ def on_connect(client, userdata, flags, reason_code, properties=None) -> None:
 # without a scene; resolve via the manager REST API, refreshed periodically).
 # ---------------------------------------------------------------------------
 
-def refresh_camera_map(camera_scene: dict) -> None:
-    """Fetch all cameras from the manager and map camera_id -> scene_id."""
+def refresh_camera_map(camera_scene: dict, camera_info: dict | None = None) -> None:
+    """Fetch all cameras from the manager and map camera_id -> scene_id (+ meta)."""
     import urllib.request
 
     url = f"{MANAGER_API.rstrip('/')}/cameras"
@@ -333,12 +475,25 @@ def refresh_camera_map(camera_scene: dict) -> None:
         }
         if not scene_id or not cam_ids:
             continue
+        meta = {
+            "scene_id": scene_id,
+            "intrinsics": cam.get("intrinsics") or {},
+            "translation": cam.get("translation"),
+            "rotation": cam.get("rotation"),
+            "resolution": cam.get("resolution"),
+        }
         for cam_id in cam_ids:
             if camera_scene.get(cam_id) != scene_id:
                 camera_scene[cam_id] = scene_id
                 updated += 1
-    if updated:
-        logger.info("Camera map refreshed: %d cameras", len(camera_scene))
+            if camera_info is not None:
+                camera_info[cam_id] = meta
+    if updated or (camera_info is not None and camera_info):
+        logger.info(
+            "Camera map refreshed: %d cameras (%d scene links updated)",
+            len(camera_scene),
+            updated,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +550,7 @@ def main() -> int:
         logger.info("MQTT TLS enabled with CA %s", MQTT_CAFILE)
     client.on_connect = on_connect
     client.on_message = on_message
-    client.user_data_set({"camera_scene": {}})
+    client.user_data_set({"camera_scene": {}, "camera_info": {}})
 
     stop = False
 
@@ -411,7 +566,8 @@ def main() -> int:
     client.loop_start()
 
     camera_scene: dict = client._userdata["camera_scene"]
-    refresh_camera_map(camera_scene)
+    camera_info: dict = client._userdata["camera_info"]
+    refresh_camera_map(camera_scene, camera_info)
     last_map_refresh = time.monotonic()
 
     try:
@@ -420,7 +576,7 @@ def main() -> int:
             enforce_retention()
             # Refresh camera->scene map every 10 minutes.
             if time.monotonic() - last_map_refresh > 600:
-                refresh_camera_map(camera_scene)
+                refresh_camera_map(camera_scene, camera_info)
                 last_map_refresh = time.monotonic()
     finally:
         client.loop_stop()

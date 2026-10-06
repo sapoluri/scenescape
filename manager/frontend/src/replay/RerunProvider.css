@@ -11,3 +11,21 @@
   min-height: 0;
   background: #0e0e12;
 }
+
+.ss-rerun-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: #c8c9d0;
+  font-size: 0.85rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.ss-rerun-hint {
+  color: #8a8b95;
+  font-size: 0.75rem;
+  max-width: 28rem;
+}
