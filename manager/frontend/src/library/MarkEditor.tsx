@@ -631,6 +631,15 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
   const footprint = rec ? footprintOf(rec) : null;
 
   return createPortal(
+    <div
+      className="ss-mark-editor-backdrop"
+      onMouseDown={(ev) => {
+        // Clicking the backdrop (not the dialog) closes the editor.
+        if (ev.target === ev.currentTarget) {
+          onClose();
+        }
+      }}
+    >
     <div className="ss-mark-editor" role="dialog" aria-modal="true" aria-label={title}>
       <header className="ss-mark-editor-header">
         <div className="ss-mark-editor-title">{title}</div>
@@ -1108,6 +1117,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
       >
         <p>You have unsaved changes to this class. Leave without saving?</p>
       </ConfirmDialog>
+    </div>
     </div>,
     document.body,
   );

@@ -3,15 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* Mark editor (Phase 1.3): isolated stage + properties for one Asset3D class. */
-.ss-mark-editor {
+/* Mark editor (Phase 1.3): floating overlay dialog with isolated stage + properties. */
+.ss-mark-editor-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 10, 14, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.ss-mark-editor {
+  display: flex;
   flex-direction: column;
+  width: min(1180px, 94vw);
+  height: min(780px, 90vh);
+  border-radius: 12px;
+  overflow: hidden;
   background: var(--ss-card-bg, #1b1f23);
   color: var(--ss-text, #e6e6e6);
+  border: 1px solid var(--ss-card-border, #2d333b);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
 }
 
 .ss-mark-editor-header {
