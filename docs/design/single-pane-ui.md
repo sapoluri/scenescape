@@ -249,7 +249,7 @@ Net: swapping Rerun for another backend = implement one provider + one sink, no 
 
 ## 9. Open questions for the user
 
-1. Ortho top-down as the *default* view (faithful to today's 2D map) or perspective (Blender-like)? Mockup defaults to perspective.
+1. ~~Ortho top-down as the *default* view (faithful to today's 2D map) or perspective (Blender-like)? Mockup defaults to perspective.~~ — **Decided:** perspective is the default view.
 2. ~~Keep the Django admin lists as separate pages, or fold Cameras/Sensors/Models fully into the Outliner + a models drawer?~~ — **Decided:** fold fully into the single pane (Outliner groups + Models drawer); the SPA never navigates away; Django admin itself opens in a new tab.
 3. ~~Multi-scene tabs vs. the existing Scenes Home gallery — tabs, gallery, or both?~~ — **Decided:** same-page gallery dialog in Phase 1; multi-scene tab strip (tabs = opened scenes) is **Phase 3**.
 4. ~~Light theme: keep the existing theme toggle, or dark-only like Compositor?~~ — **Decided:** keep the light + dark toggle (both palettes fully specified; mockup implements both).
