@@ -1,43 +1,23 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
-import { SCENE_TAB_COUNTS_EVENT, type SceneTabCounts } from "../lib/sceneTab";
-import { fitSceneMapDisplay } from "../lib/legacyBridge";
+import { useCallback, useEffect, useState } from "react";
 import { useSceneMqtt, useCameraStripMqtt } from "../mqtt";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ToastProvider } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
-import { SceneMapPane } from "./SceneMapPane";
 import { SinglePaneView } from "../panels/SinglePaneView";
-import { SceneMapSetupHelper } from "./SceneMapSetupHelper";
-import { SceneSidePanel } from "./SceneSidePanel";
-import { RoiTripwireEditors } from "./editors/RoiTripwireEditors";
+import { GeometryBootstrap } from "./GeometryBootstrap";
 import { SceneWorkspaceSheets } from "../sheets/SceneWorkspaceSheets";
 import { deleteViaRest } from "../lib/restDelete";
-import { useWorkspaceLayout } from "./useWorkspaceLayout";
-import type { WorkspaceLayoutMode } from "./useWorkspaceLayout";
-import { useWorkspaceDensity } from "./useWorkspaceDensity";
-import { WorkspaceSplitter } from "./WorkspaceSplitter";
+import { persistSceneGeometry } from "../lib/roiPersist";
 import { useMqttConnected, useCameraRates } from "./useLiveChrome";
 import type { SceneDetailBootstrap } from "./types";
-import type { TabItem } from "../components/Tabs";
-import { sceneMapBitmapUrl } from "../lib/sceneMapBitmap";
 import "./SceneDetailPage.css";
 
 type Props = {
   bootstrap: SceneDetailBootstrap;
 };
-
-function countLabel(n: number): string {
-  return String(n);
-}
 
 function sceneDetailBack(urls: SceneDetailBootstrap["urls"]): {
   href: string;
@@ -56,41 +36,8 @@ function sceneDetailBack(urls: SceneDetailBootstrap["urls"]): {
   return { href: urls.scenesHome, label: "Scenes" };
 }
 
-const LAYOUT_OPTIONS: {
-  mode: WorkspaceLayoutMode;
-  label: string;
-  title: string;
-  icon: string;
-}[] = [
-  {
-    mode: "auto",
-    label: "Auto",
-    title: "Automatic tab layout from map and screen size",
-    icon: "bi-magic",
-  },
-  {
-    mode: "stack",
-    label: "Below",
-    title: "Tabs below the map",
-    icon: "bi-distribute-vertical",
-  },
-  {
-    mode: "row",
-    label: "Side",
-    title: "Tabs beside the map",
-    icon: "bi-layout-sidebar-reverse",
-  },
-];
-
 function SceneDetailInner({ bootstrap }: Props) {
   const { scene, urls, isSuperuser } = bootstrap;
-  const { layout, mode, setMode, autoLayout } = useWorkspaceLayout();
-  const { panelSizePx, setPanelSizePx, mapFocus, toggleMapFocus } =
-    useWorkspaceDensity(layout);
-  const [sceneRate, setSceneRate] = useState("--");
-  /** Single-pane 3D viewport (Phase 1.1, beta). Defaults to the 2D map so all
-      frozen map contracts keep working; the 3D view is opt-in. */
-  const [view3d, setView3d] = useState(false);
   const [sceneDeleteOpen, setSceneDeleteOpen] = useState(false);
   const [sceneDeleteBusy, setSceneDeleteBusy] = useState(false);
   const [sceneDeleteError, setSceneDeleteError] = useState<string | null>(null);
@@ -98,32 +45,32 @@ function SceneDetailInner({ bootstrap }: Props) {
   const cameraRates = useCameraRates();
   const [cameras, setCameras] = useState(bootstrap.cameras);
   const [sensors, setSensors] = useState(bootstrap.sensors || []);
-  const [childrenLinks, setChildrenLinks] = useState(bootstrap.children || []);
-  const [tabCounts, setTabCounts] = useState({
-    cameras: bootstrap.cameras.length,
-    sensors: bootstrap.counts.sensors,
-    regions: bootstrap.counts.regions,
-    tripwires: bootstrap.counts.tripwires,
-    children: bootstrap.counts.children,
-  });
-
-  const mapBitmapUrl = sceneMapBitmapUrl(scene);
-
-  /*
-   * Prefer React SVG map when a 2D map bitmap is available (Phase 4 dual-run).
-   * Use the ortho thumbnail for .glb maps — mapUrl alone is not displayable.
-   * Set during render (not an effect) so it's already true before
-   * SceneMapPane's own mount effect reads it — child effects run before
-   * parent effects, so an effect here would race the first render.
-   */
-  window.ssUseReactMap = Boolean(mapBitmapUrl);
+  const [sceneRate, setSceneRate] = useState("--");
 
   useSceneMqtt({
     sceneId: scene.id,
     wssConnection: scene.wssConnection || "",
-    enabled: Boolean(mapBitmapUrl),
+    enabled: true,
   });
-  useCameraStripMqtt(Boolean(mapBitmapUrl));
+  useCameraStripMqtt(true);
+
+  // The 3D viewport saves through window.ssPersistGeometry (frozen bridge).
+  useEffect(() => {
+    const authToken = bootstrap.authToken || "";
+    const sid = scene.id;
+    const persist = (options?: { preferHidden?: boolean } | string[]) =>
+      persistSceneGeometry(
+        authToken,
+        sid,
+        Array.isArray(options) ? undefined : options,
+      );
+    window.ssPersistGeometry = persist;
+    return () => {
+      if (window.ssPersistGeometry === persist) {
+        delete window.ssPersistGeometry;
+      }
+    };
+  }, [bootstrap.authToken, scene.id]);
 
   useEffect(() => {
     const setSceneRateCb = (hz: string) => setSceneRate(hz || "--");
@@ -146,36 +93,6 @@ function SceneDetailInner({ bootstrap }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    const onCounts = (ev: Event) => {
-      const detail = (ev as CustomEvent<SceneTabCounts>).detail;
-      if (!detail || typeof detail !== "object") {
-        return;
-      }
-      setTabCounts((prev) => {
-        const next = { ...prev };
-        (
-          ["cameras", "sensors", "regions", "tripwires", "children"] as const
-        ).forEach((key) => {
-          const n = detail[key];
-          if (typeof n === "number" && Number.isFinite(n) && n >= 0) {
-            next[key] = n;
-          }
-        });
-        return next;
-      });
-    };
-    window.addEventListener(SCENE_TAB_COUNTS_EVENT, onCounts);
-    return () => window.removeEventListener(SCENE_TAB_COUNTS_EVENT, onCounts);
-  }, []);
-
-  useEffect(() => {
-    const id = window.requestAnimationFrame(() => {
-      fitSceneMapDisplay();
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [layout]);
-
   const confirmSceneDelete = useCallback(async () => {
     if (!urls.sceneDelete) {
       return;
@@ -194,317 +111,88 @@ function SceneDetailInner({ bootstrap }: Props) {
     }
   }, [bootstrap.authToken, urls.sceneDelete, urls.scenesHome]);
 
-  const tabs: TabItem[] = [
-    { id: "cameras", label: "Cameras", count: countLabel(tabCounts.cameras) },
-    {
-      id: "sensors",
-      label: "Sensors",
-      count: countLabel(tabCounts.sensors),
-    },
-    {
-      id: "regions",
-      label: "Regions",
-      count: countLabel(tabCounts.regions),
-    },
-    {
-      id: "tripwires",
-      label: "Tripwires",
-      count: countLabel(tabCounts.tripwires),
-    },
-    {
-      id: "children",
-      label: "Children",
-      count: countLabel(tabCounts.children),
-    },
-    {
-      id: "mqtt",
-      label: "MQTT",
-      extra: (
-        <span
-          id="mqtt_status"
-          className={`scene-detail-mqtt-pill${mqttConnected ? " connected" : ""}`}
-          title={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
-          data-ss-mqtt={mqttConnected ? "connected" : "disconnected"}
-          aria-label={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
-        >
-          <i className="bi bi-arrow-down-up" aria-hidden="true" />
-        </span>
-      ),
-    },
-  ];
-
   const back = sceneDetailBack(urls);
-
-  const sceneActions = (
-    <div className="ss-scene-header-actions" role="group" aria-label="Scene">
-      <a className="ss-scene-header-back" href={back.href}>
-        <i className="bi bi-arrow-left" aria-hidden="true" />
-        {back.label}
-      </a>
-      <h2 className="ss-page-title" id="scene_name">
-        {scene.name}
-      </h2>
-      <a
-        className="btn btn-secondary btn-sm"
-        id="export-scene"
-        href="#"
-        title={`Export ${scene.name}`}
-      >
-        <i className="bi bi-box-arrow-up" aria-hidden="true" />
-      </a>
-      <a
-        className="btn btn-secondary btn-sm"
-        id="3d-view"
-        href={urls.scene3d}
-        title={`View ${scene.name} in 3D`}
-      >
-        3D
-      </a>
-      {isSuperuser ? (
-        <a
-          className="btn btn-secondary btn-sm"
-          id="scene-edit"
-          href="?ss=scene-manage"
-          title={`Edit ${scene.name}`}
-          aria-label={`Edit ${scene.name}`}
-        >
-          <i className="bi bi-pencil" aria-hidden="true" />
-        </a>
-      ) : null}
-      {isSuperuser && urls.sceneDelete ? (
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm ss-icon-btn--danger"
-          id="scene-delete"
-          title={`Delete ${scene.name}`}
-          aria-label={`Delete ${scene.name}`}
-          onClick={() => {
-            setSceneDeleteError(null);
-            setSceneDeleteOpen(true);
-          }}
-        >
-          <i className="bi bi-trash" aria-hidden="true" />
-        </button>
-      ) : null}
-    </div>
-  );
-
-  const layoutActions = (
-    <div
-      className="ss-scene-layout-controls"
-      role="group"
-      aria-label="Panel orientation"
-    >
-      <div
-        className="ss-layout-toggle"
-        role="group"
-        aria-label="Control panel layout"
-      >
-        {LAYOUT_OPTIONS.map((opt) => {
-          const active = mode === opt.mode;
-          const hint = opt.mode === "auto" ? ` (now ${autoLayout})` : "";
-          return (
-            <button
-              key={opt.mode}
-              type="button"
-              className={`ss-layout-toggle-btn${active ? " is-active" : ""}`}
-              title={`${opt.title}${hint}`}
-              aria-pressed={active}
-              onClick={() => setMode(opt.mode)}
-            >
-              <i className={`bi ${opt.icon}`} aria-hidden="true" />
-              <span className="ss-layout-toggle-label">{opt.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        className={`ss-layout-toggle-btn ss-map-focus-btn${mapFocus ? " is-active" : ""}`}
-        title={
-          mapFocus
-            ? "Show control panel (Esc)"
-            : "Hide panel to edit map geometry underneath"
-        }
-        aria-label={
-          mapFocus
-            ? "Show control panel"
-            : "Hide panel to edit map geometry underneath"
-        }
-        aria-pressed={mapFocus}
-        onClick={toggleMapFocus}
-      >
-        <i
-          className={`bi ${mapFocus ? "bi-layout-sidebar-reverse" : "bi-layout-sidebar"}`}
-          aria-hidden="true"
-        />
-        <span className="ss-layout-toggle-label">
-          {mapFocus ? "Show panel" : "Hide panel"}
-        </span>
-      </button>
-    </div>
-  );
-
-  const mapTogglesSlotRef = useRef<HTMLDivElement>(null);
-
-  // Park bootstrap-built #map-controls centered over the map column chrome.
-  useEffect(() => {
-    const slot = mapTogglesSlotRef.current;
-    if (!slot) {
-      return;
-    }
-
-    const place = () => {
-      const controls = document.getElementById("map-controls");
-      if (!controls || controls.parentElement === slot) {
-        return;
-      }
-      slot.appendChild(controls);
-    };
-
-    place();
-    window.addEventListener("ss-map-host-ready", place);
-    const host = document.getElementById("ss-map-host");
-    let observer: MutationObserver | null = null;
-    if (host) {
-      observer = new MutationObserver(place);
-      observer.observe(host, { childList: true });
-    }
-    const timer = window.setTimeout(place, 0);
-
-    return () => {
-      window.removeEventListener("ss-map-host-ready", place);
-      observer?.disconnect();
-      window.clearTimeout(timer);
-      const controls = document.getElementById("map-controls");
-      const mapHost = document.getElementById("ss-map-host");
-      if (controls && mapHost && controls.parentElement === slot) {
-        mapHost.insertBefore(controls, mapHost.firstChild);
-      }
-    };
-  }, []);
-
   const deleteImpact = bootstrap.deleteImpact;
-  const setupReconstruct =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("setup") === "reconstruct";
 
   return (
-    <div
-      className={`ss-scene-detail ss-scene-detail--workspace ss-workspace--${layout}${mapFocus ? " ss-workspace--map-focus" : ""}`}
-      data-workspace-layout={layout}
-      data-workspace-mode={mode}
-      data-map-focus={mapFocus ? "1" : "0"}
-      style={
-        {
-          "--ss-panel-size": `${panelSizePx}px`,
-        } as CSSProperties
-      }
-    >
+    <div className="ss-scene-detail ss-scene-detail--single-pane">
       <div className="ss-scene-chrome" id="ss-scene-chrome">
         <div className="ss-scene-chrome-map">
           <div className="ss-scene-chrome-start hide-fullscreen">
-            {sceneActions}
-          </div>
-          <div
-            ref={mapTogglesSlotRef}
-            id="ss-map-toggles-slot"
-            className="ss-scene-map-toggles-slot"
-          />
-          <div className="ss-scene-chrome-end hide-fullscreen">
-            <div
-              className="ss-layout-toggle"
-              role="group"
-              aria-label="Map view mode"
-              title="Switch between the 2D map and the 3D viewport (beta)"
-            >
-              <button
-                type="button"
-                className={`ss-layout-toggle-btn${!view3d ? " is-active" : ""}`}
-                aria-pressed={!view3d}
-                onClick={() => setView3d(false)}
+            <div className="ss-scene-header-actions" role="group" aria-label="Scene">
+              <a className="ss-scene-header-back" href={back.href}>
+                <i className="bi bi-arrow-left" aria-hidden="true" />
+                {back.label}
+              </a>
+              <h2 className="ss-page-title" id="scene_name">
+                {scene.name}
+              </h2>
+              <a
+                className="btn btn-secondary btn-sm"
+                id="export-scene"
+                href="#"
+                title={`Export ${scene.name}`}
               >
-                <i className="bi bi-map" aria-hidden="true" />
-                <span className="ss-layout-toggle-label">2D</span>
-              </button>
-              <button
-                type="button"
-                className={`ss-layout-toggle-btn${view3d ? " is-active" : ""}`}
-                aria-pressed={view3d}
-                onClick={() => setView3d(true)}
+                <i className="bi bi-box-arrow-up" aria-hidden="true" />
+              </a>
+              {isSuperuser ? (
+                <a
+                  className="btn btn-secondary btn-sm"
+                  id="scene-edit"
+                  href="?ss=scene-manage"
+                  title={`Edit ${scene.name}`}
+                  aria-label={`Edit ${scene.name}`}
+                >
+                  <i className="bi bi-pencil" aria-hidden="true" />
+                </a>
+              ) : null}
+              {isSuperuser && urls.sceneDelete ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm ss-icon-btn--danger"
+                  id="scene-delete"
+                  title={`Delete ${scene.name}`}
+                  aria-label={`Delete ${scene.name}`}
+                  onClick={() => {
+                    setSceneDeleteError(null);
+                    setSceneDeleteOpen(true);
+                  }}
+                >
+                  <i className="bi bi-trash" aria-hidden="true" />
+                </button>
+              ) : null}
+              <span
+                id="mqtt_status"
+                className={`scene-detail-mqtt-pill${mqttConnected ? " connected" : ""}`}
+                title={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
+                data-ss-mqtt={mqttConnected ? "connected" : "disconnected"}
+                aria-label={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
               >
-                <i className="bi bi-box" aria-hidden="true" />
-                <span className="ss-layout-toggle-label">3D</span>
-              </button>
+                <i className="bi bi-arrow-down-up" aria-hidden="true" />
+              </span>
             </div>
-            {layoutActions}
+          </div>
+          <div className="ss-scene-chrome-end hide-fullscreen">
+            <div className="scene-rate ss-scene-rate telemetry-hide">
+              Rate: &nbsp;<span id="scene-rate">{sceneRate}</span>&nbsp; Hz
+            </div>
           </div>
         </div>
       </div>
-      <div className="ss-workspace-body">
-        <div className="ss-workspace-main">
-          {view3d ? (
-            <SinglePaneView
-              sceneId={scene.id}
-              sceneName={scene.name}
-              assetMarkColors={bootstrap.assetMarkColors}
-              cameras={cameras}
-              sensors={sensors}
-              cameraRates={cameraRates}
-              authToken={bootstrap.authToken}
-              isSuperuser={isSuperuser}
-            />
-          ) : (
-            <SceneMapPane
-              mapUrl={mapBitmapUrl}
-              sensors={sensors}
-              assetMarkColors={bootstrap.assetMarkColors}
-              setupHelper={
-                !mapBitmapUrl && isSuperuser ? (
-                  <SceneMapSetupHelper
-                    sceneId={scene.id}
-                    authToken={bootstrap.authToken}
-                    cameraCount={cameras.length}
-                    setupReconstruct={setupReconstruct}
-                    onMeshComplete={() => {
-                      window.location.href = window.location.pathname;
-                    }}
-                  />
-                ) : null
-              }
-            />
-          )}
-          <div className="scene-rate ss-scene-rate telemetry-hide">
-            Rate: &nbsp;<span id="scene-rate">{sceneRate}</span>&nbsp; Hz
-          </div>
-        </div>
-        <WorkspaceSplitter
-          layout={layout}
-          panelSizePx={panelSizePx}
-          onResize={setPanelSizePx}
-          disabled={mapFocus || view3d}
+      <div className="ss-workspace-body ss-workspace-body--single">
+        <SinglePaneView
+          sceneId={scene.id}
+          sceneName={scene.name}
+          assetMarkColors={bootstrap.assetMarkColors}
+          cameras={cameras}
+          sensors={sensors}
+          cameraRates={cameraRates}
+          authToken={bootstrap.authToken}
+          isSuperuser={isSuperuser}
         />
-        {!view3d && (
-          <SceneSidePanel
-            tabs={tabs}
-            cameraRates={cameraRates}
-            cameras={cameras}
-            sensors={sensors}
-            childrenLinks={childrenLinks}
-            isSuperuser={isSuperuser}
-            sceneId={scene.id}
-            wssConnection={bootstrap.scene.wssConnection || ""}
-            authToken={bootstrap.authToken}
-            onCamerasChange={setCameras}
-            onSensorsChange={setSensors}
-            onChildrenChange={setChildrenLinks}
-          />
-        )}
       </div>
-      <RoiTripwireEditors
+      <GeometryBootstrap
         sceneId={scene.id}
-        isSuperuser={isSuperuser}
-        authToken={bootstrap.authToken}
         initialRegions={bootstrap.regions || []}
         initialTripwires={bootstrap.tripwires || []}
       />
@@ -518,8 +206,8 @@ function SceneDetailInner({ bootstrap }: Props) {
         sensors={sensors}
         onCamerasChange={setCameras}
         onSensorsChange={setSensors}
-        onChildrenChange={setChildrenLinks}
-        mapUrl={mapBitmapUrl}
+        onChildrenChange={() => {}}
+        mapUrl={null}
         mapScale={scene.scale}
       />
       <ConfirmDialog

@@ -4,12 +4,8 @@
 /**
  * Typed React → hybrid bridges.
  *
- * Under `ssUseReactMap`, fit / number helpers use only `window.ssMap`
- * (installed by React). Snap `window.fitSceneMapDisplay` / `numberRois`
- * fallbacks run only for non-React map pages (calibrate / Snap-map scenes).
- *
- * Occupancy color helpers still call into `sscape.js` (sectors apply to
- * React polygons). Geometry persist uses React-installed `ssPersistGeometry`.
+ * Single-pane cutover: the 2D map is gone, so fit / number helpers are
+ * no-ops. Geometry persist uses React-installed `ssPersistGeometry`.
  */
 
 import type { PersistGeometryResult } from "./roiPersist";
@@ -21,38 +17,16 @@ type RoiColorSectors = {
   range_max: number;
 };
 
-function useReactMap(): boolean {
-  return Boolean(window.ssUseReactMap);
-}
-
 export function fitSceneMapDisplay(): void {
-  if (typeof window.ssMap?.fit === "function") {
-    window.ssMap.fit();
-    return;
-  }
-  if (!useReactMap()) {
-    window.fitSceneMapDisplay?.();
-  }
+  // No 2D map in the single pane; kept for WorkspaceSplitter callers.
 }
 
 export function numberRois(): void {
-  if (typeof window.ssMap?.numberRois === "function") {
-    window.ssMap.numberRois();
-    return;
-  }
-  if (!useReactMap()) {
-    window.numberRois?.();
-  }
+  // No 2D map in the single pane.
 }
 
 export function numberTripwires(): void {
-  if (typeof window.ssMap?.numberTripwires === "function") {
-    window.ssMap.numberTripwires();
-    return;
-  }
-  if (!useReactMap()) {
-    window.numberTripwires?.();
-  }
+  // No 2D map in the single pane.
 }
 
 export function syncRoiColorSectors(

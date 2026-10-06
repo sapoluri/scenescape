@@ -341,18 +341,6 @@ class SceneDeleteView(SuperUserCheck, DeleteView):
   def get(self, request, *args, **kwargs):
     return redirect(reverse('index'))
 
-class SceneDetailView(LoginRequiredMixin, DetailView):
-  model = Scene
-  template_name = "scene/scene_detail.html"
-
-  def get_context_data(self, **kwargs):
-    # Call the base implementation first to get a context
-    context = super().get_context_data(**kwargs)
-    # Add in a QuerySet of all available 3D assets
-    context['assets'] = Asset3D.objects.all()
-    context['child_rois'], context['child_tripwires'], context['child_sensors'] = getAllChildrenMetaData(context['scene'].id)
-
-    return context
 
 class SceneListView(LoginRequiredMixin, RedirectView):
   """Scenes home is React on index; keep URL for bookmarks."""

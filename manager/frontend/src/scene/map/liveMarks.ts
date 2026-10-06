@@ -279,7 +279,7 @@ export function plotLiveMarks(objects: SceneObjectMark[] | null | undefined): vo
       sceneYMax,
     );
     const id = String(o.id);
-    let entry = marks.get(id);
+    const entry = marks.get(id);
     if (entry) {
       const prevX = entry.x;
       const prevY = entry.y;

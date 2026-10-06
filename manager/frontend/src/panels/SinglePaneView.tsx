@@ -99,7 +99,7 @@ export function SinglePaneView({
           ))}
         </div>
         <div className="ss-sp-dock-body">
-          {dockTab === "outliner" && <Outliner />}
+          {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
           {dockTab === "properties" && (
             <Properties
               sceneName={sceneName}

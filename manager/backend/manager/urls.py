@@ -25,7 +25,6 @@ urlpatterns = [
   path('scene/list/', views.SceneListView.as_view(), name='scene_list'),
   path('scene/create/', views.SceneCreateView.as_view(), name='scene_create'),
   path('scene/import/', views.SceneImportView.as_view(), name='scene_import'),
-  path('scene/detail/<uuid:pk>/', views.SceneDetailView.as_view(), name='scene_detail'),
   path('scene/update/<uuid:pk>/', views.SceneUpdateView.as_view(), name='scene_update'),
   path('scene/delete/<uuid:pk>/', views.SceneDeleteView.as_view(), name='scene_delete'),
   path('mapping-service/status/', views.check_mapping_service_status, name='mapping_service_status'),

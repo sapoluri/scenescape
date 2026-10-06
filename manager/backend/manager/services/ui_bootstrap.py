@@ -99,7 +99,6 @@ def build_scenes_home_bootstrap(request) -> dict:
       "thumbnailUrl": scene.thumbnail.url if scene.thumbnail else None,
       "mapUrl": scene.map.url if scene.map else None,
       "detailUrl": reverse("sceneDetail", args=[scene.id]),
-      "detail3dUrl": reverse("scene_detail", args=[scene.id]),
       "manageUrl": f"{reverse('index')}?ss=scene-manage&id={scene.id}",
       "deleteUrl": (
         reverse("scene_delete", args=[scene.id])
@@ -223,7 +222,6 @@ def build_scene_detail_bootstrap(request, scene_id) -> dict:
       "scenesHome": reverse("index"),
       "camList": reverse("cam_list"),
       "sensorList": reverse("singleton_sensor_list"),
-      "scene3d": reverse("scene_detail", args=[scene.id]),
       "sceneEdit": (
         reverse("scene_update", args=[scene.id])
         if request.user.is_superuser else None

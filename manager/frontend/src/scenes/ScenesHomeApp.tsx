@@ -22,7 +22,6 @@ export type SceneHomeCard = {
   thumbnailUrl: string | null;
   mapUrl: string | null;
   detailUrl: string;
-  detail3dUrl: string;
   manageUrl: string;
   deleteUrl: string | null;
   counts: {
@@ -137,14 +136,6 @@ function ScenesGallery({
                   className={`bi ${ACTION_ICONS.configure}`}
                   aria-hidden="true"
                 />
-              </a>
-              <a
-                className="ss-btn ss-btn--secondary ss-btn--sm"
-                id={`scene-3d-${scene.id}`}
-                href={scene.detail3dUrl}
-                title={`View ${scene.name} Scene in 3D`}
-              >
-                3D
               </a>
               {isSuperuser ? (
                 <>

@@ -3,6 +3,8 @@
 
 import { api } from "./rest";
 import {
+  getRoiList,
+  getTripwireList,
   publishGeometry,
   rekeyRoi,
   rekeyTripwire,
@@ -163,29 +165,24 @@ export async function persistSceneGeometry(
   if (options?.preferHidden) {
     rois = parseHiddenJson<RoiDraft>("id_rois");
     trips = parseHiddenJson<TripDraft>("tripwires");
-    window.ssMap?.syncFromLegacyStringify?.();
   } else {
-    const fromModelRois = window.ssMap?.getRois?.();
-    const fromModelTrips = window.ssMap?.getTripwires?.();
-    rois = fromModelRois
-      ? fromModelRois.map((r) => ({
-          uuid: r.uuid,
-          title: r.title,
-          points: r.points,
-          volumetric: r.volumetric,
-          height: r.height,
-          buffer_size: r.buffer_size,
-          range_max: r.range_max,
-          sectors: r.sectors,
-        }))
-      : parseHiddenJson<RoiDraft>("id_rois");
-    trips = fromModelTrips
-      ? fromModelTrips.map((t) => ({
-          uuid: t.uuid,
-          title: t.title,
-          points: t.points,
-        }))
-      : parseHiddenJson<TripDraft>("tripwires");
+    // Single-pane cutover: the 3D viewport is the only editor, so the
+    // typed geometry model is the source of truth (no 2D map facade).
+    rois = getRoiList().map((r) => ({
+      uuid: r.uuid,
+      title: r.title,
+      points: r.points,
+      volumetric: r.volumetric,
+      height: r.height,
+      buffer_size: r.buffer_size,
+      range_max: r.range_max,
+      sectors: r.sectors,
+    }));
+    trips = getTripwireList().map((t) => ({
+      uuid: t.uuid,
+      title: t.title,
+      points: t.points,
+    }));
   }
 
   const [existingRegions, existingTrips] = await Promise.all([

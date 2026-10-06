@@ -89,3 +89,22 @@
   border-radius: 50%;
   flex: none;
 }
+
+.ss-outliner-add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--ss-text-muted, #8a8f9e);
+  text-decoration: none;
+}
+.ss-outliner-add:hover {
+  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
+  color: var(--ss-accent, #0a84ff);
+}
+.ss-outliner-group-header .ss-outliner-badge {
+  margin-right: 2px;
+}

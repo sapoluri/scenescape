@@ -5,11 +5,11 @@ import { useViewportStore } from "../viewport/store";
 import type { ViewportEntity, ViewportEntityType } from "../viewport/types";
 import "./Outliner.css";
 
-const GROUPS: { type: ViewportEntityType; label: string }[] = [
+const GROUPS: { type: ViewportEntityType; label: string; addHref?: string; addLabel?: string }[] = [
   { type: "region", label: "Regions" },
   { type: "tripwire", label: "Tripwires" },
-  { type: "camera", label: "Cameras" },
-  { type: "sensor", label: "Sensors" },
+  { type: "camera", label: "Cameras", addHref: "?ss=cam-create", addLabel: "Add camera" },
+  { type: "sensor", label: "Sensors", addHref: "?ss=sensor-create", addLabel: "Add sensor" },
   { type: "mark", label: "Tracked objects" },
   { type: "child", label: "Child scenes" },
 ];
@@ -82,14 +82,14 @@ function OutlinerRow({ entity }: { entity: ViewportEntity }) {
  * with badge counts and visibility eye toggles. Selection syncs both ways
  * through the viewport store (viewport click, strip click, outliner click).
  */
-export function Outliner() {
+export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
   const entities = useViewportStore((s) => s.entities);
 
   return (
     <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
-      {GROUPS.map(({ type, label }) => {
+      {GROUPS.map(({ type, label, addHref, addLabel }) => {
         const items = Object.values(entities).filter((e) => e.type === type);
-        if (items.length === 0) {
+        if (items.length === 0 && !addHref) {
           return null;
         }
         return (
@@ -97,6 +97,17 @@ export function Outliner() {
             <div className="ss-outliner-group-header">
               <span>{label}</span>
               <span className="ss-outliner-badge">{items.length}</span>
+              {isSuperuser && addHref ? (
+                <a
+                  className="ss-outliner-add"
+                  href={addHref}
+                  title={addLabel}
+                  aria-label={addLabel}
+                  onClick={(ev) => ev.stopPropagation()}
+                >
+                  <i className="bi bi-plus" aria-hidden="true" />
+                </a>
+              ) : null}
             </div>
             {items.map((e) => (
               <OutlinerRow key={e.id} entity={e} />

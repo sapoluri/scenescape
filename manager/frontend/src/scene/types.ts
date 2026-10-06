@@ -49,8 +49,8 @@ export type SceneDetailBootstrap = {
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
   children: SceneChildBootstrap[];
-  regions: import("./editors/types").RoiLoadJson[];
-  tripwires: import("./editors/types").TripwireLoadJson[];
+  regions: import("./roiTypes").RoiLoadJson[];
+  tripwires: import("./roiTypes").TripwireLoadJson[];
   assetMarkColors: Record<string, string>;
   counts: {
     sensors: number;
@@ -62,7 +62,6 @@ export type SceneDetailBootstrap = {
     scenesHome: string;
     camList?: string;
     sensorList?: string;
-    scene3d: string;
     sceneEdit: string | null;
     sceneDelete: string | null;
     camCreate: string | null;
