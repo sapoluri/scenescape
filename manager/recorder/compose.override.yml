@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+# Overlay for Phase 2 recorder: share /data/recordings with the manager
+# so GET /api/v1/recordings/ can list/serve .rrd files.
+# Usage (from repo root, demo already running):
+#   docker compose --profile controller \
+#     -f docker-compose.yml -f manager/recorder/compose.override.yml \
+#     up -d --force-recreate --no-deps web recorder
+
+services:
+  web:
+    environment:
+      RECORDER_STORAGE_DIR: /data/recordings
+    volumes:
+      - vol-recordings:/data/recordings
+
+  recorder:
+    image: intel/scenescape-recorder:dev
+    init: true
+    networks:
+      scenescape:
+    depends_on:
+      web:
+        condition: service_healthy
+      broker:
+        condition: service_started
+    environment:
+      RECORDER_MQTT_BROKER: broker.scenescape.intel.com
+      RECORDER_MQTT_PORT: "1883"
+      RECORDER_MQTT_CAFILE: /run/certs/scenescape-ca.pem
+      RECORDER_STORAGE_DIR: /data/recordings
+      RECORDER_MANAGER_API: https://web.scenescape.intel.com/api/v1
+      RECORDER_MANAGER_TOKEN: ${RECORDER_MANAGER_TOKEN:-}
+      RECORDER_RETENTION_DAYS: "1"
+    volumes:
+      - vol-recordings:/data/recordings
+      - ${SECRETSDIR}/certs/scenescape-ca.pem:/run/certs/scenescape-ca.pem:ro
+    restart: unless-stopped
+
+volumes:
+  vol-recordings:

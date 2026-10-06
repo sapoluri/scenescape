@@ -25,6 +25,7 @@ to a local disk volume.
 |-----|---------|-------------|
 | `RECORDER_MQTT_BROKER` | `localhost` | MQTT broker host |
 | `RECORDER_MQTT_PORT` | `1883` | MQTT broker port |
+| `RECORDER_MQTT_CAFILE` | _(empty)_ | PEM CA file for MQTT TLS (required on the demo broker) |
 | `RECORDER_STORAGE_DIR` | `/data/recordings` | Local volume for `.rrd` files |
 | `RECORDER_RETENTION_DAYS` | `1` | Delete files older than this |
 | `RECORDER_SCENES` | _(empty = all)_ | Comma-separated scene IDs to record |

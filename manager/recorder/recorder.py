@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import signal
+import ssl
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,7 @@ logger = logging.getLogger("recorder")
 
 MQTT_BROKER = os.environ.get("RECORDER_MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("RECORDER_MQTT_PORT", "1883"))
+MQTT_CAFILE = os.environ.get("RECORDER_MQTT_CAFILE", "")
 STORAGE_DIR = Path(os.environ.get("RECORDER_STORAGE_DIR", "/data/recordings"))
 RETENTION_DAYS = float(os.environ.get("RECORDER_RETENTION_DAYS", "1"))
 # Comma-separated scene IDs to record; empty = all scenes.
@@ -103,7 +105,7 @@ class RrdSink(Sink):
         )
         rec.save(path)
         rec.log("recorder/meta", rr.TextLog(f"rerun-sdk {RRD_SDK_VERSION}"),
-                timeless=True)
+                static=True)
         self.streams[scene_id] = rec
 
     def log_tracks(self, scene_id: str, tracks: list[dict]) -> None:
@@ -116,8 +118,7 @@ class RrdSink(Sink):
         rec.set_time("log_time", timestamp=datetime.now(timezone.utc))
         for t in tracks:
             tid = str(t.get("id", "unknown"))
-            x = float(t.get("x", 0))
-            y = float(t.get("y", 0))
+            x, y = _track_xy(t)
             rec.log(f"scene/{scene_id}/objects/{tid}", rr.Points3D([[x, y, 0]]))
 
     def log_frame(self, scene_id: str, camera_id: str, image_bytes: bytes) -> None:
@@ -129,7 +130,7 @@ class RrdSink(Sink):
             return
         rec.set_time("log_time", timestamp=datetime.now(timezone.utc))
         rec.log(f"scene/{scene_id}/cameras/{camera_id}/image",
-                rr.EncodedImage(contents=image_bytes))
+                rr.EncodedImage(contents=image_bytes, media_type="image/jpeg"))
 
     def close_partition(self, scene_id: str) -> None:
         self.streams.pop(scene_id, None)
@@ -221,6 +222,28 @@ def get_recorder(scene_id: str) -> SceneRecorder | None:
         return rec
 
 
+def _track_xy(track: dict) -> tuple[float, float]:
+    """Scene objects use translation[x,y,z]; some payloads also send x/y."""
+    trans = track.get("translation")
+    if isinstance(trans, (list, tuple)) and len(trans) >= 2:
+        return float(trans[0]), float(trans[1])
+    return float(track.get("x", 0) or 0), float(track.get("y", 0) or 0)
+
+
+def _flatten_tracks(payload: dict) -> list[dict]:
+    """Regulated scene payloads may use objects[] or objects{category: []}."""
+    raw = payload.get("objects") or payload.get("tracks") or []
+    if isinstance(raw, list):
+        return [t for t in raw if isinstance(t, dict)]
+    if isinstance(raw, dict):
+        out: list[dict] = []
+        for items in raw.values():
+            if isinstance(items, list):
+                out.extend(t for t in items if isinstance(t, dict))
+        return out
+    return []
+
+
 def scene_id_from_topic(topic: str) -> str | None:
     # scenescape/regulated/scene/<scene_id>
     parts = topic.split("/")
@@ -241,8 +264,7 @@ def on_message(client, userdata, msg) -> None:
             if rec is None:
                 return
             payload = json.loads(msg.payload.decode("utf-8", errors="replace"))
-            # The regulated topic carries {objects: [{id, x, y, class, ...}]}.
-            tracks = payload.get("objects") or payload.get("tracks") or []
+            tracks = _flatten_tracks(payload)
             if tracks:
                 rec.log_tracks(tracks)
         elif msg.topic.startswith(f"{APP_NAME}/image/camera/"):
@@ -277,12 +299,20 @@ def refresh_camera_map(camera_scene: dict) -> None:
     """Fetch all cameras from the manager and map camera_id -> scene_id."""
     import urllib.request
 
-    url = f"{MANAGER_API}/cameras"
+    url = f"{MANAGER_API.rstrip('/')}/cameras"
     req = urllib.request.Request(url)
     if MANAGER_TOKEN:
         req.add_header("Authorization", f"Token {MANAGER_TOKEN}")
+    ctx = None
+    if url.startswith("https://"):
+        ctx = ssl.create_default_context()
+        if MQTT_CAFILE:
+            ctx.load_verify_locations(MQTT_CAFILE)
+        # Demo web cert is issued for web.scenescape.intel.com; skip hostname
+        # check when talking to the in-cluster alias over HTTPS.
+        ctx.check_hostname = False
     try:
-        with urllib.request.urlopen(req, timeout=10) as res:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as res:
             data = json.loads(res.read().decode("utf-8"))
     except Exception:
         logger.exception("Failed to fetch camera list from %s", url)
@@ -292,9 +322,18 @@ def refresh_camera_map(camera_scene: dict) -> None:
         return
     updated = 0
     for cam in items:
-        cam_id = str(cam.get("sensor_id") or cam.get("id") or "")
         scene_id = str(cam.get("scene") or cam.get("scene_id") or "")
-        if cam_id and scene_id:
+        # List API exposes camera MQTT id as uid (sensor_id is write-only).
+        cam_ids = {
+            str(v) for v in (
+                cam.get("uid"),
+                cam.get("sensor_id"),
+                cam.get("name"),
+            ) if v not in (None, "")
+        }
+        if not scene_id or not cam_ids:
+            continue
+        for cam_id in cam_ids:
             if camera_scene.get(cam_id) != scene_id:
                 camera_scene[cam_id] = scene_id
                 updated += 1
@@ -348,6 +387,12 @@ def main() -> int:
     )
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    if MQTT_CAFILE:
+        client.tls_set(
+            ca_certs=MQTT_CAFILE,
+            tls_version=ssl.PROTOCOL_TLS_CLIENT,
+        )
+        logger.info("MQTT TLS enabled with CA %s", MQTT_CAFILE)
     client.on_connect = on_connect
     client.on_message = on_message
     client.user_data_set({"camera_scene": {}})
