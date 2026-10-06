@@ -9,7 +9,6 @@ import {
   SPHERE_RADIUS,
   SCENE_MESH_NAMES,
 } from "/static/js/constants.js";
-import SceneCamera from "/static/js/thing/scenecamera.js";
 
 function isMeshToProjectOn(intersect) {
   if (
@@ -186,7 +185,9 @@ function SetupInteractions(
           for (const intersect of intersects) {
             if (intersect.object.type === "CameraHelper") {
               let obj = intersect.object.parent;
-              if (obj && obj instanceof SceneCamera) {
+              // thing/scenecamera.js was removed in the single-pane cutover; duck-type
+              // the camera group instead of instanceof.
+              if (obj && obj.isGroup) {
                 setSelectedCamera(obj, true);
               }
             }
