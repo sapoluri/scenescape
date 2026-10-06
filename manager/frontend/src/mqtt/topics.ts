@@ -6,6 +6,7 @@ export const APP_NAME = "scenescape";
 export const CMD_CAMERA = "/cmd/camera/";
 export const DATA_REGULATED = "/regulated/scene/";
 export const IMAGE_CAMERA = "/image/camera/";
+export const IMAGE_CALIBRATE = "/image/calibration/camera/";
 export const SYS_CHILDSCENE_STATUS = "/sys/child/status";
 
 export function sceneRegulatedTopic(sceneId: string): string {

@@ -29,8 +29,8 @@ import { CameraSheet } from "./CameraSheet";
 import { SensorSheet } from "./SensorSheet";
 import { ChildSheet, type SceneOption } from "./ChildSheet";
 import { SceneManagePanel } from "./SceneManagePanel";
-import { CameraCalibratePanel } from "./CameraCalibratePanel";
 import { SensorCalibratePanel } from "./SensorCalibratePanel";
+import { enterCameraCalibrate } from "../viewport/calibrate";
 
 /**
  * Command surfaces: create/edit/manage sheets use Drawer; calibrate uses
@@ -76,7 +76,7 @@ export function SceneWorkspaceSheets({
   sceneId,
   authToken,
   isSuperuser,
-  isKubernetes,
+  isKubernetes: _isKubernetes,
   scenes,
   cameras,
   sensors = [],
@@ -265,15 +265,36 @@ export function SceneWorkspaceSheets({
     return map;
   }, [sensors]);
 
+  // Phase 2.3: camera calibrate is an in-viewport split, not a sheet.
+  useEffect(() => {
+    if (!isSuperuser || sheet.action !== "calibrate-cam" || !sheet.id) {
+      return;
+    }
+    const cam =
+      camByPk.get(String(sheet.id)) ||
+      camBySensorId.get(String(sheet.id));
+    if (cam) {
+      enterCameraCalibrate({
+        cameraId: cam.id,
+        sensorId: cam.sensorId,
+        cameraName: cam.name,
+      });
+    }
+    close();
+  }, [
+    isSuperuser,
+    sheet.action,
+    sheet.id,
+    camByPk,
+    camBySensorId,
+    close,
+  ]);
+
   if (!isSuperuser) {
     return null;
   }
 
   const action = sheet.action;
-  const calibrateCam =
-    action === "calibrate-cam" && sheet.id
-      ? camByPk.get(String(sheet.id))
-      : null;
   const calibrateSensor =
     action === "calibrate-sensor" && sheet.id
       ? sensorByPk.get(String(sheet.id))
@@ -320,17 +341,6 @@ export function SceneWorkspaceSheets({
         open={action === "scene-manage"}
         sceneId={sceneId}
         authToken={authToken}
-        onClose={closeSheet}
-        onSaved={reload}
-      />
-      <CameraCalibratePanel
-        open={Boolean(calibrateCam)}
-        cameraPk={calibrateCam?.id || ""}
-        sensorId={calibrateCam?.sensorId || ""}
-        cameraName={calibrateCam?.name || ""}
-        sceneId={sceneId}
-        authToken={authToken}
-        isKubernetes={isKubernetes}
         onClose={closeSheet}
         onSaved={reload}
       />

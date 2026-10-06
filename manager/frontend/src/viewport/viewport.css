@@ -143,6 +143,15 @@
   min-height: 0;
 }
 
+.ss-viewport-main,
+.ss-viewport-main-3d {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .ss-viewport-host canvas {
   display: block;
 }
@@ -150,7 +159,6 @@
 .ss-viewport-labels {
   position: absolute;
   inset: 0;
-  top: 33px; /* below the header bar */
   pointer-events: none;
   overflow: hidden;
 }

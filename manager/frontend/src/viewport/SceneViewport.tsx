@@ -8,6 +8,10 @@ import type {
   SceneCameraBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import { CalibrateFeedPane } from "./calibrate/CalibrateFeedPane";
+import { CalibrateWizard } from "./calibrate/CalibrateWizard";
+import { useCalibrateStore } from "./calibrate/calibrateStore";
+import { useCalibrateSession } from "./calibrate/useCalibrateSession";
 import { useViewportEntities } from "./entities";
 import { useViewportMarks } from "./marks";
 import { attachMarkRenderer } from "./renderMarks";
@@ -271,6 +275,9 @@ export function SceneViewport({
 
   useViewportEntities(world, { cameras, sensors, authToken });
   useViewportTools(world);
+  useCalibrateSession(world, authToken);
+
+  const calibrating = useCalibrateStore((s) => s.active);
 
   // View state -> world (presets, projection, grid).
   useEffect(() => {
@@ -316,7 +323,10 @@ export function SceneViewport({
   const toggleOverlay = useViewportStore((s) => s.toggleOverlay);
 
   return (
-    <div className="ss-viewport" data-scene-id={sceneId}>
+    <div
+      className={`ss-viewport${calibrating ? " is-calibrating" : ""}`}
+      data-scene-id={sceneId}
+    >
       <div className="ss-viewport-bar" role="toolbar" aria-label="Viewport">
         {onOpenScene && (
           <button
@@ -348,6 +358,7 @@ export function SceneViewport({
             className={mode === "live" ? "on" : ""}
             onClick={() => onModeChange?.("live")}
             title="Live view (MQTT)"
+            disabled={calibrating}
           >
             Live
           </button>
@@ -356,6 +367,7 @@ export function SceneViewport({
             className={mode === "replay" ? "on" : ""}
             onClick={() => onModeChange?.("replay")}
             title="Replay a recording"
+            disabled={calibrating}
           >
             Replay
           </button>
@@ -399,20 +411,33 @@ export function SceneViewport({
         />
         <span className="ss-viewport-beta">3D beta</span>
       </div>
-      <ToolHeader />
-      <div className="ss-viewport-host" ref={hostRef}>
-        {webglFailed && (
-          <p className="ss-viewport-error">
-            WebGL is not available in this browser.
-          </p>
-        )}
+      {calibrating ? (
+        <CalibrateWizard
+          sceneId={sceneId}
+          authToken={authToken}
+          cameras={cameras}
+        />
+      ) : (
+        <ToolHeader />
+      )}
+      <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
+        <div className={calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"}>
+          <div className="ss-viewport-host" ref={hostRef}>
+            {webglFailed && (
+              <p className="ss-viewport-error">
+                WebGL is not available in this browser.
+              </p>
+            )}
+          </div>
+          <div
+            className="ss-viewport-labels"
+            ref={labelLayerRef}
+            aria-hidden="true"
+          />
+        </div>
+        {calibrating ? <CalibrateFeedPane /> : null}
       </div>
-      <div
-        className="ss-viewport-labels"
-        ref={labelLayerRef}
-        aria-hidden="true"
-      />
-      {cameras.length > 0 && (
+      {!calibrating && cameras.length > 0 && (
         <CameraStripOverlay
           cameras={cameras}
           cameraRates={cameraRates}

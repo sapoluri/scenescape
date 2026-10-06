@@ -91,6 +91,7 @@
   background: rgba(10, 132, 255, 0.14);
   border: 1px solid rgba(10, 132, 255, 0.45);
   color: #5eb2ff;
+  font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   text-decoration: none;

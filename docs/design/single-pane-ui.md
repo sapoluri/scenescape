@@ -155,7 +155,8 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 
 ## Phase 2 — Rerun integration & replayability
 
-**Status: complete** (shipped October 2026). Testing guide: `phase2-testing.md`.
+**Status: complete** (shipped October 2026), including Phase 2.3 in-viewport
+calibration multi-view. Testing guide: `phase2-testing.md`.
 
 **Goal:** add time as a first-class citizen — record scene telemetry *and* camera frames, replay them scrubbed on a Rerun-style timeline, and use multi-view layouts for calibration. This is the one Phase-2 item that adds capability, not just chrome.
 
@@ -185,6 +186,12 @@ Today there is no replay store: `tools/mqtt_recorder.py` is a manual CLI that du
 - **Display overrides, not edits:** in Replay mode the Properties panel offers Rerun-style per-entity *display* overrides (e.g. recolor a region's rendering) without touching stored thresholds — keeps the "fields are precision, viewport is truth" contract clean.
 
 ### Phase 2.3 — calibration multi-view
+
+**Status: complete.** Calibration is dual-view inside the scene viewport (not a
+page): left = 3D with live frustum, right = MQTT calibration feed with
+point-picking. Wizard in the tool header; dirty-gated Save uses the same
+`PUT /camera/{uid}` as before. Enter from Properties / camera strip / 
+`?ss=calibrate-cam` (intercepted into mode). Exit restores the single 3D view.
 
 Calibration is inherently dual-view: pick correspondence points on the **2D camera image** while watching the **3D frustum/coverage update live**. Implement as a viewport layout mode (not a page):
 

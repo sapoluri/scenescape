@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { refreshCameraStrip } from "../mqtt";
+import { enterCameraCalibrate } from "../viewport/calibrate";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type { SceneCameraBootstrap } from "../scene/types";
 import "../scene/CameraStrip.css";
@@ -45,8 +46,8 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
  * `sscape.js` use to gate continuous `getimage` polling. Live frames still
  * land on `img[data-ss-card-sensor]` / `.snapshot-image` anchors.
  *
- * Calibrate still opens `?ss=calibrate-cam` → CameraCalibratePanel sheet
- * (Phase 1). Phase 2.3 replaces that with an in-viewport 3D+feed split.
+ * Calibrate opens Phase 2.3 in-viewport split via `enterCameraCalibrate`
+ * (3D + live feed), not the legacy `?ss=calibrate-cam` sheet.
  *
  * Mount inside the viewport container element:
  *
@@ -229,15 +230,22 @@ export function CameraStripOverlay({
                 </span>
                 <span className="ss-camera-viewer-actions">
                   {isSuperuser && (
-                    <a
-                      href={preview.calibrateHref}
+                    <button
+                      type="button"
                       className="ss-camera-calibrate"
                       title={`Calibrate ${preview.name}`}
-                      onClick={(ev) => ev.stopPropagation()}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        enterCameraCalibrate({
+                          cameraId: preview.id,
+                          sensorId: preview.sensorId,
+                          cameraName: preview.name,
+                        });
+                      }}
                     >
                       <i className="bi bi-crosshair" aria-hidden="true" />
                       <span>Calibrate</span>
-                    </a>
+                    </button>
                   )}
                   <button
                     type="button"
@@ -327,15 +335,22 @@ export function CameraStripOverlay({
                       {cam.name}
                     </span>
                     {isSuperuser && (
-                      <a
-                        href={cam.calibrateHref}
+                      <button
+                        type="button"
                         className="ss-camera-card-cal"
                         title={`Calibrate ${cam.name}`}
                         aria-label={`Calibrate ${cam.name}`}
-                        onClick={(ev) => ev.stopPropagation()}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          enterCameraCalibrate({
+                            cameraId: cam.id,
+                            sensorId: cam.sensorId,
+                            cameraName: cam.name,
+                          });
+                        }}
                       >
                         <i className="bi bi-crosshair" aria-hidden="true" />
-                      </a>
+                      </button>
                     )}
                   </span>
                 </div>

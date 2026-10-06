@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from "react";
+import { enterCameraCalibrate } from "../viewport/calibrate";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
@@ -185,9 +186,11 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
 function CameraProps({
   e,
   calibrateHref,
+  onCalibrate,
 }: {
   e: CameraEntity;
   calibrateHref?: string;
+  onCalibrate?: () => void;
 }) {
   const patch = (p: Partial<CameraEntity>) =>
     getViewportState().updateEntity(e.id, p);
@@ -214,15 +217,26 @@ function CameraProps({
         label="Rotation"
         value={`${fmt(e.rotation[0], 1)}°, ${fmt(e.rotation[1], 1)}°, ${fmt(e.rotation[2], 1)}°`}
       />
-      {calibrateHref && (
-        <a href={calibrateHref} className="ss-prop-calibrate">
-          <i className="bi bi-crosshair" aria-hidden="true" />
-          <span>Calibrate camera</span>
-        </a>
+      {(onCalibrate || calibrateHref) && (
+        onCalibrate ? (
+          <button
+            type="button"
+            className="ss-prop-calibrate"
+            onClick={onCalibrate}
+          >
+            <i className="bi bi-crosshair" aria-hidden="true" />
+            <span>Calibrate camera</span>
+          </button>
+        ) : (
+          <a href={calibrateHref} className="ss-prop-calibrate">
+            <i className="bi bi-crosshair" aria-hidden="true" />
+            <span>Calibrate camera</span>
+          </a>
+        )
       )}
       <p className="ss-prop-hint">
-        Pose comes from calibration; fine-tune it in the Phase 2.3 calibration
-        wizard. Position edits move the rig live.
+        Opens in-viewport calibrate (3D + live feed). Pose updates live as you
+        place 4+ correspondences; Save writes the same camera PUT as before.
       </p>
     </>
   );
@@ -313,15 +327,18 @@ export function Properties({
   cameras = [],
 }: {
   sceneName: string;
-  cameras?: { id: string; calibrateHref: string }[];
+  cameras?: {
+    id: string;
+    sensorId: string;
+    name: string;
+    calibrateHref: string;
+  }[];
 }) {
   const selectedId = useViewportStore((s) => s.selectedId);
   const entities = useViewportStore((s) => s.entities);
   const e = selectedId ? entities[selectedId] : undefined;
-  const calibrateHref =
-    e?.type === "camera"
-      ? cameras.find((c) => c.id === e.id)?.calibrateHref
-      : undefined;
+  const camBoot =
+    e?.type === "camera" ? cameras.find((c) => c.id === e.id) : undefined;
 
   return (
     <div className="ss-props">
@@ -329,7 +346,20 @@ export function Properties({
       {e?.type === "region" && <RegionProps e={e} />}
       {e?.type === "tripwire" && <TripwireProps e={e} />}
       {e?.type === "camera" && (
-        <CameraProps e={e} calibrateHref={calibrateHref} />
+        <CameraProps
+          e={e}
+          calibrateHref={camBoot?.calibrateHref}
+          onCalibrate={
+            camBoot
+              ? () =>
+                  enterCameraCalibrate({
+                    cameraId: camBoot.id,
+                    sensorId: camBoot.sensorId,
+                    cameraName: camBoot.name,
+                  })
+              : undefined
+          }
+        />
       )}
       {e?.type === "sensor" && <SensorProps e={e} />}
       {e?.type === "mark" && <MarkProps e={e} />}
