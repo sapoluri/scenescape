@@ -274,7 +274,7 @@ export function lookAtOriginEuler(
   return [r2d(e.x), r2d(e.y), r2d(e.z)];
 }
 
-function buildCamera(e: CameraEntity): EntityNodes {
+export function buildCamera(e: CameraEntity): EntityNodes {
   const group = new Group();
   const rig = new Group();
   rig.position.set(e.position[0], e.position[1], e.position[2]);
@@ -284,9 +284,13 @@ function buildCamera(e: CameraEntity): EntityNodes {
 
   // Frustum rig: a real PerspectiveCamera (never rendered) + CameraHelper,
   // exactly like the legacy 3D view. The lens looks down local -Z.
+  // NOTE: CameraHelper replaces its own matrix with the camera's matrixWorld,
+  // so it must live under the identity outer group — parenting it under the
+  // transformed rig would apply the rig transform twice and the frustum
+  // would not align with the camera body.
   const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.5, 30);
   const helper = new CameraHelper(persp);
-  rig.add(persp, helper);
+  rig.add(persp);
 
   const bodyMat = new MeshStandardMaterial({
     color: 0x2b2d36,
@@ -307,6 +311,10 @@ function buildCamera(e: CameraEntity): EntityNodes {
   const proxy = new Mesh(new BoxGeometry(1.6, 1.6, 1.6), proxyMaterial());
   rig.add(proxy);
   group.add(rig);
+  // Added after the rig: CameraHelper reads the camera's matrixWorld during
+  // the scene-graph update, so it must be traversed after the rig subtree
+  // to see a fresh transform (no one-frame lag).
+  group.add(helper);
   group.userData.entityId = e.id;
 
   return {

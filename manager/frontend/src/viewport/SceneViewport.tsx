@@ -39,6 +39,7 @@ interface SceneViewportProps {
   sensors: SceneSensorBootstrap[];
   cameraRates?: Record<string, string>;
   authToken: string;
+  isSuperuser?: boolean;
 }
 
 function readTheme(): ViewportTheme {
@@ -233,6 +234,7 @@ export function SceneViewport({
   sensors,
   cameraRates = {},
   authToken,
+  isSuperuser = false,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -392,6 +394,7 @@ export function SceneViewport({
           cameras={cameras}
           cameraRates={cameraRates}
           authToken={authToken}
+          isSuperuser={isSuperuser}
         />
       )}
     </div>

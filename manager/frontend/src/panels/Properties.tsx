@@ -182,7 +182,13 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
   );
 }
 
-function CameraProps({ e }: { e: CameraEntity }) {
+function CameraProps({
+  e,
+  calibrateHref,
+}: {
+  e: CameraEntity;
+  calibrateHref?: string;
+}) {
   const patch = (p: Partial<CameraEntity>) =>
     getViewportState().updateEntity(e.id, p);
   const setPos = (i: number, v: number) => {
@@ -208,6 +214,12 @@ function CameraProps({ e }: { e: CameraEntity }) {
         label="Rotation"
         value={`${fmt(e.rotation[0], 1)}°, ${fmt(e.rotation[1], 1)}°, ${fmt(e.rotation[2], 1)}°`}
       />
+      {calibrateHref && (
+        <a href={calibrateHref} className="ss-prop-calibrate">
+          <i className="bi bi-crosshair" aria-hidden="true" />
+          <span>Calibrate camera</span>
+        </a>
+      )}
       <p className="ss-prop-hint">
         Pose comes from calibration; fine-tune it in the Phase 2.3 calibration
         wizard. Position edits move the rig live.
@@ -296,17 +308,29 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
  * Numeric fields write through the viewport store so the 3D view updates
  * live. Nothing selected → scene summary.
  */
-export function Properties({ sceneName }: { sceneName: string }) {
+export function Properties({
+  sceneName,
+  cameras = [],
+}: {
+  sceneName: string;
+  cameras?: { id: string; calibrateHref: string }[];
+}) {
   const selectedId = useViewportStore((s) => s.selectedId);
   const entities = useViewportStore((s) => s.entities);
   const e = selectedId ? entities[selectedId] : undefined;
+  const calibrateHref =
+    e?.type === "camera"
+      ? cameras.find((c) => c.id === e.id)?.calibrateHref
+      : undefined;
 
   return (
     <div className="ss-props">
       {!e && <EmptyProps sceneName={sceneName} />}
       {e?.type === "region" && <RegionProps e={e} />}
       {e?.type === "tripwire" && <TripwireProps e={e} />}
-      {e?.type === "camera" && <CameraProps e={e} />}
+      {e?.type === "camera" && (
+        <CameraProps e={e} calibrateHref={calibrateHref} />
+      )}
       {e?.type === "sensor" && <SensorProps e={e} />}
       {e?.type === "mark" && <MarkProps e={e} />}
       {e?.type === "child" && (

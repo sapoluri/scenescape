@@ -17,6 +17,8 @@ type Props = {
    * (useCameraStripMqtt), which feeds every img[data-ss-card-sensor].
    */
   authToken?: string;
+  /** Gate the calibration launcher (mirrors the side-panel cards). */
+  isSuperuser?: boolean;
   /** Called with the viewport entity id (=== SceneCameraBootstrap.id). */
   onSelectCamera?: (id: string) => void;
 };
@@ -33,15 +35,19 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
 }
 
 /**
- * Floating camera strip for the single-pane 3D viewport (Phase 1.3).
+ * Floating camera panel for the single-pane 3D viewport.
  *
- * Bottom-left overlay: camera cards in a horizontal strip, reusing the
- * side-panel card structure so the existing MQTT frame machinery
- * (refreshCameraStrip / applyCameraFrame, keyed on
+ * Compositor-style floating panel, bottom-left of the viewport: a header
+ * ("Cameras" + count + collapse), a Rerun-style live preview viewer for the
+ * selected camera (name, Live/Offline pill, frame rate, calibration
+ * launcher, close), and a horizontal strip of camera cards.
+ *
+ * Live frames reuse the side-panel card structure so the existing MQTT frame
+ * machinery (refreshCameraStrip / applyCameraFrame, keyed on
  * img[data-ss-card-sensor] and .snapshot-image anchors) feeds it without
- * changes. Clicking a card selects the camera entity in the viewport store
- * (same selection model as viewport clicks and the Outliner) and expands
- * an inline live-feed preview in place.
+ * changes. The calibration launcher is a plain `?ss=calibrate-cam&id=…`
+ * link, intercepted by SceneWorkspaceSheets which opens CameraCalibratePanel
+ * as an overlay — no navigation.
  *
  * Mount inside the viewport container element:
  *
@@ -53,22 +59,23 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
 export function CameraStripOverlay({
   cameras,
   cameraRates = {},
+  isSuperuser = false,
   onSelectCamera,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [onlineBySensor, setOnlineBySensor] = useState<Record<string, boolean>>(
     {},
   );
   const selectedId = useViewportStore((s) => s.selectedId);
   const stripRef = useRef<HTMLDivElement>(null);
 
-  // Drop the expanded preview if its camera leaves the scene.
+  // Drop the preview if its camera leaves the scene.
   useEffect(() => {
-    if (expandedId && !cameras.some((c) => c.id === expandedId)) {
-      setExpandedId(null);
+    if (previewId && !cameras.some((c) => c.id === previewId)) {
+      setPreviewId(null);
     }
-  }, [cameras, expandedId]);
+  }, [cameras, previewId]);
 
   // Request MQTT frames for the strip anchors (mirrors CamerasPanelContent).
   useEffect(() => {
@@ -82,7 +89,7 @@ export function CameraStripOverlay({
   }, [cameras]);
 
   // Track live/offline per camera by observing img src/class changes,
-  // scoped to this strip (mirrors CameraStripEnhancer, React-driven).
+  // scoped to this panel (mirrors CameraStripEnhancer, React-driven).
   useEffect(() => {
     const root = stripRef.current;
     if (!root) {
@@ -139,151 +146,179 @@ export function CameraStripOverlay({
   const handleSelect = (cam: SceneCameraBootstrap) => {
     getViewportState().select(cam.id);
     onSelectCamera?.(cam.id);
-    setExpandedId((prev) => (prev === cam.id ? null : cam.id));
+    setPreviewId(cam.id);
   };
 
-  const expanded = cameras.find((c) => c.id === expandedId) ?? null;
-  const expandedOnline = expanded
-    ? Boolean(onlineBySensor[expanded.sensorId])
+  const preview = cameras.find((c) => c.id === previewId) ?? null;
+  const previewOnline = preview
+    ? Boolean(onlineBySensor[preview.sensorId])
     : false;
 
   return (
     <div
       ref={stripRef}
-      className={`ss-camera-strip-overlay ss-camera-strip${
-        collapsed ? " is-collapsed" : ""
-      }`}
+      className={`ss-camera-panel${collapsed ? " is-collapsed" : ""}`}
       role="region"
-      aria-label="Camera strip"
+      aria-label="Cameras"
     >
-      <div className="ss-strip-overlay-head">
+      <div className="ss-camera-panel-head">
         <button
           type="button"
-          className="ss-strip-collapse"
+          className="ss-camera-panel-toggle"
           aria-expanded={!collapsed}
-          aria-controls="ss-strip-cards"
+          aria-controls="ss-camera-panel-body"
           onClick={() => setCollapsed((v) => !v)}
-          title={collapsed ? "Expand camera strip" : "Collapse camera strip"}
+          title={collapsed ? "Expand cameras" : "Collapse cameras"}
         >
           <i
             className={`bi ${collapsed ? "bi-chevron-up" : "bi-chevron-down"}`}
             aria-hidden="true"
           />
           <span>Cameras</span>
-          <span className="ss-strip-count" aria-label={`${cameras.length} cameras`}>
+          <span className="ss-camera-panel-count" aria-label={`${cameras.length} cameras`}>
             {cameras.length}
           </span>
         </button>
       </div>
 
       {!collapsed && (
-        <>
-          {expanded && (
-            <div
-              className="ss-strip-expanded"
-              aria-label={`${expanded.name} live feed`}
+        <div id="ss-camera-panel-body" className="ss-camera-panel-body">
+          {preview && (
+            <section
+              className="ss-camera-viewer"
+              aria-label={`${preview.name} live preview`}
             >
-              <span
-                className="snapshot-image"
-                data-topic={expanded.cmdTopic}
-                data-topic-name={`scenescape/cmd/camera/${expanded.name}`}
-              >
-                <span className="cam-offline">Camera Offline</span>
-                <img
-                  id={`strip-overlay-expanded-${expanded.sensorId}`}
-                  data-ss-card-sensor={expanded.sensorId}
-                  data-ss-card-name={expanded.name}
-                  className="display-none"
-                  alt={`${expanded.name} live view`}
-                />
-              </span>
-              <span className="ss-strip-expanded-meta">
-                <span className="ss-strip-expanded-name">{expanded.name}</span>
+              <header className="ss-camera-viewer-bar">
                 <span
-                  className={`ss-camera-strip-badge ${
-                    expandedOnline ? "is-online" : "is-offline"
-                  }`}
+                  className={`ss-live-pill${previewOnline ? " is-live" : ""}`}
                 >
-                  {expandedOnline ? "Live" : "Offline"}
+                  <span className="ss-live-dot" aria-hidden="true" />
+                  {previewOnline ? "Live" : "Offline"}
                 </span>
-                <span className="rate">
-                  {expandedOnline
-                    ? (cameraRates[expanded.sensorId] ?? "--")
-                    : "--"}
+                <span className="ss-camera-viewer-name" title={preview.name}>
+                  {preview.name}
                 </span>
-              </span>
-            </div>
+                <span className="ss-camera-viewer-rate">
+                  {previewOnline
+                    ? `${cameraRates[preview.sensorId] ?? "--"} fps`
+                    : "—"}
+                </span>
+                <span className="ss-camera-viewer-actions">
+                  {isSuperuser && (
+                    <a
+                      href={preview.calibrateHref}
+                      className="ss-camera-calibrate"
+                      title={`Calibrate ${preview.name}`}
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      <i className="bi bi-crosshair" aria-hidden="true" />
+                      <span>Calibrate</span>
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    className="ss-camera-viewer-close"
+                    aria-label="Close preview"
+                    onClick={() => setPreviewId(null)}
+                  >
+                    <i className="bi bi-x-lg" aria-hidden="true" />
+                  </button>
+                </span>
+              </header>
+              <div className="ss-camera-viewer-feed">
+                <span
+                  className="snapshot-image"
+                  data-topic={preview.cmdTopic}
+                  data-topic-name={`scenescape/cmd/camera/${preview.name}`}
+                >
+                  <span className="cam-offline">Camera Offline</span>
+                  <img
+                    id={`strip-overlay-viewer-${preview.sensorId}`}
+                    data-ss-card-sensor={preview.sensorId}
+                    data-ss-card-name={preview.name}
+                    className="display-none"
+                    alt={`${preview.name} live view`}
+                  />
+                </span>
+              </div>
+            </section>
           )}
 
           <div
             id="ss-strip-cards"
-            className="ss-strip-cards"
+            className="ss-camera-cards"
             role="listbox"
             aria-label="Scene cameras"
             aria-orientation="horizontal"
           >
             {cameras.length === 0 && (
-              <p className="ss-strip-empty">No cameras in this scene yet.</p>
+              <p className="ss-camera-empty">No cameras in this scene yet.</p>
             )}
             {cameras.map((cam) => {
               const online = Boolean(onlineBySensor[cam.sensorId]);
               const selected = selectedId === cam.id;
+              const previewing = previewId === cam.id;
               return (
-                <button
+                <div
                   key={cam.id}
-                  type="button"
                   role="option"
                   aria-selected={selected}
-                  aria-pressed={expandedId === cam.id}
-                  aria-label={`Select camera ${cam.name}`}
-                  title={`${cam.name} — select and preview`}
-                  className={`card camera-card count-item ss-strip-card${
-                    selected ? " is-selected" : ""
+                  tabIndex={0}
+                  className={`ss-camera-card${selected ? " is-selected" : ""}${
+                    previewing ? " is-previewing" : ""
                   }`}
                   onClick={() => handleSelect(cam)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      handleSelect(cam);
+                    }
+                  }}
+                  title={`${cam.name} — select and preview`}
                 >
-                  <span className="card-header">
-                    <span className="ss-strip-card-name">{cam.name}</span>
-                    <span
-                      className={`ss-camera-strip-badge ${
-                        online ? "is-online" : "is-offline"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {online ? "Live" : "Offline"}
-                    </span>
-                    <span
-                      className={`rate${online ? "" : " telemetry-hide"}`}
-                      aria-label={
-                        online
-                          ? `Frame rate ${cameraRates[cam.sensorId] ?? "--"}`
-                          : "Frame rate unavailable"
-                      }
-                    >
-                      {online ? (cameraRates[cam.sensorId] ?? "--") : "--"}
-                    </span>
-                  </span>
-                  <span className="card-image">
+                  <span className="ss-camera-card-thumb">
                     <span
                       className="snapshot-image"
                       data-topic={cam.cmdTopic}
                       data-topic-name={`scenescape/cmd/camera/${cam.name}`}
                     >
-                      <span className="cam-offline">Camera Offline</span>
+                      <span className="cam-offline">Offline</span>
                       <img
                         id={`strip-overlay-preview-${cam.sensorId}`}
                         data-ss-card-sensor={cam.sensorId}
                         data-ss-card-name={cam.name}
                         className="display-none"
-                        alt={`${cam.name} view`}
+                        alt=""
                       />
                     </span>
+                    <span
+                      className={`ss-live-pill ss-live-pill-mini${online ? " is-live" : ""}`}
+                    >
+                      <span className="ss-live-dot" aria-hidden="true" />
+                      {online ? "Live" : "Offline"}
+                    </span>
                   </span>
-                </button>
+                  <span className="ss-camera-card-foot">
+                    <span className="ss-camera-card-name" title={cam.name}>
+                      {cam.name}
+                    </span>
+                    {isSuperuser && (
+                      <a
+                        href={cam.calibrateHref}
+                        className="ss-camera-card-cal"
+                        title={`Calibrate ${cam.name}`}
+                        aria-label={`Calibrate ${cam.name}`}
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        <i className="bi bi-crosshair" aria-hidden="true" />
+                      </a>
+                    )}
+                  </span>
+                </div>
               );
             })}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

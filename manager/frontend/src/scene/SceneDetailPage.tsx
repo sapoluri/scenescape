@@ -452,6 +452,7 @@ function SceneDetailInner({ bootstrap }: Props) {
               sensors={sensors}
               cameraRates={cameraRates}
               authToken={bootstrap.authToken}
+              isSuperuser={isSuperuser}
             />
           ) : (
             <SceneMapPane

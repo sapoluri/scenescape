@@ -3,148 +3,216 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* Floating camera strip overlay — bottom-left of the 3D viewport.
- * Mount inside .ss-viewport (position: relative). The root also carries
- * .ss-camera-strip so the shared card rules in ../scene/CameraStrip.css
- * (card chrome, live/offline badges) apply verbatim. */
+/* Floating camera panel — bottom-left of the 3D viewport.
+ * Compositor-style floating panel; the preview viewer borrows Rerun's
+ * viewer chrome (header bar with live pill + actions over a dark feed).
+ * Mount inside .ss-viewport (position: relative). */
 
-.ss-camera-strip-overlay {
+.ss-camera-panel {
   position: absolute;
   left: 12px;
   bottom: 12px;
   z-index: 30;
-  max-width: min(44rem, calc(100% - 24px));
+  width: 340px;
+  max-width: calc(100% - 24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ss-elevated) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--ss-card-border);
-  border-radius: var(--ss-radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  color: var(--ss-text);
-  font-size: var(--ss-type-workspace-body, 0.8125rem);
+  background: color-mix(in srgb, #1e1e21 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--ss-text, #f5f5f7);
+  font-size: 12.5px;
 }
 
-/* Header: collapse toggle + count badge */
-.ss-strip-overlay-head {
+/* Header */
+.ss-camera-panel-head {
   display: flex;
   align-items: center;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--ss-card-border);
-  background: color-mix(in srgb, var(--ss-surface) 55%, transparent);
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.ss-strip-collapse {
+.ss-camera-panel-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 6px;
+  gap: 7px;
+  padding: 3px 8px;
   border: 0;
   border-radius: 6px;
   background: none;
-  color: var(--ss-text);
+  color: var(--ss-text, #f5f5f7);
   font: inherit;
   font-weight: 600;
-  font-size: var(--ss-type-workspace-section, 0.875rem);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.ss-strip-collapse:hover {
-  background: color-mix(in srgb, var(--ss-text) 8%, transparent);
+.ss-camera-panel-toggle:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
 
-.ss-strip-collapse:focus-visible {
-  outline: 2px solid var(--ss-brand-soft);
+.ss-camera-panel-toggle:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
   outline-offset: 1px;
 }
 
-.ss-strip-count {
+.ss-camera-panel-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.35rem;
-  padding: 0 0.35rem;
+  min-width: 20px;
+  padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ss-brand) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ss-brand) 40%, transparent);
-  color: var(--ss-text);
-  font-size: var(--ss-type-workspace-micro, 0.625rem);
+  background: rgba(10, 132, 255, 0.18);
+  border: 1px solid rgba(10, 132, 255, 0.45);
+  color: var(--ss-text, #f5f5f7);
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-/* Horizontal card strip */
-.ss-strip-cards {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 8px 10px;
-  scrollbar-width: thin;
-}
-
-.ss-strip-empty {
-  margin: 4px 2px;
-  color: var(--ss-text-muted);
-  font-size: var(--ss-type-workspace-body, 0.8125rem);
-  white-space: nowrap;
-}
-
-/* Cards are buttons: reset native button chrome, keep .card/.camera-card
- * visuals from the shared stylesheets. */
-button.ss-strip-card {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: 0 0 10.5rem;
+.ss-camera-panel-body {
   display: flex;
   flex-direction: column;
-  padding: 0;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  overflow: hidden;
+  min-height: 0;
 }
 
-button.ss-strip-card:hover {
-  border-color: var(--ss-brand-soft);
+/* Live pill (Rerun-style) */
+.ss-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: rgba(120, 120, 128, 0.25);
+  color: #aeaeb2;
+  flex: none;
 }
 
-button.ss-strip-card:focus-visible {
-  outline: 2px solid var(--ss-brand-soft);
-  outline-offset: 1px;
+.ss-live-pill.is-live {
+  background: rgba(48, 209, 88, 0.16);
+  color: #30d158;
 }
 
-button.ss-strip-card.is-selected {
-  border-color: var(--ss-brand);
-  box-shadow: 0 0 0 1px var(--ss-brand);
+.ss-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 
-.ss-camera-strip-overlay .camera-card .card-header {
-  padding: 0.3rem 0.4rem;
-  font-size: 0.72rem;
-  background: transparent;
+.ss-live-pill.is-live .ss-live-dot {
+  box-shadow: 0 0 6px currentColor;
+  animation: ss-live-pulse 2s ease-in-out infinite;
 }
 
-.ss-strip-card-name {
+@keyframes ss-live-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.ss-live-pill-mini {
+  font-size: 9px;
+  padding: 1px 6px;
+}
+
+/* Preview viewer (Rerun-style viewer chrome) */
+.ss-camera-viewer {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ss-camera-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ss-camera-viewer-name {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  flex: 1;
+  min-width: 0;
 }
 
-.ss-camera-strip-overlay .card-image {
+.ss-camera-viewer-rate {
+  color: var(--ss-text-muted, #8e8e93);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.ss-camera-viewer-actions {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.ss-camera-calibrate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(10, 132, 255, 0.16);
+  border: 1px solid rgba(10, 132, 255, 0.5);
+  color: #5eb2ff;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ss-camera-calibrate:hover {
+  background: rgba(10, 132, 255, 0.28);
+  color: #8ec9ff;
+}
+
+.ss-camera-viewer-close {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  width: 100%;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ss-camera-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ss-text, #f5f5f7);
+}
+
+.ss-camera-viewer-feed {
+  background: #000;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ss-surface) 70%, var(--ss-elevated));
 }
 
-.ss-camera-strip-overlay .snapshot-image {
+.ss-camera-viewer-feed .snapshot-image {
   position: relative;
   display: flex;
   align-items: center;
@@ -153,81 +221,162 @@ button.ss-strip-card.is-selected {
   height: 100%;
 }
 
-.ss-camera-strip-overlay .card-image img,
-.ss-camera-strip-overlay .snapshot-image img {
+.ss-camera-viewer-feed img {
   object-fit: contain;
   width: 100%;
   height: 100%;
 }
 
-/* Keep previews hidden until MQTT sets a frame (scoped fallback; the
- * page-level rule is scoped under .ss-scene-detail--workspace). */
-.ss-camera-strip-overlay .card-image img.display-none,
-.ss-camera-strip-overlay .snapshot-image img.display-none {
+.ss-camera-viewer-feed img.display-none {
   display: none !important;
 }
 
-.ss-camera-strip-overlay .cam-offline {
+.ss-camera-viewer-feed .cam-offline {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ss-text-muted);
-  font-size: var(--ss-type-workspace-micro, 0.625rem);
+  color: #636366;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
-/* Expanded inline live feed ("in place" preview) */
-.ss-strip-expanded {
-  padding: 8px 10px 0;
+/* Card strip */
+.ss-camera-cards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px;
+  scrollbar-width: thin;
 }
 
-.ss-strip-expanded .snapshot-image {
+.ss-camera-empty {
+  margin: 4px 2px;
+  color: var(--ss-text-muted, #8e8e93);
+  white-space: nowrap;
+}
+
+.ss-camera-card {
+  flex: 0 0 9.5rem;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  outline: none;
+}
+
+.ss-camera-card:hover {
+  border-color: rgba(10, 132, 255, 0.55);
+}
+
+.ss-camera-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--ss-accent, #0a84ff);
+}
+
+.ss-camera-card.is-selected {
+  border-color: var(--ss-accent, #0a84ff);
+  box-shadow: 0 0 0 1px var(--ss-accent, #0a84ff);
+}
+
+.ss-camera-card.is-previewing .ss-camera-card-thumb {
+  box-shadow: inset 0 0 0 2px rgba(10, 132, 255, 0.7);
+}
+
+.ss-camera-card-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+}
+
+.ss-camera-card-thumb .snapshot-image {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border: 1px solid var(--ss-card-border);
-  border-radius: calc(var(--ss-radius) - 4px);
-  background: color-mix(in srgb, var(--ss-surface) 70%, var(--ss-elevated));
+  height: 100%;
 }
 
-.ss-strip-expanded-meta {
+.ss-camera-card-thumb img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+
+.ss-camera-card-thumb img.display-none {
+  display: none !important;
+}
+
+.ss-camera-card-thumb .cam-offline {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 2px 2px;
+  justify-content: center;
+  color: #636366;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.ss-strip-expanded-name {
-  font-weight: 600;
+.ss-camera-card-thumb .ss-live-pill-mini {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+}
+
+.ss-camera-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.ss-camera-card-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
-.ss-strip-expanded-meta .rate {
-  margin-left: auto;
-  color: var(--ss-text-muted);
-  font-size: var(--ss-type-workspace-micro, 0.625rem);
-  font-variant-numeric: tabular-nums;
+.ss-camera-card-cal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 5px;
+  color: var(--ss-text-muted, #8e8e93);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.ss-camera-card-cal:hover {
+  background: rgba(10, 132, 255, 0.2);
+  color: #5eb2ff;
 }
 
 /* Collapsed: header only */
-.ss-camera-strip-overlay.is-collapsed .ss-strip-overlay-head {
+.ss-camera-panel.is-collapsed .ss-camera-panel-head {
   border-bottom: 0;
 }
 
 @media (max-width: 720px) {
-  .ss-camera-strip-overlay {
-    max-width: calc(100% - 24px);
+  .ss-camera-panel {
+    width: calc(100% - 24px);
   }
-  button.ss-strip-card {
-    flex-basis: 8.5rem;
+  .ss-camera-card {
+    flex-basis: 8rem;
   }
 }

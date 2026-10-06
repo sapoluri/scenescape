@@ -33,6 +33,7 @@ export interface SinglePaneViewProps {
   cameraRates?: Record<string, string>;
   authToken: string;
   assetMarkColors?: Record<string, string>;
+  isSuperuser?: boolean;
 }
 
 /**
@@ -51,6 +52,7 @@ export function SinglePaneView({
   cameraRates = {},
   authToken,
   assetMarkColors,
+  isSuperuser = false,
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -73,6 +75,7 @@ export function SinglePaneView({
           sensors={sensors}
           cameraRates={cameraRates}
           authToken={authToken}
+          isSuperuser={isSuperuser}
         />
       </div>
 
@@ -97,7 +100,12 @@ export function SinglePaneView({
         </div>
         <div className="ss-sp-dock-body">
           {dockTab === "outliner" && <Outliner />}
-          {dockTab === "properties" && <Properties sceneName={sceneName} />}
+          {dockTab === "properties" && (
+            <Properties
+              sceneName={sceneName}
+              cameras={isSuperuser ? cameras : []}
+            />
+          )}
           {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
         </div>
       </aside>
