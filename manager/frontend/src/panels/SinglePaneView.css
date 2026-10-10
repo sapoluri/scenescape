@@ -17,14 +17,167 @@
   position: relative;
 }
 
+/* Right dock — thin handle when open; slim vertical-tab rail when collapsed. */
 .ss-sp-dock {
-  width: 300px;
+  --ss-sp-dock-width: 300px;
+  --ss-sp-dock-rail: 0.875rem;
+  --ss-sp-dock-rail-collapsed: 1.35rem;
+  width: calc(var(--ss-sp-dock-width) + var(--ss-sp-dock-rail));
   flex: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
   background: var(--ss-panel-bg, #1e1e21);
   border-left: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+  transition: width 180ms ease;
+  overflow: hidden;
+}
+
+.ss-sp-dock.is-collapsed {
+  width: var(--ss-sp-dock-rail-collapsed);
+}
+
+.ss-sp-dock-rail {
+  flex: none;
+  width: var(--ss-sp-dock-rail);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+  background: var(--ss-panel-bg, #1e1e21);
+  border-right: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+  z-index: 1;
+  transition: width 180ms ease;
+}
+
+.ss-sp-dock.is-collapsed .ss-sp-dock-rail {
+  width: var(--ss-sp-dock-rail-collapsed);
+  border-right: none;
+}
+
+/* Centers the chevron (and collapsed tabs) as a vertical group. */
+.ss-sp-dock-rail-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+.ss-sp-dock:not(.is-collapsed) .ss-sp-dock-rail-inner {
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
+}
+
+.ss-sp-dock.is-collapsed .ss-sp-dock-rail-inner {
+  flex: none;
+  gap: 0.35rem;
+}
+
+.ss-sp-dock-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 1.75rem;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+}
+
+.ss-sp-dock:not(.is-collapsed) .ss-sp-dock-toggle {
+  /* Fill the thin rail so the hit target is full-height; icon stays centered. */
+  flex: 1;
+  height: auto;
+  min-height: 1.75rem;
+}
+
+.ss-sp-dock-toggle .bi {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.ss-sp-dock-toggle:hover {
+  color: var(--ss-text, #f5f5f7);
+  background: color-mix(
+    in srgb,
+    var(--ss-fill-secondary, rgba(120, 120, 128, 0.22)) 90%,
+    transparent
+  );
+}
+
+.ss-sp-dock-toggle:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: -2px;
+}
+
+.ss-sp-dock-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+
+.ss-sp-dock-rail-tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.55rem 0;
+  border: none;
+  background: none;
+  color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-left: 2px solid transparent;
+}
+
+.ss-sp-dock-rail-tab:hover {
+  color: var(--ss-text, #f5f5f7);
+  background: color-mix(
+    in srgb,
+    var(--ss-fill-secondary, rgba(120, 120, 128, 0.18)) 80%,
+    transparent
+  );
+}
+
+.ss-sp-dock-rail-tab.is-active {
+  color: var(--ss-text, #f5f5f7);
+  border-left-color: var(--ss-accent, #0a84ff);
+}
+
+.ss-sp-dock-rail-tab:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: -2px;
+}
+
+.ss-sp-dock-main {
+  flex: 1;
+  min-width: 0;
+  width: var(--ss-sp-dock-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 120ms ease;
+}
+
+.ss-sp-dock.is-collapsed .ss-sp-dock-main {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  overflow: hidden;
 }
 
 .ss-sp-dock-tabs {
@@ -68,4 +221,12 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-sp-dock,
+  .ss-sp-dock-rail,
+  .ss-sp-dock-main {
+    transition: none;
+  }
 }

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
 import type {
@@ -25,6 +25,24 @@ const DOCK_TABS: { id: DockTab; label: string }[] = [
   { id: "properties", label: "Properties" },
   { id: "telemetry", label: "Telemetry" },
 ];
+
+const DOCK_COLLAPSED_KEY = "ss-sp-dock-collapsed";
+
+function readDockCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(DOCK_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeDockCollapsed(collapsed: boolean): void {
+  try {
+    sessionStorage.setItem(DOCK_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* private mode / quota */
+  }
+}
 
 export interface SinglePaneViewProps {
   sceneId: string;
@@ -60,6 +78,7 @@ export function SinglePaneView({
   isSuperuser = false,
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
+  const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   // undefined = editor closed; null = create-new form; string = edit asset.
@@ -70,6 +89,21 @@ export function SinglePaneView({
   const [replayMode, setReplayMode] = useState(false);
 
   useOpenSceneHotkey(() => setSceneDialogOpen(true));
+
+  const setCollapsed = useCallback((collapsed: boolean) => {
+    setDockCollapsed(collapsed);
+    writeDockCollapsed(collapsed);
+  }, []);
+
+  const pickTab = useCallback(
+    (id: DockTab) => {
+      setDockTab(id);
+      if (dockCollapsed) {
+        setCollapsed(false);
+      }
+    },
+    [dockCollapsed, setCollapsed],
+  );
 
   return (
     <div className="ss-single-pane">
@@ -96,38 +130,85 @@ export function SinglePaneView({
         )}
       </div>
 
-      <aside className="ss-sp-dock" aria-label="Scene panels">
-        <div
-          className="ss-sp-dock-tabs"
-          role="tablist"
-          aria-label="Outliner, Properties, Telemetry"
-        >
-          {DOCK_TABS.map((t) => (
+      <aside
+        className={`ss-sp-dock${dockCollapsed ? " is-collapsed" : ""}`}
+        aria-label="Scene panels"
+      >
+        <div className="ss-sp-dock-rail">
+          <div className="ss-sp-dock-rail-inner">
             <button
-              key={t.id}
               type="button"
-              role="tab"
-              aria-selected={dockTab === t.id}
-              className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
-              onClick={() => setDockTab(t.id)}
+              className="ss-sp-dock-toggle"
+              aria-expanded={!dockCollapsed}
+              aria-controls="ss-sp-dock-main"
+              title={dockCollapsed ? "Expand panel" : "Collapse panel"}
+              onClick={() => setCollapsed(!dockCollapsed)}
             >
-              {t.label}
+              <i
+                className={`bi ${dockCollapsed ? "bi-chevron-left" : "bi-chevron-right"}`}
+                aria-hidden="true"
+              />
+              <span className="sr-only">
+                {dockCollapsed ? "Expand panel" : "Collapse panel"}
+              </span>
             </button>
-          ))}
+            {dockCollapsed ? (
+              <div
+                className="ss-sp-dock-rail-tabs"
+                role="tablist"
+                aria-label="Outliner, Properties, Telemetry"
+                aria-orientation="vertical"
+              >
+                {DOCK_TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={dockTab === t.id}
+                    className={`ss-sp-dock-rail-tab${dockTab === t.id ? " is-active" : ""}`}
+                    onClick={() => pickTab(t.id)}
+                    title={t.label}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="ss-sp-dock-body">
-          {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
-          {dockTab === "properties" && (
-            <Properties
-              sceneName={sceneName}
-              sceneId={sceneId}
-              cameras={cameras}
-              sensors={sensors}
-              authToken={authToken}
-              isSuperuser={isSuperuser}
-            />
-          )}
-          {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+        <div id="ss-sp-dock-main" className="ss-sp-dock-main">
+          <div
+            className="ss-sp-dock-tabs"
+            role="tablist"
+            aria-label="Outliner, Properties, Telemetry"
+          >
+            {DOCK_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={dockTab === t.id}
+                className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
+                onClick={() => pickTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="ss-sp-dock-body">
+            {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
+            {dockTab === "properties" && (
+              <Properties
+                sceneName={sceneName}
+                sceneId={sceneId}
+                cameras={cameras}
+                sensors={sensors}
+                authToken={authToken}
+                isSuperuser={isSuperuser}
+              />
+            )}
+            {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+          </div>
         </div>
       </aside>
 
