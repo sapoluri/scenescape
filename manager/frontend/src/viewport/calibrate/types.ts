@@ -9,9 +9,6 @@ export type CalibratePair = {
 
 export type CalibrateStep = "select" | "pick" | "save";
 
-/** Which side still needs a click; `null` = either side may start. */
-export type CalibratePending = "cam" | "scene" | null;
-
 export type CameraOptics = {
   fx: number;
   fy: number;
@@ -29,6 +26,19 @@ export type CameraOptics = {
 
 export const TRANSFORM_TYPE_POINT =
   "3d-2d point correspondence" as const;
+
+/** Zip equal-index points into pairs (legacy cam/map lists by index). */
+export function zipCalibratePairs(
+  camPoints: [number, number][],
+  mapPoints: [number, number, number][],
+): CalibratePair[] {
+  const n = Math.min(camPoints.length, mapPoints.length);
+  const out: CalibratePair[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push({ cam: camPoints[i], map: mapPoints[i] });
+  }
+  return out;
+}
 
 export function pairsToTransforms(pairs: CalibratePair[]): number[] {
   const cam = pairs.flatMap((p) => [p.cam[0], p.cam[1]]);

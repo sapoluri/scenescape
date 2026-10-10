@@ -2,12 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { create } from "zustand";
-import type {
-  CalibratePair,
-  CalibratePending,
-  CalibrateStep,
-  CameraOptics,
-} from "./types";
+import type { CalibrateStep, CameraOptics } from "./types";
+import { zipCalibratePairs } from "./types";
 
 export type CalibrateState = {
   active: boolean;
@@ -16,14 +12,10 @@ export type CalibrateState = {
   sensorId: string | null;
   cameraName: string;
   step: CalibrateStep;
-  pairs: CalibratePair[];
-  /**
-   * Which side still needs a click to finish the in-progress pair.
-   * `null` = either side may start the next correspondence.
-   */
-  pending: CalibratePending;
-  draftCam: [number, number] | null;
-  draftMap: [number, number, number] | null;
+  /** Camera-image points (px). Paired with mapPoints by index. */
+  camPoints: [number, number][];
+  /** Floor / scene points (meters, Z-up). Paired with camPoints by index. */
+  mapPoints: [number, number, number][];
   dirty: boolean;
   optics: CameraOptics | null;
   /** Latest calibration JPEG object URL (for map coverage projection). */
@@ -63,26 +55,31 @@ export type CalibrateState = {
       fov: number;
     } | null,
   ) => void;
-  /** Place / complete from the camera feed (either start or finish a pair). */
-  pickCam: (pt: [number, number]) => void;
-  /** Place / complete from the 3D map (either start or finish a pair). */
-  pickMap: (pt: [number, number, number]) => void;
-  clearDraft: () => void;
-  /** Remove a correspondence by index (right-click). */
-  removePairAt: (index: number) => void;
-  undoPair: () => void;
-  resetPairs: () => void;
+  addCamPoint: (pt: [number, number]) => void;
+  addMapPoint: (pt: [number, number, number]) => void;
+  moveCamPoint: (index: number, pt: [number, number]) => void;
+  moveMapPoint: (index: number, pt: [number, number, number]) => void;
+  removeCamPointAt: (index: number) => void;
+  removeMapPointAt: (index: number) => void;
+  undoPoint: () => void;
+  resetPoints: () => void;
   markClean: () => void;
 };
 
-function afterPairs(pairs: CalibratePair[], dirty: boolean) {
+function stepForCounts(camN: number, mapN: number): CalibrateStep {
+  return camN >= 4 && mapN >= 4 && camN === mapN ? "save" : "pick";
+}
+
+function afterPoints(
+  camPoints: [number, number][],
+  mapPoints: [number, number, number][],
+  dirty: boolean,
+) {
   return {
-    pairs,
-    draftCam: null as [number, number] | null,
-    draftMap: null as [number, number, number] | null,
-    pending: null as CalibratePending,
+    camPoints,
+    mapPoints,
     dirty,
-    step: (pairs.length >= 4 ? "save" : "pick") as CalibrateStep,
+    step: stepForCounts(camPoints.length, mapPoints.length),
   };
 }
 
@@ -92,10 +89,8 @@ const idle = {
   sensorId: null as string | null,
   cameraName: "",
   step: "select" as CalibrateStep,
-  pairs: [] as CalibratePair[],
-  pending: null as CalibratePending,
-  draftCam: null as [number, number] | null,
-  draftMap: null as [number, number, number] | null,
+  camPoints: [] as [number, number][],
+  mapPoints: [] as [number, number, number][],
   dirty: false,
   optics: null as CameraOptics | null,
   feedImageUrl: null as string | null,
@@ -107,8 +102,9 @@ const idle = {
  * In-viewport calibration mode (Phase 2.3). Separate from the geometry
  * viewport store so Live editing state stays untouched.
  *
- * Correspondences are bidirectional: click camera then map, or map then
- * camera. Colors are assigned by pair index (see `colors.ts`).
+ * Interaction matches the legacy 2D/3D calibrator: double-click to add a
+ * point on either view, right-click to delete, click-drag to move. Points
+ * correspond by index (same color/number on each side).
  */
 export const useCalibrateStore = create<CalibrateState>()((set) => ({
   ...idle,
@@ -120,7 +116,6 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
       sensorId,
       cameraName,
       step: "pick",
-      pending: null,
     }),
   exit: () => set({ ...idle }),
   setStep: (step) => set({ step }),
@@ -128,72 +123,76 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
   setFeedImageUrl: (feedImageUrl) => set({ feedImageUrl }),
   setPreviewPose: (previewPose) => set({ previewPose }),
   setPriorPose: (priorPose) => set({ priorPose }),
-  pickCam: (pt) =>
+  addCamPoint: (pt) =>
+    set((s) =>
+      afterPoints([...s.camPoints, pt], s.mapPoints, true),
+    ),
+  addMapPoint: (pt) =>
+    set((s) =>
+      afterPoints(s.camPoints, [...s.mapPoints, pt], true),
+    ),
+  moveCamPoint: (index, pt) =>
     set((s) => {
-      if (s.draftMap) {
-        return afterPairs(
-          [...s.pairs, { cam: pt, map: s.draftMap }],
-          true,
-        );
-      }
-      // Start (or replace) a camera-side draft; wait for the map.
-      return {
-        draftCam: pt,
-        draftMap: null,
-        pending: "scene" as const,
-        dirty: true,
-      };
-    }),
-  pickMap: (pt) =>
-    set((s) => {
-      if (s.draftCam) {
-        return afterPairs(
-          [...s.pairs, { cam: s.draftCam, map: pt }],
-          true,
-        );
-      }
-      // Start (or replace) a map-side draft; wait for the camera feed.
-      return {
-        draftMap: pt,
-        draftCam: null,
-        pending: "cam" as const,
-        dirty: true,
-      };
-    }),
-  clearDraft: () =>
-    set({
-      draftCam: null,
-      draftMap: null,
-      pending: null,
-    }),
-  removePairAt: (index) =>
-    set((s) => {
-      if (index < 0 || index >= s.pairs.length) {
+      if (index < 0 || index >= s.camPoints.length) {
         return s;
       }
-      return afterPairs(
-        s.pairs.filter((_, i) => i !== index),
+      const camPoints = s.camPoints.slice();
+      camPoints[index] = pt;
+      return afterPoints(camPoints, s.mapPoints, true);
+    }),
+  moveMapPoint: (index, pt) =>
+    set((s) => {
+      if (index < 0 || index >= s.mapPoints.length) {
+        return s;
+      }
+      const mapPoints = s.mapPoints.slice();
+      mapPoints[index] = pt;
+      return afterPoints(s.camPoints, mapPoints, true);
+    }),
+  removeCamPointAt: (index) =>
+    set((s) => {
+      if (index < 0 || index >= s.camPoints.length) {
+        return s;
+      }
+      return afterPoints(
+        s.camPoints.filter((_, i) => i !== index),
+        s.mapPoints,
         true,
       );
     }),
-  undoPair: () =>
+  removeMapPointAt: (index) =>
     set((s) => {
-      if (s.draftCam || s.draftMap) {
-        return {
-          draftCam: null,
-          draftMap: null,
-          pending: null,
-        };
+      if (index < 0 || index >= s.mapPoints.length) {
+        return s;
       }
-      const pairs = s.pairs.slice(0, -1);
-      return afterPairs(pairs, pairs.length > 0 || s.dirty);
+      return afterPoints(
+        s.camPoints,
+        s.mapPoints.filter((_, i) => i !== index),
+        true,
+      );
     }),
-  resetPairs: () =>
+  undoPoint: () =>
+    set((s) => {
+      if (s.camPoints.length === 0 && s.mapPoints.length === 0) {
+        return s;
+      }
+      if (s.camPoints.length > s.mapPoints.length) {
+        return afterPoints(s.camPoints.slice(0, -1), s.mapPoints, true);
+      }
+      if (s.mapPoints.length > s.camPoints.length) {
+        return afterPoints(s.camPoints, s.mapPoints.slice(0, -1), true);
+      }
+      // Equal counts: drop the last index from both sides.
+      return afterPoints(
+        s.camPoints.slice(0, -1),
+        s.mapPoints.slice(0, -1),
+        s.camPoints.length > 1 || s.dirty,
+      );
+    }),
+  resetPoints: () =>
     set({
-      pairs: [],
-      draftCam: null,
-      draftMap: null,
-      pending: null,
+      camPoints: [],
+      mapPoints: [],
       dirty: true,
       step: "pick",
     }),
@@ -202,4 +201,13 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
 
 export function getCalibrateState(): CalibrateState {
   return useCalibrateStore.getState();
+}
+
+/** Completed equal-index correspondences (for solve / save). */
+export function getCalibratePairs(): ReturnType<typeof zipCalibratePairs> {
+  const s = useCalibrateStore.getState();
+  if (s.camPoints.length !== s.mapPoints.length) {
+    return [];
+  }
+  return zipCalibratePairs(s.camPoints, s.mapPoints);
 }

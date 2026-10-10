@@ -19,11 +19,19 @@ export function enterCameraCalibrate(args: {
   ) {
     return;
   }
-  // Select tool: left-click must place map points, not orbit the view.
+  // Select tool so orbit / pick are free for double-click + drag points.
   getViewportState().setTool("select");
   useCalibrateStore.getState().enter(args);
 }
 
-export { useCalibrateStore, getCalibrateState } from "./calibrateStore";
-export { pairsToTransforms, TRANSFORM_TYPE_POINT } from "./types";
+export {
+  getCalibratePairs,
+  getCalibrateState,
+  useCalibrateStore,
+} from "./calibrateStore";
+export {
+  pairsToTransforms,
+  TRANSFORM_TYPE_POINT,
+  zipCalibratePairs,
+} from "./types";
 export type { CalibratePair, CameraOptics } from "./types";

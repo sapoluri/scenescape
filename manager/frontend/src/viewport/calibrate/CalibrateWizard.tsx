@@ -12,7 +12,11 @@ import { api, type RestError } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
 import { getViewportState } from "../store";
 import { useCalibrateStore } from "./calibrateStore";
-import { pairsToTransforms, TRANSFORM_TYPE_POINT } from "./types";
+import {
+  pairsToTransforms,
+  TRANSFORM_TYPE_POINT,
+  zipCalibratePairs,
+} from "./types";
 import "./CalibrateWizard.css";
 
 type Props = {
@@ -34,18 +38,19 @@ export function CalibrateWizard({
   const cameraId = useCalibrateStore((s) => s.cameraId);
   const sensorId = useCalibrateStore((s) => s.sensorId);
   const cameraName = useCalibrateStore((s) => s.cameraName);
-  const pairs = useCalibrateStore((s) => s.pairs);
-  const pending = useCalibrateStore((s) => s.pending);
-  const draftCam = useCalibrateStore((s) => s.draftCam);
-  const draftMap = useCalibrateStore((s) => s.draftMap);
+  const camPoints = useCalibrateStore((s) => s.camPoints);
+  const mapPoints = useCalibrateStore((s) => s.mapPoints);
   const dirty = useCalibrateStore((s) => s.dirty);
   const optics = useCalibrateStore((s) => s.optics);
   const priorPose = useCalibrateStore((s) => s.priorPose);
   const exit = useCalibrateStore((s) => s.exit);
-  const undoPair = useCalibrateStore((s) => s.undoPair);
-  const resetPairs = useCalibrateStore((s) => s.resetPairs);
+  const undoPoint = useCalibrateStore((s) => s.undoPoint);
+  const resetPoints = useCalibrateStore((s) => s.resetPoints);
   const markClean = useCalibrateStore((s) => s.markClean);
   const enter = useCalibrateStore((s) => s.enter);
+  const pairCount =
+    camPoints.length === mapPoints.length ? camPoints.length : 0;
+  const hasPoints = camPoints.length > 0 || mapPoints.length > 0;
   const [busy, setBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
@@ -55,7 +60,7 @@ export function CalibrateWizard({
   );
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
 
-  const canSave = pairs.length >= 4 && dirty && !busy && Boolean(optics);
+  const canSave = pairCount >= 4 && dirty && !busy && Boolean(optics);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,7 +157,9 @@ export function CalibrateWizard({
         },
         resolution: { width: optics.width, height: optics.height },
         transform_type: TRANSFORM_TYPE_POINT,
-        transforms: pairsToTransforms(pairs),
+        transforms: pairsToTransforms(
+          zipCalibratePairs(camPoints, mapPoints),
+        ),
       });
       toast.show("Camera calibration saved", "ok");
       markClean();
@@ -195,8 +202,10 @@ export function CalibrateWizard({
   }, []);
 
   const stepLabel =
-    pairs.length < 4
-      ? `Step 2 · Pick points (${pairs.length}/4+)`
+    pairCount < 4
+      ? camPoints.length !== mapPoints.length
+        ? `Step 2 · Pick points (cam ${camPoints.length} / map ${mapPoints.length})`
+        : `Step 2 · Pick points (${pairCount}/4+)`
       : "Step 3–4 · Frustum updated · Save when ready";
 
   return (
@@ -233,28 +242,23 @@ export function CalibrateWizard({
       </label>
       <span className="ss-cal-wizard-step" title={stepLabel}>
         {stepLabel}
-        {pending === "scene"
-          ? " · waiting for 3D click"
-          : pending === "cam"
-            ? " · waiting for camera click"
-            : ""}
       </span>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <button
         type="button"
         className="ss-tool-btn"
-        disabled={(pairs.length === 0 && !draftCam && !draftMap) || busy}
-        onClick={undoPair}
-        title="Undo last pair or clear draft"
+        disabled={!hasPoints || busy}
+        onClick={undoPoint}
+        title="Undo last point"
       >
         Undo
       </button>
       <button
         type="button"
         className="ss-tool-btn"
-        disabled={(pairs.length === 0 && !draftCam && !draftMap) || busy}
-        onClick={resetPairs}
-        title="Clear all pairs"
+        disabled={!hasPoints || busy}
+        onClick={resetPoints}
+        title="Clear all points"
       >
         Reset
       </button>
@@ -273,13 +277,15 @@ export function CalibrateWizard({
       </button>
       <button
         type="button"
-        className={`ss-tool-btn ss-tool-save${dirty && pairs.length >= 4 ? " is-dirty" : ""}`}
+        className={`ss-tool-btn ss-tool-save${dirty && pairCount >= 4 ? " is-dirty" : ""}`}
         disabled={!canSave}
         onClick={onSave}
         title={
-          pairs.length < 4
-            ? "Need at least 4 point pairs"
-            : "Save calibration (PUT camera)"
+          camPoints.length !== mapPoints.length
+            ? "Need an equal number of points in each view"
+            : pairCount < 4
+              ? "Need at least 4 point pairs"
+              : "Save calibration (PUT camera)"
         }
       >
         <i className="bi bi-check-lg" aria-hidden="true" />
