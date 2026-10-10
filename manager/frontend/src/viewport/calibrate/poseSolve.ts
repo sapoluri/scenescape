@@ -110,7 +110,9 @@ function arePointsCoplanar(pts: [number, number, number][]): boolean {
       pts[i][1] - a[1],
       pts[i][2] - a[2],
     );
-    if (Math.abs(d.dot(n)) > 1e-3) {
+    // Loose threshold: floor-map mesh hits often vary by a few cm in Z and
+    // should still use ITERATIVE (SQPNP can freeze opencv.js on near-planar sets).
+    if (Math.abs(d.dot(n)) > 0.05) {
       return false;
     }
   }
@@ -129,14 +131,17 @@ export type SolvedPose = {
  * Mirror legacy cameracalibrate.js solvePnP + OpenCV→OpenGL flip + invert.
  * Returns pose in the same convention as REST `translation` / `rotation`.
  */
-export async function solveCameraPose(
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
+function solvePnPOnce(
+  cv: CvModule,
   pairs: CalibratePair[],
   optics: CameraOptics,
-): Promise<SolvedPose | null> {
-  if (pairs.length < 4) {
-    return null;
-  }
-  const cv = await loadOpenCv();
+): SolvedPose | null {
   const imagePts = pairs.map((p) => p.cam);
   const objectPts = pairs.map((p) => p.map);
 
@@ -174,9 +179,16 @@ export async function solveCameraPose(
   const tvec = new cv.Mat();
   const R = new cv.Mat();
   try {
-    const method = arePointsCoplanar(objectPts)
-      ? cv.SOLVEPNP_ITERATIVE
-      : cv.SOLVEPNP_SQPNP;
+    // Floor-map picks are nearly coplanar. SQPNP in opencv.js can hang the
+    // main thread on degenerate / near-planar sets, so prefer ITERATIVE and
+    // only try SQPNP when it exists and points are clearly non-planar.
+    const iterative = cv.SOLVEPNP_ITERATIVE;
+    const sqpnp = cv.SOLVEPNP_SQPNP;
+    const useSqpnp =
+      typeof sqpnp === "number" &&
+      sqpnp !== iterative &&
+      !arePointsCoplanar(objectPts);
+    const method = useSqpnp ? sqpnp : iterative;
     const ok = cv.solvePnP(
       objectPointsMat,
       imagePointsMat,
@@ -215,6 +227,13 @@ export async function solveCameraPose(
     const q = new Quaternion().setFromRotationMatrix(T);
     const e = new Euler().setFromQuaternion(q, "XYZ");
     const r2d = (r: number) => (r * 180) / Math.PI;
+    if (
+      !Number.isFinite(position.x) ||
+      !Number.isFinite(position.y) ||
+      !Number.isFinite(position.z)
+    ) {
+      return null;
+    }
     const fov =
       optics.fy > 0
         ? r2d(2 * Math.atan(optics.height / (2 * optics.fy)))
@@ -233,4 +252,22 @@ export async function solveCameraPose(
     tvec.delete();
     R.delete();
   }
+}
+
+/**
+ * Mirror legacy cameracalibrate.js solvePnP + OpenCV→OpenGL flip + invert.
+ * Returns pose in the same convention as REST `translation` / `rotation`.
+ */
+export async function solveCameraPose(
+  pairs: CalibratePair[],
+  optics: CameraOptics,
+): Promise<SolvedPose | null> {
+  if (pairs.length < 4) {
+    return null;
+  }
+  // Let the UI paint the 4th marker before pulling in OpenCV / solving.
+  await yieldToUi();
+  const cv = await loadOpenCv();
+  await yieldToUi();
+  return solvePnPOnce(cv, pairs, optics);
 }

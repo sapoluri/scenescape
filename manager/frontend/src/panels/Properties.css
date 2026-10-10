@@ -56,6 +56,15 @@
   cursor: pointer;
 }
 
+.ss-prop-section {
+  color: var(--ss-text-muted, #8e8e93);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
 .ss-prop-grid3 {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -74,6 +83,17 @@
   color: var(--ss-text, #f5f5f7);
 }
 
+.ss-prop-check.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ss-prop-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ss-accent, #0a84ff);
+}
+
 .ss-prop-hint {
   margin: 2px 0 0;
   font-size: 11.5px;
@@ -81,7 +101,47 @@
   color: var(--ss-text-muted, #8e8e93);
 }
 
-.ss-prop-calibrate {
+.ss-prop-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 7px;
+  background: rgba(120, 120, 128, 0.12);
+  border: 1px solid rgba(120, 120, 128, 0.28);
+  color: var(--ss-text-muted, #8e8e93);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ss-prop-save.is-dirty {
+  background: rgba(10, 132, 255, 0.2);
+  border-color: rgba(10, 132, 255, 0.55);
+  color: #8ec9ff;
+}
+
+.ss-prop-save:hover:not(:disabled).is-dirty {
+  background: rgba(10, 132, 255, 0.3);
+  color: #cce4ff;
+}
+
+.ss-prop-save:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ss-prop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ss-prop-calibrate,
+.ss-prop-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -98,9 +158,30 @@
   cursor: pointer;
 }
 
-.ss-prop-calibrate:hover {
+.ss-prop-calibrate:hover:not(:disabled) {
   background: rgba(10, 132, 255, 0.24);
   color: #8ec9ff;
+}
+
+.ss-prop-calibrate:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ss-prop-danger {
+  background: rgba(255, 69, 58, 0.12);
+  border-color: rgba(255, 69, 58, 0.45);
+  color: #ff8a80;
+}
+
+.ss-prop-danger:hover {
+  background: rgba(255, 69, 58, 0.22);
+  color: #ffb4ae;
+}
+
+.ss-prop-select {
+  text-align: left;
+  cursor: pointer;
 }
 
 .ss-prop-hint kbd {

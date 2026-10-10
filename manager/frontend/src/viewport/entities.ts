@@ -42,6 +42,7 @@ import {
   centroidOf,
   seedEntitiesFromGeometry,
 } from "./geometrySync";
+import { getPersistState } from "./persistStore";
 import { getViewportState, useViewportStore } from "./store";
 import type {
   CameraEntity,
@@ -288,7 +289,9 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   // so it must live under the identity outer group — parenting it under the
   // transformed rig would apply the rig transform twice and the frustum
   // would not align with the camera body.
-  const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.5, 30);
+  // Match legacy scenecamera.js: near 0.1, far 10 — a 30 m far plane
+  // clutters the viewport with giant frustums.
+  const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.1, 10);
   const helper = new CameraHelper(persp);
   rig.add(persp);
 
@@ -346,7 +349,9 @@ function buildSensor(e: SensorEntity): EntityNodes {
   const group = new Group();
   const base = new Color(e.color);
   const [x, y, z] = e.position;
-  const radius = Math.max(e.radius, 0.5);
+  // Circle coverage uses radius; scene/poly still show a small footprint cue.
+  const radius =
+    e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
 
   const poleGeo = new CylinderGeometry(0.09, 0.12, 2.2, 10);
   poleGeo.rotateX(Math.PI / 2); // axis Y -> Z (Z-up)
@@ -365,26 +370,28 @@ function buildSensor(e: SensorEntity): EntityNodes {
   head.position.z = 2.3;
   // RingGeometry/CircleGeometry already lie in the XY plane = Z-up floor.
   const ring = new Mesh(
-    new RingGeometry(radius - 0.25, radius, 48),
+    new RingGeometry(Math.max(radius - 0.25, 0.1), radius, 48),
     new MeshBasicMaterial({
       color: base.clone(),
       transparent: true,
-      opacity: 0.35,
+      opacity: e.areaMode === "circle" ? 0.35 : 0.18,
       side: DoubleSide,
     }),
   );
   ring.position.z = 0.06;
+  ring.visible = e.areaMode !== "scene";
   const disc = new Mesh(
     new CircleGeometry(radius, 48),
     new MeshBasicMaterial({
       color: base.clone(),
       transparent: true,
-      opacity: 0.06,
+      opacity: e.areaMode === "circle" ? 0.06 : 0.03,
       side: DoubleSide,
       depthWrite: false,
     }),
   );
   disc.position.z = 0.05;
+  disc.visible = e.areaMode !== "scene";
   const proxy = new Mesh(new BoxGeometry(1.5, 1.5, 2.6), proxyMaterial());
   proxy.position.z = 1.3;
   group.add(pole, head, ring, disc, proxy);
@@ -431,7 +438,10 @@ function isFiniteTriple(v: unknown): v is [number, number, number] {
 
 function parseCameraPose(row: Record<string, unknown>): {
   position: [number, number, number];
+  /** Rig euler for frustum meshes. */
   rotation: [number, number, number];
+  /** REST / solve euler for map projection. */
+  restRotation: [number, number, number];
   fov: number;
 } | null {
   if (!isFiniteTriple(row.translation)) {
@@ -441,12 +451,41 @@ function parseCameraPose(row: Record<string, unknown>): {
     ? [Number(row.rotation[0]), Number(row.rotation[1]), Number(row.rotation[2])]
     : [0, 0, 0];
   const intr = row.intrinsics as
-    | { fov?: unknown; hfov?: unknown; vfov?: unknown }
+    | {
+        fov?: unknown;
+        hfov?: unknown;
+        vfov?: unknown;
+        fx?: unknown;
+        fy?: unknown;
+      }
     | null
     | undefined;
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-  const fov =
-    num(intr?.vfov) ?? num(intr?.fov) ?? (num(intr?.hfov) ?? 60) * 0.75;
+  const res = row.resolution as
+    | { width?: unknown; height?: unknown; w?: unknown; h?: unknown }
+    | unknown[]
+    | null
+    | undefined;
+  const num = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const resObj = Array.isArray(res) ? null : res;
+  const height =
+    num(resObj?.height) ??
+    num(resObj?.h) ??
+    (Array.isArray(res) ? num(res[1]) : null);
+  const fy = num(intr?.fy) ?? num(intr?.fx);
+  // Prefer fy→vfov (legacy scenecamera.js); fall back to explicit vfov/fov.
+  let fov = num(intr?.vfov) ?? num(intr?.fov) ?? null;
+  if (fov == null && fy != null && height != null && fy > 0 && height > 0) {
+    fov = (2 * Math.atan(height / (2 * fy)) * 180) / Math.PI;
+  }
+  if (fov == null) {
+    const hfov = num(intr?.hfov);
+    fov = hfov != null ? hfov * 0.75 : 60;
+  }
+  // Guard against treating focal length (hundreds of px) as degrees.
+  if (fov <= 1 || fov >= 170) {
+    fov = 60;
+  }
   return {
     position: [
       Number(row.translation[0]),
@@ -454,6 +493,7 @@ function parseCameraPose(row: Record<string, unknown>): {
       Number(row.translation[2]),
     ],
     rotation: restPoseToRigEuler(restRot),
+    restRotation: restRot,
     fov,
   };
 }
@@ -480,6 +520,7 @@ async function seedCameras(
       let pose: {
         position: [number, number, number];
         rotation: [number, number, number];
+        restRotation: [number, number, number];
         fov: number;
       } | null = null;
       if (authToken) {
@@ -500,6 +541,8 @@ async function seedCameras(
         position: pose?.position ?? fallback.position,
         target: [0, 0, 0],
         rotation: pose?.rotation ?? fallback.rotation,
+        restRotation: pose?.restRotation ?? [0, 0, 0],
+        posed: pose != null,
         fov: pose?.fov ?? 60,
         color: "#0a84ff",
       } satisfies CameraEntity;
@@ -557,12 +600,15 @@ async function seedSensors(
           position = [Math.cos(angle) * 10, Math.sin(angle) * 10, 0];
         }
       }
+      const areaMode =
+        area?.area === "circle" || area?.area === "poly" ? area.area : "scene";
       return {
         id: s.id,
         type: "sensor",
         name: s.name,
         visible: true,
         position,
+        areaMode,
         radius: areaRadius,
         color: "#bf5af2",
       } satisfies SensorEntity;
@@ -627,6 +673,11 @@ export function useViewportEntities(
         }
       }
       getViewportState().upsertEntities([...regions, ...tripwires]);
+      // Only seed baselines for new ids — don't clear dirty in-progress edits.
+      getPersistState().captureBaselines(
+        [...regions, ...tripwires].map((e) => e.id),
+        { onlyMissing: true },
+      );
     };
 
     seedFromModel();
@@ -638,11 +689,13 @@ export function useViewportEntities(
         return;
       }
       getViewportState().upsertEntities(camEntities);
+      getPersistState().captureBaselines(camEntities.map((e) => e.id));
       const senEntities = await seedSensors(seed.sensors, seed.authToken);
       if (cancelled) {
         return;
       }
       getViewportState().upsertEntities(senEntities);
+      getPersistState().captureBaselines(senEntities.map((e) => e.id));
     })();
 
     return () => {
@@ -651,6 +704,7 @@ export function useViewportEntities(
       const state = getViewportState();
       state.removeEntitiesByType("camera");
       state.removeEntitiesByType("sensor");
+      getPersistState().clearBaselines();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);

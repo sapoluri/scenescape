@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { getViewportState } from "../store";
 import { getCalibrateState, useCalibrateStore } from "./calibrateStore";
 
 /** Enter Phase 2.3 in-viewport calibrate for a scene camera. */
@@ -18,6 +19,8 @@ export function enterCameraCalibrate(args: {
   ) {
     return;
   }
+  // Select tool: left-click must place map points, not orbit the view.
+  getViewportState().setTool("select");
   useCalibrateStore.getState().enter(args);
 }
 

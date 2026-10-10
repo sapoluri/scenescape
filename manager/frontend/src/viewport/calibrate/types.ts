@@ -9,6 +9,7 @@ export type CalibratePair = {
 
 export type CalibrateStep = "select" | "pick" | "save";
 
+/** Which side still needs a click; `null` = either side may start. */
 export type CalibratePending = "cam" | "scene" | null;
 
 export type CameraOptics = {

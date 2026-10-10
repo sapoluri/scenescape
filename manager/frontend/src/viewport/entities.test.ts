@@ -81,6 +81,8 @@ describe("buildCamera frustum alignment", () => {
       position: [10, 5, 3],
       target: [0, 0, 0],
       rotation: [15, -20, 45],
+      restRotation: [15, -20, 45],
+      posed: true,
       fov: 60,
       color: "#0a84ff",
     };

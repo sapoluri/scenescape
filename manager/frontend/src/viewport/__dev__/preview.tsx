@@ -81,6 +81,8 @@ function seedSyntheticEntities(): void {
     position: [-10, -8, 4],
     target: [0, 0, 0],
     rotation: [-35, 0, 45],
+    restRotation: [-35, 0, 45],
+    posed: true,
     fov: 60,
     color: "#0a84ff",
   };
@@ -90,6 +92,7 @@ function seedSyntheticEntities(): void {
     name: "Lidar north",
     visible: true,
     position: [8, 8, 0],
+    areaMode: "circle",
     radius: 6,
     color: "#bf5af2",
   };

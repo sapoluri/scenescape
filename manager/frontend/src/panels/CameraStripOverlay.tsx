@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { useAppToast } from "../components/ToastProvider";
+import { type RestError } from "../lib/rest";
+import { restDeleteTarget } from "../lib/restDelete";
 import { refreshCameraStrip } from "../mqtt";
+import type { SceneCameraBootstrap } from "../scene/types";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { getViewportState, useViewportStore } from "../viewport/store";
-import type { SceneCameraBootstrap } from "../scene/types";
 import "../scene/CameraStrip.css";
 import "./CameraStripOverlay.css";
 
@@ -59,16 +63,24 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
 export function CameraStripOverlay({
   cameras,
   cameraRates = {},
+  authToken,
   isSuperuser = false,
   onSelectCamera,
 }: Props) {
+  const toast = useAppToast();
   const [collapsed, setCollapsed] = useState(false);
   const [liveView, setLiveView] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [onlineBySensor, setOnlineBySensor] = useState<Record<string, boolean>>(
     {},
   );
+  const [deleteTarget, setDeleteTarget] = useState<SceneCameraBootstrap | null>(
+    null,
+  );
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const selectedId = useViewportStore((s) => s.selectedId);
+  const projectCameraId = useViewportStore((s) => s.projectCameraId);
+  const entities = useViewportStore((s) => s.entities);
   const stripRef = useRef<HTMLDivElement>(null);
 
   const onLiveViewChange = (checked: boolean) => {
@@ -85,6 +97,17 @@ export function CameraStripOverlay({
       setPreviewId(null);
     }
   }, [cameras, previewId]);
+
+  // Project needs JPEG frames — turn Live View on and open the preview.
+  useEffect(() => {
+    if (!projectCameraId) {
+      return;
+    }
+    setCollapsed(false);
+    setPreviewId(projectCameraId);
+    setLiveView(true);
+    refreshCameraStrip();
+  }, [projectCameraId]);
 
   // Request MQTT frames for the strip anchors (mirrors CamerasPanelContent).
   useEffect(() => {
@@ -162,6 +185,41 @@ export function CameraStripOverlay({
   const previewOnline = preview
     ? Boolean(onlineBySensor[preview.sensorId])
     : false;
+  const previewEntity = preview ? entities[preview.id] : undefined;
+  const previewPosed =
+    previewEntity?.type === "camera" && previewEntity.posed;
+  const previewProjecting = Boolean(
+    preview && projectCameraId === preview.id,
+  );
+
+  const onConfirmDelete = async () => {
+    if (!deleteTarget?.deleteUrl || !authToken) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const path = deleteTarget.deleteUrl.startsWith("http")
+        ? new URL(deleteTarget.deleteUrl).pathname
+        : deleteTarget.deleteUrl;
+      const m = path.match(/\/cam\/delete\/([^/]+)\/?$/);
+      if (!m) {
+        throw new Error("Unrecognized camera delete URL");
+      }
+      await restDeleteTarget(authToken, {
+        kind: "camera",
+        uid: decodeURIComponent(m[1]),
+      });
+      getViewportState().removeEntity(deleteTarget.id);
+      getViewportState().setProjectCamera(null);
+      setPreviewId((id) => (id === deleteTarget.id ? null : id));
+      setDeleteTarget(null);
+      toast.show(`Deleted ${deleteTarget.name}`, "ok");
+      window.location.reload();
+    } catch (err) {
+      toast.show((err as RestError).message || "Delete failed", "bad");
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     <div
@@ -229,6 +287,28 @@ export function CameraStripOverlay({
                     : "—"}
                 </span>
                 <span className="ss-camera-viewer-actions">
+                  <button
+                    type="button"
+                    className={`ss-camera-project${previewProjecting ? " is-on" : ""}`}
+                    disabled={!previewPosed}
+                    title={
+                      previewPosed
+                        ? previewProjecting
+                          ? "Stop projecting frame onto the scene map"
+                          : "Project live frame onto the scene map"
+                        : "Calibrate this camera first — projection needs a pose"
+                    }
+                    aria-pressed={previewProjecting}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      getViewportState().setProjectCamera(
+                        previewProjecting ? null : preview.id,
+                      );
+                    }}
+                  >
+                    <i className="bi bi-cast" aria-hidden="true" />
+                    <span>Project</span>
+                  </button>
                   {isSuperuser && (
                     <button
                       type="button"
@@ -247,6 +327,20 @@ export function CameraStripOverlay({
                       <span>Calibrate</span>
                     </button>
                   )}
+                  {isSuperuser && preview.deleteUrl ? (
+                    <button
+                      type="button"
+                      className="ss-camera-delete"
+                      title={`Delete ${preview.name}`}
+                      aria-label={`Delete ${preview.name}`}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setDeleteTarget(preview);
+                      }}
+                    >
+                      <i className="bi bi-trash" aria-hidden="true" />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="ss-camera-viewer-close"
@@ -359,6 +453,25 @@ export function CameraStripOverlay({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete camera?"
+        confirmLabel="Delete"
+        danger
+        busy={deleteBusy}
+        onConfirm={() => void onConfirmDelete()}
+        onCancel={() => {
+          if (!deleteBusy) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <p>
+          Are you sure you want to delete{" "}
+          <strong>{deleteTarget?.name}</strong>?
+        </p>
+        <p>This action cannot be undone.</p>
+      </ConfirmDialog>
     </div>
   );
 }

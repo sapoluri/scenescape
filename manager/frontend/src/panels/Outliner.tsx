@@ -1,11 +1,17 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useCallback, useState } from "react";
 import { useViewportStore } from "../viewport/store";
 import type { ViewportEntity, ViewportEntityType } from "../viewport/types";
 import "./Outliner.css";
 
-const GROUPS: { type: ViewportEntityType; label: string; addHref?: string; addLabel?: string }[] = [
+const GROUPS: {
+  type: ViewportEntityType;
+  label: string;
+  addHref?: string;
+  addLabel?: string;
+}[] = [
   { type: "region", label: "Regions" },
   { type: "tripwire", label: "Tripwires" },
   { type: "camera", label: "Cameras", addHref: "?ss=cam-create", addLabel: "Add camera" },
@@ -22,6 +28,32 @@ const TYPE_ICON: Record<ViewportEntityType, string> = {
   mark: "bi-person-walking",
   child: "bi-diagram-2",
 };
+
+const COLLAPSED_KEY = "ss-outliner-collapsed";
+
+function readCollapsed(): Set<ViewportEntityType> {
+  try {
+    const raw = sessionStorage.getItem(COLLAPSED_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const list = JSON.parse(raw) as unknown;
+    if (!Array.isArray(list)) {
+      return new Set();
+    }
+    return new Set(list.filter((t): t is ViewportEntityType => typeof t === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsed(collapsed: Set<ViewportEntityType>): void {
+  try {
+    sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+  } catch {
+    /* private mode / quota */
+  }
+}
 
 function OutlinerRow({ entity }: { entity: ViewportEntity }) {
   const selectedId = useViewportStore((s) => s.selectedId);
@@ -84,6 +116,20 @@ function OutlinerRow({ entity }: { entity: ViewportEntity }) {
  */
 export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
   const entities = useViewportStore((s) => s.entities);
+  const [collapsed, setCollapsed] = useState<Set<ViewportEntityType>>(readCollapsed);
+
+  const toggleGroup = useCallback((type: ViewportEntityType) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      writeCollapsed(next);
+      return next;
+    });
+  }, []);
 
   return (
     <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
@@ -92,11 +138,29 @@ export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
         if (items.length === 0 && !addHref) {
           return null;
         }
+        const isCollapsed = collapsed.has(type);
+        const bodyId = `ss-outliner-body-${type}`;
         return (
-          <div key={type} className="ss-outliner-group">
+          <div
+            key={type}
+            className={`ss-outliner-group${isCollapsed ? " is-collapsed" : ""}`}
+          >
             <div className="ss-outliner-group-header">
-              <span>{label}</span>
-              <span className="ss-outliner-badge">{items.length}</span>
+              <button
+                type="button"
+                className="ss-outliner-group-toggle"
+                aria-expanded={!isCollapsed}
+                aria-controls={bodyId}
+                onClick={() => toggleGroup(type)}
+                title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+              >
+                <i
+                  className={`bi ${isCollapsed ? "bi-chevron-right" : "bi-chevron-down"}`}
+                  aria-hidden="true"
+                />
+                <span className="ss-outliner-group-label">{label}</span>
+                <span className="ss-outliner-badge">{items.length}</span>
+              </button>
               {isSuperuser && addHref ? (
                 <a
                   className="ss-outliner-add"
@@ -109,9 +173,17 @@ export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
                 </a>
               ) : null}
             </div>
-            {items.map((e) => (
-              <OutlinerRow key={e.id} entity={e} />
-            ))}
+            <div
+              id={bodyId}
+              className="ss-outliner-group-body"
+              hidden={isCollapsed}
+              role="group"
+              aria-label={label}
+            >
+              {items.map((e) => (
+                <OutlinerRow key={e.id} entity={e} />
+              ))}
+            </div>
           </div>
         );
       })}

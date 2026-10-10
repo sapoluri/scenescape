@@ -9,6 +9,7 @@ import {
   GridHelper,
   Group,
   LineBasicMaterial,
+  Object3D,
   OrthographicCamera,
   PerspectiveCamera,
   Scene,
@@ -19,6 +20,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { applyBlenderBindings, applyViewPreset } from "./controls";
 import type { EntityNodes } from "./entities";
+import type { CameraProjectionHandle } from "./projection/projectOntoMap";
 import { getViewportState } from "./store";
 
 export type ViewportTheme = "light" | "dark";
@@ -41,6 +43,12 @@ export interface ViewportWorld {
   gizmo: TransformControls;
   markRoot: Group;
   entityRoot: Group;
+  /** Scene floor map (PNG plane or posed GLB). */
+  mapRoot: Group;
+  /** Loaded map object (for projection / raycasts); null until loaded. */
+  sceneMesh: Object3D | null;
+  /** Optional camera→map coverage projector (calibrate / live). */
+  cameraProjection: CameraProjectionHandle | null;
   /** Entity id → three nodes, owned by the entity reconciler. */
   entityNodes: Map<string, EntityNodes>;
   /** Per-frame callbacks registered by renderers (label projection…). */
@@ -129,6 +137,10 @@ export function createViewportWorld(
   const axes = new AxesHelper(4);
   scene.add(axes);
 
+  const mapRoot = new Group();
+  mapRoot.name = "scene-map";
+  scene.add(mapRoot);
+
   const markRoot = new Group();
   markRoot.name = "marks";
   scene.add(markRoot);
@@ -209,6 +221,9 @@ export function createViewportWorld(
     gizmo,
     markRoot,
     entityRoot,
+    mapRoot,
+    sceneMesh: null,
+    cameraProjection: null,
     entityNodes: new Map(),
     onFrame,
     getActiveCamera: () => activeCamera,

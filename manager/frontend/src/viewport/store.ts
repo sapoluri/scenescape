@@ -7,6 +7,7 @@ import {
   snapshotGeometry,
   type GeometrySnapshot,
 } from "./geometrySync";
+import { getPersistState } from "./persistStore";
 import type { ToolId, ViewportEntity, ViewPreset } from "./types";
 
 export interface ViewportUiState {
@@ -18,6 +19,13 @@ export interface ViewportUiState {
   showTrails: boolean;
   showFrustums: boolean;
   activeTool: ToolId;
+  /**
+   * Camera entity id whose live JPEG is projected onto the scene map
+   * (legacy "project frame"). Null = off. Only one projector at a time.
+   */
+  projectCameraId: string | null;
+  /** Map-projection overlay opacity 0–1 (legacy opacity slider). */
+  projectOpacity: number;
 }
 
 interface HistorySnapshot {
@@ -49,6 +57,8 @@ interface ViewportStore extends ViewportUiState {
   setTool: (tool: ToolId) => void;
   setViewPreset: (preset: ViewPreset) => void;
   setOrtho: (ortho: boolean) => void;
+  setProjectCamera: (id: string | null) => void;
+  setProjectOpacity: (opacity: number) => void;
   toggleOverlay: (key: "showGrid" | "showLabels" | "showTrails" | "showFrustums") => void;
   /**
    * Snapshot the current structural state onto the undo stack. Call BEFORE
@@ -68,6 +78,8 @@ const initialUi: ViewportUiState = {
   showTrails: true,
   showFrustums: true,
   activeTool: "live",
+  projectCameraId: null,
+  projectOpacity: 0.55,
 };
 
 const HISTORY_LIMIT = 50;
@@ -124,6 +136,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       }
       const next = { ...s.entities };
       delete next[id];
+      getPersistState().dropBaseline(id);
       return {
         entities: next,
         selectedId: s.selectedId === id ? null : s.selectedId,
@@ -139,6 +152,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
           if (s.selectedId === id) {
             removedSelected = true;
           }
+          getPersistState().dropBaseline(id);
           continue;
         }
         next[id] = e;
@@ -149,18 +163,25 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
         structVersion: s.structVersion + 1,
       };
     }),
-  clearEntities: () =>
-    set((s) => ({
+  clearEntities: () => {
+    getPersistState().clearBaselines();
+    return set((s) => ({
       entities: {},
       selectedId: null,
       structVersion: s.structVersion + 1,
       past: [],
       future: [],
-    })),
+    }));
+  },
   select: (id) => set({ selectedId: id }),
   setTool: (activeTool) => set({ activeTool }),
   setViewPreset: (viewPreset) => set({ viewPreset }),
   setOrtho: (ortho) => set({ ortho }),
+  setProjectCamera: (id) => set({ projectCameraId: id }),
+  setProjectOpacity: (opacity) =>
+    set({
+      projectOpacity: Math.min(1, Math.max(0, opacity)),
+    }),
   toggleOverlay: (key) => set((s) => ({ [key]: !s[key] }) as Partial<ViewportStore>),
   commitHistory: () =>
     set((s) => ({

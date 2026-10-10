@@ -54,16 +54,31 @@ export interface CameraEntity extends ViewportEntityBase {
   position: [number, number, number];
   /** Look-at target [x, y, z] meters. */
   target: [number, number, number];
-  /** Orientation as XYZ euler degrees, Z-up (from calibration when known). */
+  /**
+   * Rig orientation as XYZ euler degrees, Z-up (REST pose × Rx(π) when
+   * calibrated; look-at fallback when not).
+   */
   rotation: [number, number, number];
+  /**
+   * REST / solve XYZ euler degrees for map projection. Meaningful only when
+   * `posed` is true (matches calibrate previewPose.rotation).
+   */
+  restRotation: [number, number, number];
+  /** True when REST calibration translation is known (projection eligible). */
+  posed: boolean;
   fov: number;
   color: string;
 }
 
+/** Sensor coverage area (matches AREA_CHOICES / SensorCalibratePanel). */
+export type SensorAreaMode = "scene" | "circle" | "poly";
+
 export interface SensorEntity extends ViewportEntityBase {
   type: "sensor";
   position: [number, number, number];
-  /** Coverage radius in meters. */
+  /** Coverage area type: entire scene, circle, or polygon. */
+  areaMode: SensorAreaMode;
+  /** Coverage radius in meters (circle mode). */
   radius: number;
   color: string;
 }

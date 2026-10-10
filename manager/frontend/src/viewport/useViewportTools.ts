@@ -17,6 +17,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { useCalibrateStore } from "./calibrate/calibrateStore";
 import { lookAtOriginEuler } from "./entities";
 import {
   bboxOf,
@@ -315,6 +316,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
         position,
         target: [0, 0, 0],
         rotation: lookAtOriginEuler(position),
+        restRotation: [0, 0, 0],
+        posed: false,
         fov: 60,
         color: "#0a84ff",
       };
@@ -335,6 +338,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         name: `Sensor ${count + 1}`,
         visible: true,
         position: [pt[0], pt[1], 0],
+        areaMode: "circle",
         radius: 5,
         color: "#bf5af2",
       };
@@ -500,6 +504,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
   const activeTool = useViewportStore((s) => s.activeTool);
   const selectedId = useViewportStore((s) => s.selectedId);
   const structVersion = useViewportStore((s) => s.structVersion);
+  // While calibrating, left-click places map points (start or finish a pair).
+  const calPickScene = useCalibrateStore((s) => s.active);
 
   useEffect(() => {
     if (!world) {
@@ -523,9 +529,13 @@ export function useViewportTools(world: ViewportWorld | null): void {
           (entity.type === "region" || entity.type === "tripwire")));
 
     // Left-drag orbits only for navigation/transform tools; creation and
-    // precise-select tools reserve it.
+    // precise-select tools reserve it. Calibrate map-pick always wins.
     const orbitLeftDrag =
-      tool === "live" || tool === "move" || tool === "rotate" || tool === "scale";
+      !calPickScene &&
+      (tool === "live" ||
+        tool === "move" ||
+        tool === "rotate" ||
+        tool === "scale");
     world.orbit.mouseButtons.LEFT = orbitLeftDrag ? MOUSE.ROTATE : null;
 
     if (!canTransform || !nodes || !entity) {
@@ -558,7 +568,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
       gizmo.showY = true;
       gizmo.showZ = true;
     };
-  }, [world, activeTool, selectedId, structVersion]);
+  }, [world, activeTool, selectedId, structVersion, calPickScene]);
 
   /* ---------------- keyboard ------------------------------------------- */
   useEffect(() => {

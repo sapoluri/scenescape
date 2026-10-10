@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { SceneObjectMark } from "../scene/map/liveMarks";
 import { getViewportState, useViewportStore } from "./store";
 import type { MarkEntity } from "./types";
@@ -175,9 +176,13 @@ export function useViewportMarks({ assetMarkColors }: MarkHookOptions): void {
 
 /** Read-only access to the marks currently in the store (for tests/debug). */
 export function useViewportMarksList(): MarkEntity[] {
-  return useViewportStore((s) =>
-    Object.values(s.entities).filter(
-      (e): e is MarkEntity => e.type === "mark",
+  // useShallow is required: filtering Object.values yields a new array every
+  // getSnapshot call; without it Telemetry hits React error #185 (max update depth).
+  return useViewportStore(
+    useShallow((s) =>
+      Object.values(s.entities).filter(
+        (e): e is MarkEntity => e.type === "mark",
+      ),
     ),
   );
 }

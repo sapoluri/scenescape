@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef, useState } from "react";
-import { persistGeometry } from "../lib/legacyBridge";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAppToast } from "../components/ToastProvider";
+import { saveAllDirtyEntities } from "../lib/entityPersist";
 import { CameraStripOverlay } from "../panels/CameraStripOverlay";
 import type {
   SceneCameraBootstrap,
@@ -14,7 +15,14 @@ import { useCalibrateStore } from "./calibrate/calibrateStore";
 import { useCalibrateSession } from "./calibrate/useCalibrateSession";
 import { useViewportEntities } from "./entities";
 import { useViewportMarks } from "./marks";
+import {
+  countDirtyPersistable,
+  getPersistState,
+  usePersistStore,
+} from "./persistStore";
 import { attachMarkRenderer } from "./renderMarks";
+import { useLiveCameraProjection } from "./useLiveCameraProjection";
+import { useSceneMap } from "./useSceneMap";
 import { getViewportState, useViewportStore } from "./store";
 import { TOOLS, toolDef } from "./tools";
 import type { ToolId } from "./types";
@@ -38,6 +46,9 @@ import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./w
 
 interface SceneViewportProps {
   sceneId: string;
+  sceneName?: string;
+  mapUrl?: string | null;
+  mapScale?: number | null;
   assetMarkColors?: Record<string, string>;
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
@@ -90,6 +101,7 @@ function remapStoreIds(idMap: Record<string, string>): void {
   const s = getViewportState();
   let changed = false;
   const next = { ...s.entities };
+  const baselines = { ...getPersistState().baselines };
   for (const [oldId, newId] of Object.entries(idMap)) {
     if (!oldId || !newId || oldId === newId) {
       continue;
@@ -100,11 +112,16 @@ function remapStoreIds(idMap: Record<string, string>): void {
     }
     delete next[oldId];
     next[newId] = { ...entity, id: newId };
+    if (oldId in baselines) {
+      baselines[newId] = baselines[oldId];
+      delete baselines[oldId];
+    }
     changed = true;
   }
   if (!changed) {
     return;
   }
+  usePersistStore.setState({ baselines });
   useViewportStore.setState((state) => ({
     entities: next,
     selectedId:
@@ -113,15 +130,29 @@ function remapStoreIds(idMap: Record<string, string>): void {
         : state.selectedId,
     structVersion: state.structVersion + 1,
   }));
+  getPersistState().captureBaselines(Object.values(idMap));
 }
 
-function ToolHeader() {
+function ToolHeader({
+  sceneId,
+  authToken,
+  cameras,
+  sensors,
+}: {
+  sceneId: string;
+  authToken: string;
+  cameras: SceneCameraBootstrap[];
+  sensors: SceneSensorBootstrap[];
+}) {
+  const toast = useAppToast();
   const activeTool = useViewportStore((s) => s.activeTool);
   const setTool = useViewportStore((s) => s.setTool);
   const canUndo = useViewportStore((s) => s.past.length > 0);
   const canRedo = useViewportStore((s) => s.future.length > 0);
   const undo = useViewportStore((s) => s.undo);
   const redo = useViewportStore((s) => s.redo);
+  const entities = useViewportStore((s) => s.entities);
+  const baselines = usePersistStore((s) => s.baselines);
   const [roiDirty, setRoiDirty] = useState(false);
   const [tripDirty, setTripDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,23 +170,75 @@ function ToolHeader() {
     };
   }, []);
 
-  const dirty = roiDirty || tripDirty;
+  const entityDirtyCount = useMemo(
+    () => countDirtyPersistable(),
+    [entities, baselines],
+  );
+  const geometryDirty = roiDirty || tripDirty;
+  const dirtyCount = entityDirtyCount + (geometryDirty ? 1 : 0);
+  const dirty = dirtyCount > 0;
 
-  const onSave = async () => {
-    if (saving || !dirty) {
+  const onSaveAll = async () => {
+    if (saving || !dirty || !authToken || !sceneId) {
       return;
     }
     setSaving(true);
     try {
-      const result = await persistGeometry();
-      if (result && typeof result === "object") {
+      const result = await saveAllDirtyEntities({
+        authToken,
+        sceneId,
+        cameras,
+        sensors,
+        geometryDirty,
+      });
+      if (result.roiIds) {
         remapStoreIds(result.roiIds);
+      }
+      if (result.tripIds) {
         remapStoreIds(result.tripIds);
       }
+      if (result.saved > 0 && !result.errors.length) {
+        toast.show(
+          result.saved === 1
+            ? "Saved 1 change"
+            : `Saved ${result.saved} changes`,
+          "ok",
+        );
+      } else if (result.saved > 0 && result.errors.length) {
+        toast.show(
+          `Saved ${result.saved}; ${result.errors.length} failed`,
+          "bad",
+        );
+      } else if (result.errors.length) {
+        toast.show(result.errors[0] || "Save failed", "bad");
+      }
+      setRoiDirty(false);
+      setTripDirty(false);
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
+        ev.preventDefault();
+        void onSaveAll();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, saving, authToken, sceneId, cameras, sensors, geometryDirty]);
 
   const pickTool = (id: ToolId) => {
     setTool(id);
@@ -206,16 +289,22 @@ function ToolHeader() {
       <button
         type="button"
         className={`ss-tool-btn ss-tool-save${dirty ? " is-dirty" : ""}`}
-        disabled={!dirty || saving}
-        onClick={onSave}
+        disabled={!dirty || saving || !authToken}
+        onClick={() => void onSaveAll()}
         title={
           dirty
-            ? "Save regions/tripwires to the server (same as the 2D editors)"
-            : "No unsaved geometry changes"
+            ? `Save all unsaved cameras, sensors, regions, and tripwires (${entityDirtyCount} item${entityDirtyCount === 1 ? "" : "s"}${geometryDirty ? " + geometry" : ""}) — Ctrl+S`
+            : "No unsaved changes"
         }
       >
         <i className="bi bi-check-lg" aria-hidden="true" />
-        <span className="ss-tool-label">{saving ? "Saving…" : "Save"}</span>
+        <span className="ss-tool-label">
+          {saving
+            ? "Saving…"
+            : dirty
+              ? `Save all${entityDirtyCount > 0 ? ` (${entityDirtyCount})` : ""}`
+              : "Save all"}
+        </span>
       </button>
       <span
         className="ss-tool-hint"
@@ -230,6 +319,9 @@ function ToolHeader() {
 
 export function SceneViewport({
   sceneId,
+  sceneName = "",
+  mapUrl = null,
+  mapScale = null,
   assetMarkColors,
   cameras,
   sensors,
@@ -273,9 +365,17 @@ export function SceneViewport({
     world?.setTheme(theme);
   }, [world, theme]);
 
+  useSceneMap(world, {
+    sceneId,
+    sceneName,
+    mapUrl,
+    mapScale,
+    authToken,
+  });
   useViewportEntities(world, { cameras, sensors, authToken });
   useViewportTools(world);
   useCalibrateSession(world, authToken);
+  useLiveCameraProjection(world, cameras);
 
   const calibrating = useCalibrateStore((s) => s.active);
 
@@ -418,7 +518,12 @@ export function SceneViewport({
           cameras={cameras}
         />
       ) : (
-        <ToolHeader />
+        <ToolHeader
+          sceneId={sceneId}
+          authToken={authToken}
+          cameras={cameras}
+          sensors={sensors}
+        />
       )}
       <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
         <div className={calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"}>

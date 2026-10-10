@@ -117,6 +117,9 @@ export function attachMarkRenderer(world: ViewportWorld): () => void {
       pts = [];
       trailPts.set(id, pts);
     }
+    // Trail samples are stored in world XY; the Line is parented under the
+    // mark group, so write local coords (world − current mark position) or
+    // the trail becomes random squiggles as the object moves.
     const last = pts[0];
     if (!last || Math.hypot(last.x - x, last.y - y) > 0.05) {
       pts.unshift(new Vector3(x, y, 0.08));
@@ -127,12 +130,17 @@ export function attachMarkRenderer(world: ViewportWorld): () => void {
     const attr = nodes.trail.geometry.getAttribute(
       "position",
     ) as BufferAttribute;
-    for (let i = 0; i < TRAIL_POINTS; i++) {
-      const p = pts[Math.min(i, pts.length - 1)] ?? new Vector3(x, y, 0.08);
-      attr.setXYZ(i, p.x, p.y, p.z);
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      attr.setXYZ(i, p.x - x, p.y - y, p.z);
+    }
+    // Clear unused slots so a shorter trail doesn't leave a stale segment.
+    for (let i = pts.length; i < TRAIL_POINTS; i++) {
+      attr.setXYZ(i, 0, 0, 0.08);
     }
     attr.needsUpdate = true;
-    nodes.trail.visible = show;
+    nodes.trail.geometry.setDrawRange(0, Math.max(pts.length, 1));
+    nodes.trail.visible = show && pts.length >= 2;
   };
 
   const reconcileMarks = () => {

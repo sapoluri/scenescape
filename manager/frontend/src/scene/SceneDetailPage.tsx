@@ -183,6 +183,8 @@ function SceneDetailInner({ bootstrap }: Props) {
         <SinglePaneView
           sceneId={scene.id}
           sceneName={scene.name}
+          mapUrl={scene.mapUrl}
+          mapScale={scene.scale}
           assetMarkColors={bootstrap.assetMarkColors}
           cameras={cameras}
           sensors={sensors}
@@ -207,7 +209,7 @@ function SceneDetailInner({ bootstrap }: Props) {
         onCamerasChange={setCameras}
         onSensorsChange={setSensors}
         onChildrenChange={() => {}}
-        mapUrl={null}
+        mapUrl={scene.mapUrl}
         mapScale={scene.scale}
       />
       <ConfirmDialog

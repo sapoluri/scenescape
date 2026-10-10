@@ -13,13 +13,52 @@
 .ss-outliner-group-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px 3px;
+  gap: 2px;
+  padding: 2px 4px 2px 2px;
+}
+
+.ss-outliner-group-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ss-outliner-group-toggle:hover {
+  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.12));
+  color: var(--ss-text, #f5f5f7);
+}
+
+.ss-outliner-group-toggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--ss-accent, #0a84ff);
+  outline: none;
+}
+
+.ss-outliner-group-toggle .bi {
+  font-size: 11px;
+  flex: none;
+  width: 12px;
+}
+
+.ss-outliner-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ss-outliner-badge {
@@ -31,6 +70,17 @@
   color: var(--ss-text-secondary, #aeaeb2);
   font-size: 11px;
   font-weight: 600;
+  flex: none;
+}
+
+.ss-outliner-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ss-outliner-group-body[hidden] {
+  display: none;
 }
 
 .ss-outliner-row {
@@ -91,20 +141,17 @@
 }
 
 .ss-outliner-add {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   color: var(--ss-text-muted, #8a8f9e);
   text-decoration: none;
+  flex: none;
 }
 .ss-outliner-add:hover {
   background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
   color: var(--ss-accent, #0a84ff);
-}
-.ss-outliner-group-header .ss-outliner-badge {
-  margin-right: 2px;
 }

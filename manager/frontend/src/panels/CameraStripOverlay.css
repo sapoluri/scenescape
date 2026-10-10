@@ -210,6 +210,7 @@
   flex: none;
 }
 
+.ss-camera-project,
 .ss-camera-calibrate {
   display: inline-flex;
   align-items: center;
@@ -225,9 +226,41 @@
   cursor: pointer;
 }
 
+.ss-camera-project:hover:not(:disabled),
 .ss-camera-calibrate:hover {
   background: rgba(10, 132, 255, 0.28);
   color: #8ec9ff;
+}
+
+.ss-camera-project.is-on {
+  background: rgba(10, 132, 255, 0.32);
+  border-color: rgba(10, 132, 255, 0.75);
+  color: #cce4ff;
+}
+
+.ss-camera-project:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ss-camera-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.45);
+  color: #ff8a80;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ss-camera-delete:hover {
+  background: rgba(255, 69, 58, 0.22);
+  color: #ffb4ae;
 }
 
 .ss-camera-viewer-close {

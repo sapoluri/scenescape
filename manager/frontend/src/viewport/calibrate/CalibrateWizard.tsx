@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useState } from "react";
-import { api, type RestError } from "../../lib/rest";
 import { useAppToast } from "../../components/ToastProvider";
+import {
+  frameToBase64,
+  getAutocalibrationStatus,
+  startCameraAutocalibration,
+} from "../../lib/autocalibration";
+import { api, type RestError } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
 import { getViewportState } from "../store";
 import { useCalibrateStore } from "./calibrateStore";
@@ -31,6 +36,8 @@ export function CalibrateWizard({
   const cameraName = useCalibrateStore((s) => s.cameraName);
   const pairs = useCalibrateStore((s) => s.pairs);
   const pending = useCalibrateStore((s) => s.pending);
+  const draftCam = useCalibrateStore((s) => s.draftCam);
+  const draftMap = useCalibrateStore((s) => s.draftMap);
   const dirty = useCalibrateStore((s) => s.dirty);
   const optics = useCalibrateStore((s) => s.optics);
   const priorPose = useCalibrateStore((s) => s.priorPose);
@@ -41,8 +48,37 @@ export function CalibrateWizard({
   const enter = useCalibrateStore((s) => s.enter);
   const [busy, setBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoReady, setAutoReady] = useState(false);
+  const [autoTitle, setAutoTitle] = useState(
+    "Checking auto-calibration service…",
+  );
+  const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
 
   const canSave = pairs.length >= 4 && dirty && !busy && Boolean(optics);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const status = await getAutocalibrationStatus();
+      if (cancelled) {
+        return;
+      }
+      if (status?.status === "running" || status?.status === "success") {
+        setAutoReady(true);
+        setAutoTitle("Click to calibrate the camera automatically");
+      } else {
+        setAutoReady(false);
+        setAutoTitle(
+          status?.message ||
+            "Auto Calibrate system not available for this scene",
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sceneId, sensorId]);
 
   const restorePrior = () => {
     if (!cameraId || !priorPose) {
@@ -61,6 +97,34 @@ export function CalibrateWizard({
     }
     restorePrior();
     exit();
+  };
+
+  const onAutoCalibrate = async () => {
+    if (!sensorId || !optics || autoBusy) {
+      return;
+    }
+    if (!feedImageUrl) {
+      toast.show("Wait for a calibration frame first", "bad");
+      return;
+    }
+    setAutoBusy(true);
+    try {
+      const image = await frameToBase64(feedImageUrl);
+      const result = await startCameraAutocalibration(sensorId, image, [
+        [optics.fx, 0, optics.cx],
+        [0, optics.fy, optics.cy],
+        [0, 0, 1],
+      ]);
+      if (result.status === "error") {
+        toast.show(result.message || "Auto calibrate failed", "bad");
+      } else {
+        toast.show("Auto calibrate started", "ok");
+      }
+    } catch (err) {
+      toast.show((err as Error).message || "Auto calibrate failed", "bad");
+    } finally {
+      setAutoBusy(false);
+    }
   };
 
   const onSave = async () => {
@@ -169,26 +233,43 @@ export function CalibrateWizard({
       </label>
       <span className="ss-cal-wizard-step" title={stepLabel}>
         {stepLabel}
-        {pending === "scene" ? " · waiting for 3D click" : ""}
+        {pending === "scene"
+          ? " · waiting for 3D click"
+          : pending === "cam"
+            ? " · waiting for camera click"
+            : ""}
       </span>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <button
         type="button"
         className="ss-tool-btn"
-        disabled={pairs.length === 0 || busy}
+        disabled={(pairs.length === 0 && !draftCam && !draftMap) || busy}
         onClick={undoPair}
-        title="Undo last pair"
+        title="Undo last pair or clear draft"
       >
         Undo
       </button>
       <button
         type="button"
         className="ss-tool-btn"
-        disabled={pairs.length === 0 || busy}
+        disabled={(pairs.length === 0 && !draftCam && !draftMap) || busy}
         onClick={resetPairs}
         title="Clear all pairs"
       >
         Reset
+      </button>
+      <button
+        type="button"
+        className="ss-tool-btn"
+        id="auto-autocalibration"
+        disabled={!autoReady || autoBusy || !feedImageUrl || busy}
+        title={autoTitle}
+        onClick={() => void onAutoCalibrate()}
+      >
+        <i className="bi bi-lightning" aria-hidden="true" />
+        <span className="ss-tool-label">
+          {autoBusy ? "Starting…" : "Auto Calibrate"}
+        </span>
       </button>
       <button
         type="button"

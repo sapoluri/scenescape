@@ -29,6 +29,8 @@ const DOCK_TABS: { id: DockTab; label: string }[] = [
 export interface SinglePaneViewProps {
   sceneId: string;
   sceneName: string;
+  mapUrl?: string | null;
+  mapScale?: number | null;
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
   cameraRates?: Record<string, string>;
@@ -48,6 +50,8 @@ export interface SinglePaneViewProps {
 export function SinglePaneView({
   sceneId,
   sceneName,
+  mapUrl = null,
+  mapScale = null,
   cameras,
   sensors,
   cameraRates = {},
@@ -75,6 +79,9 @@ export function SinglePaneView({
         ) : (
           <SceneViewport
             sceneId={sceneId}
+            sceneName={sceneName}
+            mapUrl={mapUrl}
+            mapScale={mapScale}
             assetMarkColors={assetMarkColors}
             cameras={cameras}
             sensors={sensors}
@@ -113,7 +120,11 @@ export function SinglePaneView({
           {dockTab === "properties" && (
             <Properties
               sceneName={sceneName}
-              cameras={isSuperuser ? cameras : []}
+              sceneId={sceneId}
+              cameras={cameras}
+              sensors={sensors}
+              authToken={authToken}
+              isSuperuser={isSuperuser}
             />
           )}
           {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}

@@ -1,13 +1,46 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { useAppToast } from "../components/ToastProvider";
+import {
+  frameToBase64,
+  getAutocalibrationStatus,
+  startCameraAutocalibration,
+} from "../lib/autocalibration";
+import {
+  fovFromFy,
+  fyFromFov,
+  opticsPersistKey,
+  parseCameraOptics,
+} from "../lib/cameraOptics";
+import {
+  entityPersistKey,
+  persistCameraEntity,
+  persistRegionEntity,
+  persistSensorEntity,
+  persistTripwireEntity,
+} from "../lib/entityPersist";
+import { api, type RestError } from "../lib/rest";
+import { restDeleteTarget } from "../lib/restDelete";
 import { enterCameraCalibrate } from "../viewport/calibrate";
+import type { CameraOptics } from "../viewport/calibrate/types";
+import { restPoseToRigEuler } from "../viewport/entities";
+import {
+  writeRegionToModel,
+  writeTripwireToModel,
+} from "../viewport/geometrySync";
+import {
+  markEntityPersistClean,
+  usePersistStore,
+} from "../viewport/persistStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
   MarkEntity,
   RegionEntity,
+  SensorAreaMode,
   SensorEntity,
   TripwireEntity,
   ViewportEntity,
@@ -39,32 +72,49 @@ function polylineLength(points: [number, number][]): number {
   return l;
 }
 
+/** Round to a fixed number of fractional digits (avoids float noise in inputs). */
+function roundDigits(n: number, digits: number): number {
+  if (!Number.isFinite(n)) {
+    return n;
+  }
+  const f = 10 ** digits;
+  return Math.round(n * f) / f;
+}
+
 function NumField({
   label,
   value,
   step = 0.1,
+  digits,
   onCommit,
 }: {
   label: string;
   value: number;
   step?: number;
+  /** When set, display and commit are rounded to this many fractional digits. */
+  digits?: number;
   onCommit: (v: number) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
+  const display =
+    digits !== undefined && Number.isFinite(value)
+      ? value.toFixed(digits)
+      : String(value);
+  const inputStep = digits !== undefined ? 10 ** -digits : step;
   return (
     <label className="ss-prop-field">
       <span className="ss-prop-label">{label}</span>
       <input
         type="number"
-        step={step}
+        step={inputStep}
         className="ss-prop-input"
-        value={text ?? String(value)}
+        value={text ?? display}
         onChange={(ev) => setText(ev.target.value)}
         onBlur={() => {
           if (text !== null) {
             const v = Number(text);
             if (Number.isFinite(v)) {
-              onCommit(v);
+              onCommit(digits !== undefined ? roundDigits(v, digits) : v);
             }
             setText(null);
           }
@@ -88,7 +138,13 @@ function ReadField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NameRow({ entity }: { entity: ViewportEntity }) {
+function NameRow({
+  entity,
+  onRenamed,
+}: {
+  entity: ViewportEntity;
+  onRenamed?: (name: string) => void;
+}) {
   const [text, setText] = useState<string | null>(null);
   return (
     <label className="ss-prop-field ss-prop-name">
@@ -99,7 +155,9 @@ function NameRow({ entity }: { entity: ViewportEntity }) {
         onChange={(ev) => setText(ev.target.value)}
         onBlur={() => {
           if (text !== null && text.trim()) {
-            getViewportState().updateEntity(entity.id, { name: text.trim() });
+            const name = text.trim();
+            getViewportState().updateEntity(entity.id, { name });
+            onRenamed?.(name);
           }
           setText(null);
         }}
@@ -113,7 +171,13 @@ function NameRow({ entity }: { entity: ViewportEntity }) {
   );
 }
 
-function ColorRow({ entity }: { entity: ViewportEntity & { color: string } }) {
+function ColorRow({
+  entity,
+  onColor,
+}: {
+  entity: ViewportEntity & { color: string };
+  onColor?: (color: string) => void;
+}) {
   return (
     <label className="ss-prop-field">
       <span className="ss-prop-label">Color</span>
@@ -121,20 +185,97 @@ function ColorRow({ entity }: { entity: ViewportEntity & { color: string } }) {
         type="color"
         className="ss-prop-color"
         value={entity.color}
-        onChange={(ev) =>
-          getViewportState().updateEntity(entity.id, { color: ev.target.value })
-        }
+        onChange={(ev) => {
+          getViewportState().updateEntity(entity.id, {
+            color: ev.target.value,
+          });
+          onColor?.(ev.target.value);
+        }}
       />
     </label>
   );
 }
 
+function SaveBar({
+  dirty,
+  busy,
+  savedFlash,
+  onSave,
+  canPersist = true,
+  disabledTitle,
+}: {
+  dirty: boolean;
+  busy: boolean;
+  savedFlash: boolean;
+  onSave: () => void;
+  canPersist?: boolean;
+  disabledTitle?: string;
+}) {
+  const enabled = dirty && canPersist && !busy;
+  return (
+    <button
+      type="button"
+      className={`ss-prop-save${dirty && canPersist ? " is-dirty" : ""}`}
+      disabled={!enabled}
+      title={
+        !canPersist
+          ? disabledTitle || "Cannot save this item"
+          : dirty
+            ? "Save changes to the database"
+            : "No unsaved changes"
+      }
+      onClick={onSave}
+    >
+      <i className="bi bi-check-lg" aria-hidden="true" />
+      <span>{busy ? "Saving…" : savedFlash ? "Saved" : "Save"}</span>
+    </button>
+  );
+}
+
+function useEntityDirty(entity: ViewportEntity): boolean {
+  const baseline = usePersistStore((s) => s.baselines[entity.id]);
+  return baseline === undefined || baseline !== entityPersistKey(entity);
+}
+
 function RegionProps({ e }: { e: RegionEntity }) {
-  const patch = (p: Partial<RegionEntity>) =>
+  const toast = useAppToast();
+  const dirty = useEntityDirty(e);
+  const [busy, setBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const patch = (p: Partial<RegionEntity>) => {
     getViewportState().updateEntity(e.id, p);
+    writeRegionToModel({ ...e, ...p } as RegionEntity);
+  };
+
+  const onSave = async () => {
+    if (!dirty || busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const cur = getViewportState().entities[e.id];
+      if (!cur || cur.type !== "region") {
+        return;
+      }
+      await persistRegionEntity(cur);
+      markEntityPersistClean(e.id);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1500);
+      toast.show("Region saved", "ok");
+    } catch (err) {
+      toast.show((err as Error).message || "Save failed", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
-      <NameRow entity={e} />
+      <NameRow
+        entity={e}
+        onRenamed={(name) => writeRegionToModel({ ...e, name })}
+      />
       <ColorRow entity={e} />
       <ReadField label="Area" value={`${fmt(polygonArea(e.points))} m²`} />
       <ReadField label="Corners" value={String(e.points.length)} />
@@ -156,18 +297,54 @@ function RegionProps({ e }: { e: RegionEntity }) {
         />
         <span>Volumetric</span>
       </label>
+      <SaveBar
+        dirty={dirty}
+        busy={busy}
+        savedFlash={savedFlash}
+        onSave={() => void onSave()}
+      />
       <p className="ss-prop-hint">
-        Drag corners and edges in the viewport for precise shaping; values here
-        tune height, buffer, and volume.
+        Drag corners in the viewport to reshape. Save writes this region; use
+        toolbar Save all for bulk edits.
       </p>
     </>
   );
 }
 
 function TripwireProps({ e }: { e: TripwireEntity }) {
+  const toast = useAppToast();
+  const dirty = useEntityDirty(e);
+  const [busy, setBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const onSave = async () => {
+    if (!dirty || busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const cur = getViewportState().entities[e.id];
+      if (!cur || cur.type !== "tripwire") {
+        return;
+      }
+      await persistTripwireEntity(cur);
+      markEntityPersistClean(e.id);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1500);
+      toast.show("Tripwire saved", "ok");
+    } catch (err) {
+      toast.show((err as Error).message || "Save failed", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
-      <NameRow entity={e} />
+      <NameRow
+        entity={e}
+        onRenamed={(name) => writeTripwireToModel({ ...e, name })}
+      />
       <ColorRow entity={e} />
       <ReadField label="Length" value={`${fmt(polylineLength(e.points))} m`} />
       <ReadField label="Points" value={String(e.points.length)} />
@@ -175,95 +352,620 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
         label="Direction"
         value={`${fmt(e.a[0])}, ${fmt(e.a[1])} → ${fmt(e.b[0])}, ${fmt(e.b[1])}`}
       />
+      <SaveBar
+        dirty={dirty}
+        busy={busy}
+        savedFlash={savedFlash}
+        onSave={() => void onSave()}
+      />
       <p className="ss-prop-hint">
-        Crossings are counted A → B. Redraw the line in the viewport to reshape
-        it.
+        Crossings are counted A → B. Save writes this tripwire; use toolbar
+        Save all for bulk edits.
       </p>
     </>
   );
+}
+
+function frameSrcForSensor(sensorId: string): string | null {
+  const imgs = document.querySelectorAll<HTMLImageElement>(
+    `img[data-ss-card-sensor="${CSS.escape(sensorId)}"]`,
+  );
+  for (const img of imgs) {
+    const src = img.currentSrc || img.getAttribute("src") || "";
+    if (!src || src.includes("offline.png")) {
+      continue;
+    }
+    if (img.naturalWidth > 0 || src.startsWith("data:image")) {
+      return src;
+    }
+  }
+  return null;
 }
 
 function CameraProps({
   e,
+  sensorId,
+  sceneId,
   calibrateHref,
+  deleteUrl,
+  authToken,
+  sceneHomeHref,
   onCalibrate,
 }: {
   e: CameraEntity;
+  sensorId?: string;
+  sceneId?: string;
   calibrateHref?: string;
+  deleteUrl?: string | null;
+  authToken?: string;
+  sceneHomeHref?: string;
   onCalibrate?: () => void;
 }) {
+  const toast = useAppToast();
+  const projectCameraId = useViewportStore((s) => s.projectCameraId);
+  const projectOpacity = useViewportStore((s) => s.projectOpacity);
+  const projecting = projectCameraId === e.id;
+  const poseDirty = useEntityDirty(e);
+  const [optics, setOptics] = useState<CameraOptics | null>(null);
+  const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
+  const opticsDirty =
+    optics != null &&
+    opticsBaseline != null &&
+    opticsPersistKey(optics) !== opticsBaseline;
+  const dirty = poseDirty || opticsDirty;
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoReady, setAutoReady] = useState(false);
+  const [autoTitle, setAutoTitle] = useState(
+    "Checking auto-calibration service…",
+  );
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (!sensorId || !authToken) {
+      setOptics(null);
+      setOpticsBaseline(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const row = (await api.getCamera(authToken, sensorId)) ?? {};
+        if (cancelled) {
+          return;
+        }
+        const o = parseCameraOptics(row, e.name);
+        setOptics(o);
+        setOpticsBaseline(opticsPersistKey(o));
+      } catch {
+        if (!cancelled) {
+          const o = parseCameraOptics({}, e.name);
+          setOptics(o);
+          setOpticsBaseline(opticsPersistKey(o));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sensorId, authToken, e.name, e.id]);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const status = await getAutocalibrationStatus();
+      if (cancelled) {
+        return;
+      }
+      if (status?.status === "running" || status?.status === "success") {
+        setAutoReady(true);
+        setAutoTitle("Click to calibrate the camera automatically");
+      } else {
+        setAutoReady(false);
+        setAutoTitle(
+          status?.message ||
+            "Auto Calibrate system not available for this scene",
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sensorId]);
+
   const patch = (p: Partial<CameraEntity>) =>
     getViewportState().updateEntity(e.id, p);
   const setPos = (i: number, v: number) => {
     const position: [number, number, number] = [...e.position];
-    position[i] = v;
+    position[i] = roundDigits(v, 3);
     patch({ position });
   };
+  const setRot = (i: number, v: number) => {
+    const rotation: [number, number, number] = [...e.rotation];
+    rotation[i] = roundDigits(v, 2);
+    // Rig ↔ REST is the same Rx(π) involution; keep restRotation in sync
+    // so projection / save stay consistent with a manual pose edit.
+    patch({
+      rotation,
+      restRotation: restPoseToRigEuler(rotation),
+      posed: true,
+    });
+  };
+
+  const patchOptics = (p: Partial<CameraOptics>) => {
+    setOptics((prev) => (prev ? { ...prev, ...p } : prev));
+  };
+
+  const onFovCommit = (v: number) => {
+    const fov = roundDigits(Math.min(120, Math.max(10, v)), 2);
+    patch({ fov });
+    if (optics) {
+      patchOptics({ fy: roundDigits(fyFromFov(fov, optics.height), 2) });
+    }
+  };
+
+  const onSave = async () => {
+    if (!dirty || saveBusy || !sensorId || !authToken || !sceneId) {
+      return;
+    }
+    setSaveBusy(true);
+    try {
+      const cur = getViewportState().entities[e.id];
+      if (!cur || cur.type !== "camera") {
+        return;
+      }
+      await persistCameraEntity(
+        authToken,
+        sceneId,
+        sensorId,
+        cur,
+        optics ?? undefined,
+      );
+      const restRotation = restPoseToRigEuler(cur.rotation);
+      getViewportState().updateEntity(e.id, {
+        restRotation,
+        posed: true,
+      });
+      markEntityPersistClean(e.id);
+      if (optics) {
+        setOpticsBaseline(opticsPersistKey(optics));
+      }
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1500);
+      toast.show("Camera saved", "ok");
+    } catch (err) {
+      toast.show((err as RestError).message || "Save failed", "bad");
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const onAutoCalibrate = async () => {
+    if (!sensorId || !authToken || autoBusy) {
+      return;
+    }
+    const src = frameSrcForSensor(sensorId);
+    if (!src) {
+      toast.show("Enable Live View and wait for a camera frame first", "bad");
+      return;
+    }
+    setAutoBusy(true);
+    try {
+      const row = (await api.getCamera(authToken, sensorId)) ?? {};
+      const intr = (row.intrinsics as Record<string, number>) || {};
+      const fx = Number(intr.fx) || 905;
+      const fy = Number(intr.fy) || fx;
+      const cx = Number(intr.cx) || 640;
+      const cy = Number(intr.cy) || 360;
+      const image = await frameToBase64(src);
+      const result = await startCameraAutocalibration(sensorId, image, [
+        [fx, 0, cx],
+        [0, fy, cy],
+        [0, 0, 1],
+      ]);
+      if (result.status === "error") {
+        toast.show(result.message || "Auto calibrate failed", "bad");
+      } else {
+        toast.show("Auto calibrate started", "ok");
+      }
+    } catch (err) {
+      toast.show((err as Error).message || "Auto calibrate failed", "bad");
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!deleteUrl || !authToken) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const path = deleteUrl.startsWith("http")
+        ? new URL(deleteUrl).pathname
+        : deleteUrl;
+      const m = path.match(/\/cam\/delete\/([^/]+)\/?$/);
+      if (!m) {
+        throw new Error("Unrecognized camera delete URL");
+      }
+      await restDeleteTarget(authToken, {
+        kind: "camera",
+        uid: decodeURIComponent(m[1]),
+      });
+      getViewportState().removeEntity(e.id);
+      getViewportState().setProjectCamera(null);
+      toast.show(`Deleted ${e.name}`, "ok");
+      setConfirmDelete(false);
+      if (sceneHomeHref) {
+        window.location.assign(sceneHomeHref);
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      toast.show((err as RestError).message || "Delete failed", "bad");
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <>
       <NameRow entity={e} />
+      <span className="ss-prop-section">Position</span>
       <div className="ss-prop-grid3">
-        <NumField label="X" value={e.position[0]} onCommit={(v) => setPos(0, v)} />
-        <NumField label="Y" value={e.position[1]} onCommit={(v) => setPos(1, v)} />
-        <NumField label="Z" value={e.position[2]} onCommit={(v) => setPos(2, v)} />
+        <NumField
+          label="X"
+          value={e.position[0]}
+          digits={3}
+          onCommit={(v) => setPos(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.position[1]}
+          digits={3}
+          onCommit={(v) => setPos(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.position[2]}
+          digits={3}
+          onCommit={(v) => setPos(2, v)}
+        />
+      </div>
+      <span className="ss-prop-section">Rotation (°)</span>
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.rotation[0]}
+          digits={2}
+          onCommit={(v) => setRot(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.rotation[1]}
+          digits={2}
+          onCommit={(v) => setRot(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.rotation[2]}
+          digits={2}
+          onCommit={(v) => setRot(2, v)}
+        />
       </div>
       <NumField
         label="FOV (°)"
         value={e.fov}
-        step={1}
-        onCommit={(v) => patch({ fov: Math.min(120, Math.max(10, v)) })}
+        digits={2}
+        onCommit={onFovCommit}
       />
-      <ReadField
-        label="Rotation"
-        value={`${fmt(e.rotation[0], 1)}°, ${fmt(e.rotation[1], 1)}°, ${fmt(e.rotation[2], 1)}°`}
+      {optics ? (
+        <>
+          <span className="ss-prop-section">Intrinsics (px)</span>
+          <div className="ss-prop-grid3">
+            <NumField
+              label="fx"
+              value={optics.fx}
+              digits={2}
+              onCommit={(v) => patchOptics({ fx: v })}
+            />
+            <NumField
+              label="fy"
+              value={optics.fy}
+              digits={2}
+              onCommit={(v) => {
+                const fy = roundDigits(v, 2);
+                patchOptics({ fy });
+                patch({
+                  fov: roundDigits(
+                    Math.min(120, Math.max(10, fovFromFy(fy, optics.height))),
+                    2,
+                  ),
+                });
+              }}
+            />
+            <NumField
+              label="cx"
+              value={optics.cx}
+              digits={2}
+              onCommit={(v) => patchOptics({ cx: v })}
+            />
+          </div>
+          <NumField
+            label="cy"
+            value={optics.cy}
+            digits={2}
+            onCommit={(v) => patchOptics({ cy: v })}
+          />
+          <span className="ss-prop-section">Distortion</span>
+          <div className="ss-prop-grid3">
+            <NumField
+              label="k1"
+              value={optics.k1}
+              digits={4}
+              onCommit={(v) => patchOptics({ k1: v })}
+            />
+            <NumField
+              label="k2"
+              value={optics.k2}
+              digits={4}
+              onCommit={(v) => patchOptics({ k2: v })}
+            />
+            <NumField
+              label="k3"
+              value={optics.k3}
+              digits={4}
+              onCommit={(v) => patchOptics({ k3: v })}
+            />
+          </div>
+          <div className="ss-prop-grid3">
+            <NumField
+              label="p1"
+              value={optics.p1}
+              digits={4}
+              onCommit={(v) => patchOptics({ p1: v })}
+            />
+            <NumField
+              label="p2"
+              value={optics.p2}
+              digits={4}
+              onCommit={(v) => patchOptics({ p2: v })}
+            />
+          </div>
+        </>
+      ) : null}
+      <ReadField label="Pose" value={e.posed ? "Calibrated" : "Unset"} />
+      <label
+        className={`ss-prop-check${e.posed ? "" : " is-disabled"}`}
+        title={
+          e.posed
+            ? "Project the live camera frame onto the scene map"
+            : "Calibrate this camera first — projection needs a pose"
+        }
+      >
+        <input
+          type="checkbox"
+          checked={projecting}
+          disabled={!e.posed}
+          onChange={(ev) =>
+            getViewportState().setProjectCamera(
+              ev.target.checked ? e.id : null,
+            )
+          }
+        />
+        <span>Project frame</span>
+      </label>
+      {e.posed && projecting && (
+        <label className="ss-prop-field">
+          <span className="ss-prop-label">Opacity</span>
+          <input
+            type="range"
+            className="ss-prop-range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(projectOpacity * 100)}
+            onChange={(ev) =>
+              getViewportState().setProjectOpacity(
+                Number(ev.target.value) / 100,
+              )
+            }
+          />
+          <span className="ss-prop-value">{Math.round(projectOpacity * 100)}%</span>
+        </label>
+      )}
+      <SaveBar
+        dirty={dirty}
+        busy={saveBusy}
+        savedFlash={savedFlash}
+        canPersist={Boolean(sensorId && authToken && sceneId)}
+        onSave={() => void onSave()}
+        disabledTitle="Camera is not linked to the server yet"
       />
-      {(onCalibrate || calibrateHref) && (
-        onCalibrate ? (
+      <div className="ss-prop-actions">
+        {(onCalibrate || calibrateHref) &&
+          (onCalibrate ? (
+            <button
+              type="button"
+              className="ss-prop-calibrate"
+              onClick={onCalibrate}
+            >
+              <i className="bi bi-crosshair" aria-hidden="true" />
+              <span>Calibrate</span>
+            </button>
+          ) : (
+            <a href={calibrateHref} className="ss-prop-calibrate">
+              <i className="bi bi-crosshair" aria-hidden="true" />
+              <span>Calibrate</span>
+            </a>
+          ))}
+        {sensorId && authToken ? (
           <button
             type="button"
             className="ss-prop-calibrate"
-            onClick={onCalibrate}
+            disabled={!autoReady || autoBusy}
+            title={autoTitle}
+            onClick={() => void onAutoCalibrate()}
           >
-            <i className="bi bi-crosshair" aria-hidden="true" />
-            <span>Calibrate camera</span>
+            <i className="bi bi-lightning" aria-hidden="true" />
+            <span>{autoBusy ? "Starting…" : "Auto Calibrate"}</span>
           </button>
-        ) : (
-          <a href={calibrateHref} className="ss-prop-calibrate">
-            <i className="bi bi-crosshair" aria-hidden="true" />
-            <span>Calibrate camera</span>
-          </a>
-        )
-      )}
+        ) : null}
+        {deleteUrl && authToken ? (
+          <button
+            type="button"
+            className="ss-prop-danger"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <i className="bi bi-trash" aria-hidden="true" />
+            <span>Delete</span>
+          </button>
+        ) : null}
+      </div>
       <p className="ss-prop-hint">
-        Opens in-viewport calibrate (3D + live feed). Pose updates live as you
-        place 4+ correspondences; Save writes the same camera PUT as before.
+        Save writes pose, FOV/fy, intrinsics, and distortion. FOV is a
+        convenience view of fy; fx/fy drive solve and projection. Calibrate
+        opens the point-pair split; Auto Calibrate needs the service and a
+        live frame.
       </p>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete camera?"
+        confirmLabel="Delete"
+        danger
+        busy={deleteBusy}
+        onConfirm={() => void onDelete()}
+        onCancel={() => {
+          if (!deleteBusy) {
+            setConfirmDelete(false);
+          }
+        }}
+      >
+        <p>
+          Are you sure you want to delete <strong>{e.name}</strong>?
+        </p>
+        <p>This action cannot be undone.</p>
+      </ConfirmDialog>
     </>
   );
 }
 
-function SensorProps({ e }: { e: SensorEntity }) {
+function SensorProps({
+  e,
+  sensorId,
+  sceneId,
+  calibrateHref,
+  authToken,
+}: {
+  e: SensorEntity;
+  sensorId?: string;
+  sceneId?: string;
+  calibrateHref?: string;
+  authToken?: string;
+}) {
+  const toast = useAppToast();
+  const dirty = useEntityDirty(e);
+  const [busy, setBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
   const patch = (p: Partial<SensorEntity>) =>
     getViewportState().updateEntity(e.id, p);
   const setPos = (i: number, v: number) => {
     const position: [number, number, number] = [...e.position];
-    position[i] = v;
+    position[i] = roundDigits(v, 3);
     patch({ position });
   };
+
+  const onSave = async () => {
+    if (!dirty || busy || !sensorId || !authToken || !sceneId) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const cur = getViewportState().entities[e.id];
+      if (!cur || cur.type !== "sensor") {
+        return;
+      }
+      await persistSensorEntity(authToken, sceneId, sensorId, cur);
+      markEntityPersistClean(e.id);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1500);
+      toast.show("Sensor saved", "ok");
+    } catch (err) {
+      toast.show((err as RestError).message || "Save failed", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <NameRow entity={e} />
       <ColorRow entity={e} />
       <div className="ss-prop-grid3">
-        <NumField label="X" value={e.position[0]} onCommit={(v) => setPos(0, v)} />
-        <NumField label="Y" value={e.position[1]} onCommit={(v) => setPos(1, v)} />
-        <NumField label="Z" value={e.position[2]} onCommit={(v) => setPos(2, v)} />
+        <NumField
+          label="X"
+          value={e.position[0]}
+          digits={3}
+          onCommit={(v) => setPos(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.position[1]}
+          digits={3}
+          onCommit={(v) => setPos(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.position[2]}
+          digits={3}
+          onCommit={(v) => setPos(2, v)}
+        />
       </div>
-      <NumField
-        label="Radius (m)"
-        value={e.radius}
-        onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
+      <label className="ss-prop-field">
+        <span className="ss-prop-label">Area</span>
+        <select
+          className="ss-prop-input ss-prop-select"
+          value={e.areaMode}
+          disabled={busy}
+          onChange={(ev) =>
+            patch({ areaMode: ev.target.value as SensorAreaMode })
+          }
+          aria-label="Sensor coverage area"
+        >
+          <option value="scene">Full scene</option>
+          <option value="circle">Circle</option>
+          <option value="poly">Polygon</option>
+        </select>
+      </label>
+      {e.areaMode === "circle" ? (
+        <NumField
+          label="Radius (m)"
+          value={e.radius}
+          onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
+        />
+      ) : null}
+      {e.areaMode === "poly" && calibrateHref ? (
+        <a href={calibrateHref} className="ss-prop-calibrate">
+          <i className="bi bi-pencil" aria-hidden="true" />
+          <span>Edit polygon on map</span>
+        </a>
+      ) : null}
+      <SaveBar
+        dirty={dirty}
+        busy={busy}
+        savedFlash={savedFlash}
+        canPersist={Boolean(sensorId && authToken && sceneId)}
+        onSave={() => void onSave()}
+        disabledTitle="Sensor is not linked to the server yet"
       />
+      <p className="ss-prop-hint">
+        {e.areaMode === "scene"
+          ? "Full scene coverage. Save writes name and area to the database."
+          : e.areaMode === "circle"
+            ? "Circle uses X/Y as center. Save writes area and radius to the database."
+            : "Draw polygon vertices on the map first, then Save name/area here."}
+      </p>
     </>
   );
 }
@@ -324,21 +1026,38 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
  */
 export function Properties({
   sceneName,
+  sceneId,
   cameras = [],
+  sensors = [],
+  authToken = "",
+  isSuperuser = false,
 }: {
   sceneName: string;
+  sceneId?: string;
   cameras?: {
     id: string;
     sensorId: string;
     name: string;
     calibrateHref: string;
+    deleteUrl?: string | null;
   }[];
+  sensors?: {
+    id: string;
+    sensorId: string;
+    name: string;
+    calibrateHref: string;
+    deleteUrl?: string | null;
+  }[];
+  authToken?: string;
+  isSuperuser?: boolean;
 }) {
   const selectedId = useViewportStore((s) => s.selectedId);
   const entities = useViewportStore((s) => s.entities);
   const e = selectedId ? entities[selectedId] : undefined;
   const camBoot =
     e?.type === "camera" ? cameras.find((c) => c.id === e.id) : undefined;
+  const senBoot =
+    e?.type === "sensor" ? sensors.find((s) => s.id === e.id) : undefined;
 
   return (
     <div className="ss-props">
@@ -348,7 +1067,12 @@ export function Properties({
       {e?.type === "camera" && (
         <CameraProps
           e={e}
+          sensorId={camBoot?.sensorId}
+          sceneId={sceneId}
           calibrateHref={camBoot?.calibrateHref}
+          deleteUrl={isSuperuser ? camBoot?.deleteUrl : null}
+          authToken={authToken}
+          sceneHomeHref={sceneId ? `/${sceneId}/` : undefined}
           onCalibrate={
             camBoot
               ? () =>
@@ -361,7 +1085,15 @@ export function Properties({
           }
         />
       )}
-      {e?.type === "sensor" && <SensorProps e={e} />}
+      {e?.type === "sensor" && (
+        <SensorProps
+          e={e}
+          sensorId={senBoot?.sensorId}
+          sceneId={sceneId}
+          calibrateHref={senBoot?.calibrateHref}
+          authToken={authToken}
+        />
+      )}
       {e?.type === "mark" && <MarkProps e={e} />}
       {e?.type === "child" && (
         <>
