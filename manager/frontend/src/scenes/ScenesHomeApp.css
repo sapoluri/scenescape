@@ -31,24 +31,25 @@
   gap: 0.4rem;
 }
 
-/* Override legacy .scene-gallery flex tiles from map-scene.css so every
-   card (including New scene) shares one grid track size. */
+/* Override legacy .scene-gallery rules: fixed-width cards packed left
+   (not justified / stretch-to-fill, which leaves awkward gaps). */
 .ss-scenes-home .ss-scene-gallery.scene-gallery,
 .ss-scenes-home .ss-scene-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: stretch;
   gap: 1.25rem;
   margin-bottom: 2rem;
-  align-items: stretch;
 }
 
 .ss-scenes-home .ss-scene-card.scene-card,
 .ss-scenes-home .ss-scene-card {
   display: flex;
   flex-direction: column;
-  width: auto;
-  max-width: none;
-  height: 100%;
+  flex: 0 0 17.5rem;
+  width: 17.5rem;
+  max-width: 100%;
   margin: 0;
   overflow: hidden;
   transition:
