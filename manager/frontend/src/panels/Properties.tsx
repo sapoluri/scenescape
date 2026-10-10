@@ -25,6 +25,7 @@ import {
 import { api, type RestError } from "../lib/rest";
 import { restDeleteTarget } from "../lib/restDelete";
 import { enterCameraCalibrate } from "../viewport/calibrate";
+import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import type { CameraOptics } from "../viewport/calibrate/types";
 import { restPoseToRigEuler } from "../viewport/entities";
 import {
@@ -405,6 +406,10 @@ function CameraProps({
   const projectCameraId = useViewportStore((s) => s.projectCameraId);
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
   const projecting = projectCameraId === e.id;
+  // Wizard toolbar owns Auto Calibrate + Save while this camera is calibrating.
+  const calibrating = useCalibrateStore(
+    (s) => s.active && s.cameraId === e.id,
+  );
   const poseDirty = useEntityDirty(e);
   const [optics, setOptics] = useState<CameraOptics | null>(null);
   const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
@@ -775,32 +780,35 @@ function CameraProps({
           <span className="ss-prop-value">{Math.round(projectOpacity * 100)}%</span>
         </label>
       )}
-      <SaveBar
-        dirty={dirty}
-        busy={saveBusy}
-        savedFlash={savedFlash}
-        canPersist={Boolean(sensorId && authToken && sceneId)}
-        onSave={() => void onSave()}
-        disabledTitle="Camera is not linked to the server yet"
-      />
+      {!calibrating ? (
+        <SaveBar
+          dirty={dirty}
+          busy={saveBusy}
+          savedFlash={savedFlash}
+          canPersist={Boolean(sensorId && authToken && sceneId)}
+          onSave={() => void onSave()}
+          disabledTitle="Camera is not linked to the server yet"
+        />
+      ) : null}
       <div className="ss-prop-actions">
-        {(onCalibrate || calibrateHref) &&
-          (onCalibrate ? (
-            <button
-              type="button"
-              className="ss-prop-calibrate"
-              onClick={onCalibrate}
-            >
-              <i className="bi bi-crosshair" aria-hidden="true" />
-              <span>Calibrate</span>
-            </button>
-          ) : (
-            <a href={calibrateHref} className="ss-prop-calibrate">
-              <i className="bi bi-crosshair" aria-hidden="true" />
-              <span>Calibrate</span>
-            </a>
-          ))}
-        {sensorId && authToken ? (
+        {!calibrating && (onCalibrate || calibrateHref)
+          ? onCalibrate ? (
+              <button
+                type="button"
+                className="ss-prop-calibrate"
+                onClick={onCalibrate}
+              >
+                <i className="bi bi-crosshair" aria-hidden="true" />
+                <span>Calibrate</span>
+              </button>
+            ) : (
+              <a href={calibrateHref} className="ss-prop-calibrate">
+                <i className="bi bi-crosshair" aria-hidden="true" />
+                <span>Calibrate</span>
+              </a>
+            )
+          : null}
+        {!calibrating && sensorId && authToken ? (
           <button
             type="button"
             className="ss-prop-calibrate"
@@ -824,10 +832,9 @@ function CameraProps({
         ) : null}
       </div>
       <p className="ss-prop-hint">
-        Save writes pose, FOV/fy, intrinsics, and distortion. FOV is a
-        convenience view of fy; fx/fy drive solve and projection. Calibrate
-        opens the point-pair split; Auto Calibrate needs the service and a
-        live frame.
+        {calibrating
+          ? "Use the toolbar to Auto Calibrate or Save point correspondences. Edit pose and optics here; they apply after Save."
+          : "Save writes pose, FOV/fy, intrinsics, and distortion. FOV is a convenience view of fy; fx/fy drive solve and projection. Calibrate opens the point-pair split; Auto Calibrate needs the service and a live frame."}
       </p>
       <ConfirmDialog
         open={confirmDelete}
