@@ -29,6 +29,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/rest";
+import { sceneMapBitmapUrl } from "../lib/sceneMapBitmap";
 import "../tokens/tokens.css";
 import "./OpenSceneDialog.css";
 
@@ -41,6 +42,10 @@ export type SceneSummary = {
   regions?: unknown[];
   tripwires?: unknown[];
   map_processed?: string | null;
+  /** Ortho preview from Scene.thumbnail when present. */
+  thumbnail?: string | null;
+  /** Map file URL; used as preview only when it is a bitmap. */
+  map?: string | null;
 };
 
 export type OpenSceneDialogProps = {
@@ -141,6 +146,9 @@ function normalizeScenes(payload: unknown): SceneSummary[] {
       regions: row.regions as unknown[] | undefined,
       tripwires: row.tripwires as unknown[] | undefined,
       map_processed: (row.map_processed as string | null) ?? null,
+      thumbnail:
+        typeof row.thumbnail === "string" ? row.thumbnail : null,
+      map: typeof row.map === "string" ? row.map : null,
     }))
     .filter((s) => s.uid.length > 0);
 }
@@ -153,8 +161,7 @@ function SceneCard({
   onOpen: (uid: string) => void;
 }) {
   const stats = sceneStats(scene);
-  // NOTE: the read SceneSerializer exposes no thumbnail; render a
-  // stylized placeholder until a thumbnail field exists server-side.
+  const thumb = sceneMapBitmapUrl(scene);
   const initials = scene.name
     .split(/\s+/)
     .slice(0, 2)
@@ -168,8 +175,21 @@ function SceneCard({
       onClick={() => onOpen(scene.uid)}
       aria-label={`Open scene ${scene.name}`}
     >
-      <span className="ss-open-scene-thumb" aria-hidden="true">
-        <span className="ss-open-scene-thumb-initials">{initials}</span>
+      <span
+        className={`ss-open-scene-thumb${thumb ? " has-image" : ""}`}
+        aria-hidden="true"
+      >
+        {thumb ? (
+          <img
+            className="ss-open-scene-thumb-img"
+            src={thumb}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <span className="ss-open-scene-thumb-initials">{initials}</span>
+        )}
       </span>
       <span className="ss-open-scene-card-body">
         <span className="ss-open-scene-name">{scene.name}</span>
@@ -421,6 +441,9 @@ export function OpenSceneDialog({
                     <span className="ss-open-scene-name">New scene</span>
                     <span className="ss-open-scene-stats">
                       Start from a blank scene
+                    </span>
+                    <span className="ss-open-scene-modified">
+                      Create a scene
                     </span>
                   </span>
                 </button>

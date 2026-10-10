@@ -8,6 +8,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ACTION_ICONS } from "../components/actionIcons";
 import { useSheetFromQuery } from "../hooks/useSheetFromQuery";
 import type { SheetAction } from "../lib/sheetQuery";
+import { sceneMapBitmapUrl } from "../lib/sceneMapBitmap";
 import { SceneSheet } from "../sheets/SceneSheet";
 import { SceneImportDialog } from "../sheets/SceneImportDialog";
 import { SceneManagePanel } from "../sheets/SceneManagePanel";
@@ -53,11 +54,23 @@ function isHomeAction(v: string | null): v is Exclude<SheetAction, null> {
 }
 
 function SceneThumb({ scene }: { scene: SceneHomeCard }) {
-  const src = scene.thumbnailUrl || scene.mapUrl;
+  const src = sceneMapBitmapUrl(scene);
   if (src) {
-    return <img className="cover" src={src} alt={scene.name} />;
+    return (
+      <img
+        className="cover"
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+      />
+    );
   }
-  return <div className="blank-container border" aria-hidden="true" />;
+  return (
+    <div className="blank-container ss-scene-card-blank" aria-hidden="true">
+      <span className="ss-scene-card-blank-label">No map preview</span>
+    </div>
+  );
 }
 
 function ScenesGallery({
@@ -69,27 +82,38 @@ function ScenesGallery({
   isSuperuser: boolean;
   onCreate: () => void;
 }) {
-  if (scenes.length === 0) {
+  if (scenes.length === 0 && !isSuperuser) {
     return (
       <p className="scene-gallery-empty ss-scene-gallery-empty">
-        No scenes are available.
-        {isSuperuser ? (
-          <>
-            {" "}
-            <button type="button" className="ss-text-link" onClick={onCreate}>
-              Click here
-            </button>{" "}
-            to add one.
-          </>
-        ) : (
-          " Ask an administrator to add one."
-        )}
+        No scenes are available. Ask an administrator to add one.
       </p>
     );
   }
 
   return (
     <div className="scene-gallery ss-scene-gallery">
+      {isSuperuser ? (
+        <button
+          type="button"
+          className="card scene-card ss-scene-card ss-scene-card-new"
+          onClick={onCreate}
+          aria-label="New scene"
+        >
+          <h5 className="card-header">New scene</h5>
+          <div className="card-image">
+            <div className="ss-scene-card-media">
+              <span className="ss-scene-card-add-thumb" aria-hidden="true">
+                +
+              </span>
+            </div>
+          </div>
+          <div className="card-body">
+            <p className="ss-scene-card-add-hint">
+              Start from a blank scene. Upload a map after creating.
+            </p>
+          </div>
+        </button>
+      ) : null}
       {scenes.map((scene) => (
         <div
           key={scene.id}
@@ -103,7 +127,11 @@ function ScenesGallery({
         >
           <h5 className="card-header">{scene.name}</h5>
           <div className="card-image">
-            <a id={`scene_id_${scene.id}`} href={scene.detailUrl}>
+            <a
+              id={`scene_id_${scene.id}`}
+              href={scene.detailUrl}
+              className="ss-scene-card-media"
+            >
               <SceneThumb scene={scene} />
             </a>
           </div>
