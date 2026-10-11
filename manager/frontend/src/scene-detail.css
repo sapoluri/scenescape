@@ -81,7 +81,8 @@ body.ss-scene-workspace > .wrapper > .content {
   margin: 0;
 }
 
-body.ss-scene-workspace .ss-scene-detail-root {
+body.ss-scene-workspace .ss-scene-detail-root,
+body.ss-scene-workspace #ss-scenes-home-app {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;

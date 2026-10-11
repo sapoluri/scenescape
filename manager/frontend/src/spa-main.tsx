@@ -165,6 +165,8 @@ async function mountPage(): Promise<void> {
   const homeRoot = document.createElement("div");
   homeRoot.id = "ss-scenes-home-app";
   spaRoot.appendChild(homeRoot);
+  document.documentElement.classList.add("ss-scene-workspace");
+  document.body.classList.add("ss-scene-workspace");
   createRoot(homeRoot).render(
     <StrictMode>
       <ScenesHomeApp bootstrap={bootstrap} />

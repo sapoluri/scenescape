@@ -45,13 +45,14 @@ import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./w
  */
 
 interface SceneViewportProps {
-  sceneId: string;
+  /** Omit or empty for the home empty-scene shell (orbit only). */
+  sceneId?: string | null;
   sceneName?: string;
   mapUrl?: string | null;
   mapScale?: number | null;
   assetMarkColors?: Record<string, string>;
-  cameras: SceneCameraBootstrap[];
-  sensors: SceneSensorBootstrap[];
+  cameras?: SceneCameraBootstrap[];
+  sensors?: SceneSensorBootstrap[];
   cameraRates?: Record<string, string>;
   authToken: string;
   isSuperuser?: boolean;
@@ -318,13 +319,13 @@ function ToolHeader({
 }
 
 export function SceneViewport({
-  sceneId,
+  sceneId = null,
   sceneName = "",
   mapUrl = null,
   mapScale = null,
   assetMarkColors,
-  cameras,
-  sensors,
+  cameras = [],
+  sensors = [],
   cameraRates = {},
   authToken,
   isSuperuser = false,
@@ -338,6 +339,7 @@ export function SceneViewport({
   const [world, setWorld] = useState<ViewportWorld | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
   const theme = useTheme();
+  const emptyScene = !sceneId;
 
   useViewportMarks({ assetMarkColors });
 
@@ -366,18 +368,22 @@ export function SceneViewport({
   }, [world, theme]);
 
   useSceneMap(world, {
-    sceneId,
+    sceneId: sceneId || "",
     sceneName,
     mapUrl,
     mapScale,
     authToken,
   });
-  useViewportEntities(world, { cameras, sensors, authToken });
+  useViewportEntities(world, {
+    cameras: emptyScene ? [] : cameras,
+    sensors: emptyScene ? [] : sensors,
+    authToken: emptyScene ? "" : authToken,
+  });
   useViewportTools(world);
-  useCalibrateSession(world, authToken);
-  useLiveCameraProjection(world, cameras);
+  useCalibrateSession(world, emptyScene ? "" : authToken);
+  useLiveCameraProjection(world, emptyScene ? [] : cameras);
 
-  const calibrating = useCalibrateStore((s) => s.active);
+  const calibrating = useCalibrateStore((s) => s.active) && !emptyScene;
 
   // View state -> world (presets, projection, grid).
   useEffect(() => {
@@ -424,8 +430,8 @@ export function SceneViewport({
 
   return (
     <div
-      className={`ss-viewport${calibrating ? " is-calibrating" : ""}`}
-      data-scene-id={sceneId}
+      className={`ss-viewport${calibrating ? " is-calibrating" : ""}${emptyScene ? " is-empty" : ""}`}
+      data-scene-id={sceneId || ""}
     >
       <div className="ss-viewport-bar" role="toolbar" aria-label="Viewport">
         {onOpenScene && (
@@ -439,7 +445,7 @@ export function SceneViewport({
             <span>Open</span>
           </button>
         )}
-        {onOpenLibrary && (
+        {!emptyScene && onOpenLibrary && (
           <button
             type="button"
             className="ss-viewport-bar-btn"
@@ -450,28 +456,32 @@ export function SceneViewport({
             <span>Library</span>
           </button>
         )}
-        <span className="ss-viewport-bar-sep" aria-hidden="true" />
-        <span className="ss-viewport-bar-label">Mode</span>
-        <div className="seg" role="group" aria-label="Live or replay">
-          <button
-            type="button"
-            className={mode === "live" ? "on" : ""}
-            onClick={() => onModeChange?.("live")}
-            title="Live view (MQTT)"
-            disabled={calibrating}
-          >
-            Live
-          </button>
-          <button
-            type="button"
-            className={mode === "replay" ? "on" : ""}
-            onClick={() => onModeChange?.("replay")}
-            title="Replay a recording"
-            disabled={calibrating}
-          >
-            Replay
-          </button>
-        </div>
+        {!emptyScene ? (
+          <>
+            <span className="ss-viewport-bar-sep" aria-hidden="true" />
+            <span className="ss-viewport-bar-label">Mode</span>
+            <div className="seg" role="group" aria-label="Live or replay">
+              <button
+                type="button"
+                className={mode === "live" ? "on" : ""}
+                onClick={() => onModeChange?.("live")}
+                title="Live view (MQTT)"
+                disabled={calibrating}
+              >
+                Live
+              </button>
+              <button
+                type="button"
+                className={mode === "replay" ? "on" : ""}
+                onClick={() => onModeChange?.("replay")}
+                title="Replay a recording"
+                disabled={calibrating}
+              >
+                Replay
+              </button>
+            </div>
+          </>
+        ) : null}
         <span className="ss-viewport-bar-sep" aria-hidden="true" />
         <span className="ss-viewport-bar-label">View</span>
         <div className="seg" role="group" aria-label="Projection">
@@ -499,32 +509,37 @@ export function SceneViewport({
           onChange={() => toggleOverlay("showGrid")}
           label="Grid"
         />
-        <OverlayCheck
-          checked={showTrails}
-          onChange={() => toggleOverlay("showTrails")}
-          label="Trails"
-        />
-        <OverlayCheck
-          checked={showLabels}
-          onChange={() => toggleOverlay("showLabels")}
-          label="Labels"
-        />
+        {!emptyScene ? (
+          <>
+            <OverlayCheck
+              checked={showTrails}
+              onChange={() => toggleOverlay("showTrails")}
+              label="Trails"
+            />
+            <OverlayCheck
+              checked={showLabels}
+              onChange={() => toggleOverlay("showLabels")}
+              label="Labels"
+            />
+          </>
+        ) : null}
         <span className="ss-viewport-beta">3D beta</span>
       </div>
-      {calibrating ? (
-        <CalibrateWizard
-          sceneId={sceneId}
-          authToken={authToken}
-          cameras={cameras}
-        />
-      ) : (
-        <ToolHeader
-          sceneId={sceneId}
-          authToken={authToken}
-          cameras={cameras}
-          sensors={sensors}
-        />
-      )}
+      {!emptyScene &&
+        (calibrating ? (
+          <CalibrateWizard
+            sceneId={sceneId || ""}
+            authToken={authToken}
+            cameras={cameras}
+          />
+        ) : (
+          <ToolHeader
+            sceneId={sceneId || ""}
+            authToken={authToken}
+            cameras={cameras}
+            sensors={sensors}
+          />
+        ))}
       <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
         <div className={calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"}>
           <div className="ss-viewport-host" ref={hostRef}>
@@ -542,7 +557,7 @@ export function SceneViewport({
         </div>
         {calibrating ? <CalibrateFeedPane /> : null}
       </div>
-      {!calibrating && cameras.length > 0 && (
+      {!emptyScene && !calibrating && cameras.length > 0 && (
         <CameraStripOverlay
           cameras={cameras}
           cameraRates={cameraRates}

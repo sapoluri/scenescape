@@ -243,6 +243,7 @@ export function SinglePaneView({
           window.location.assign(`/${uid}/`);
         }}
         authToken={authToken}
+        isSuperuser={isSuperuser}
       />
     </div>
   );

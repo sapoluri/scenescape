@@ -42,7 +42,10 @@ def test_scenes_summary_main(params, record_xml_attribute):
 
     time.sleep(1)
     browser.find_element(By.ID, "nav-scenes").click()
-    header_selector = ".ss-scene-card .card-header"
+    WebDriverWait(browser, 30).until(
+      lambda drv: drv.find_elements(By.CSS_SELECTOR, ".ss-open-scene-dialog")
+    )
+    header_selector = ".ss-scene-gallery .ss-scene-card .card-header"
     WebDriverWait(browser, 30).until(
       lambda drv: len(drv.find_elements(By.CSS_SELECTOR, header_selector)) >= 2
       and all(h.text.strip() for h in drv.find_elements(By.CSS_SELECTOR, header_selector))

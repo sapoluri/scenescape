@@ -37,7 +37,7 @@ export function useSceneMap(
   const readyRef = useRef(false);
 
   useEffect(() => {
-    if (!world) {
+    if (!world || !props.sceneId) {
       return;
     }
     let cancelled = false;

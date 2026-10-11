@@ -1,19 +1,23 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToastProvider, useAppToast } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
-import { PageHeader } from "../components/PageHeader";
-import { ACTION_ICONS } from "../components/actionIcons";
 import { useSheetFromQuery } from "../hooks/useSheetFromQuery";
 import type { SheetAction } from "../lib/sheetQuery";
-import { sceneMapBitmapUrl } from "../lib/sceneMapBitmap";
+import {
+  OpenSceneDialog,
+  useOpenSceneHotkey,
+  type GalleryScene,
+} from "../panels/OpenSceneDialog";
+import { SceneViewport } from "../viewport/SceneViewport";
 import { SceneSheet } from "../sheets/SceneSheet";
 import { SceneImportDialog } from "../sheets/SceneImportDialog";
 import { SceneManagePanel } from "../sheets/SceneManagePanel";
 import { ChildSheet } from "../sheets/ChildSheet";
 import "../components/Button.css";
+import "../panels/SinglePaneView.css";
 import "./ScenesHomeApp.css";
 
 export type SceneHomeCard = {
@@ -53,159 +57,55 @@ function isHomeAction(v: string | null): v is Exclude<SheetAction, null> {
   return Boolean(v && HOME_ACTIONS.has(v));
 }
 
-function SceneThumb({ scene }: { scene: SceneHomeCard }) {
-  const src = sceneMapBitmapUrl(scene);
-  if (src) {
-    return (
-      <img
-        className="cover"
-        src={src}
-        alt=""
-        loading="lazy"
-        decoding="async"
-      />
-    );
-  }
-  return (
-    <div className="blank-container ss-scene-card-blank" aria-hidden="true">
-      <span className="ss-scene-card-blank-label">No map preview</span>
-    </div>
-  );
-}
-
-function ScenesGallery({
-  scenes,
-  isSuperuser,
-  onCreate,
-}: {
-  scenes: SceneHomeCard[];
-  isSuperuser: boolean;
-  onCreate: () => void;
-}) {
-  if (scenes.length === 0 && !isSuperuser) {
-    return (
-      <p className="scene-gallery-empty ss-scene-gallery-empty">
-        No scenes are available. Ask an administrator to add one.
-      </p>
-    );
-  }
-
-  return (
-    <div className="scene-gallery ss-scene-gallery">
-      {isSuperuser ? (
-        <button
-          type="button"
-          className="card scene-card ss-scene-card ss-scene-card-new"
-          onClick={onCreate}
-          aria-label="New scene"
-        >
-          <h5 className="card-header">New scene</h5>
-          <div className="card-image">
-            <div className="ss-scene-card-media">
-              <span className="ss-scene-card-add-thumb" aria-hidden="true">
-                +
-              </span>
-            </div>
-          </div>
-          <div className="card-body">
-            <p className="ss-scene-card-add-hint">
-              Start from a blank scene. Upload a map after creating.
-            </p>
-          </div>
-        </button>
-      ) : null}
-      {scenes.map((scene) => (
-        <div
-          key={scene.id}
-          className="card scene-card ss-scene-card"
-          data-scene-id={scene.id}
-          ref={(el) => {
-            if (el) {
-              el.setAttribute("name", scene.name);
-            }
-          }}
-        >
-          <h5 className="card-header">{scene.name}</h5>
-          <div className="card-image">
-            <a
-              id={`scene_id_${scene.id}`}
-              href={scene.detailUrl}
-              className="ss-scene-card-media"
-            >
-              <SceneThumb scene={scene} />
-            </a>
-          </div>
-          <div className="card-body">
-            <table className="table table-sm scene-card-meta">
-              <tbody>
-                <tr>
-                  <td>Cameras &amp; Sensors</td>
-                  <td className="sensor-count">{scene.counts.sensors}</td>
-                </tr>
-                <tr>
-                  <td>Regions</td>
-                  <td className="region-count">{scene.counts.regions}</td>
-                </tr>
-                <tr>
-                  <td>Tripwires</td>
-                  <td className="tripwire-count">{scene.counts.tripwires}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div className="scene-card-actions ss-scene-card-actions">
-              <a
-                className="ss-icon-btn"
-                id={`scene-manage-${scene.name}`}
-                href={scene.detailUrl}
-                title={`Configure ${scene.name} Scene`}
-                aria-label={`Configure ${scene.name} Scene`}
-              >
-                <i
-                  className={`bi ${ACTION_ICONS.configure}`}
-                  aria-hidden="true"
-                />
-              </a>
-              {isSuperuser ? (
-                <>
-                  <a
-                    className="ss-icon-btn"
-                    id={`scene-edit-${scene.id}`}
-                    href={scene.manageUrl}
-                    title={`Edit ${scene.name} Scene Details`}
-                    aria-label={`Edit ${scene.name} Scene Details`}
-                  >
-                    <i
-                      className={`bi ${ACTION_ICONS.edit}`}
-                      aria-hidden="true"
-                    />
-                  </a>
-                  {scene.deleteUrl ? (
-                    <a
-                      className="ss-icon-btn ss-icon-btn--danger"
-                      id={`scene-delete-${scene.id}`}
-                      href={scene.deleteUrl}
-                      title={`Delete ${scene.name} Scene`}
-                      aria-label={`Delete ${scene.name} Scene`}
-                    >
-                      <i
-                        className={`bi ${ACTION_ICONS.delete}`}
-                        aria-hidden="true"
-                      />
-                    </a>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+function toGalleryScenes(cards: SceneHomeCard[]): GalleryScene[] {
+  return cards.map((s) => ({
+    uid: s.id,
+    name: s.name,
+    detailUrl: s.detailUrl,
+    manageUrl: s.manageUrl,
+    deleteUrl: s.deleteUrl,
+    thumbnailUrl: s.thumbnailUrl,
+    mapUrl: s.mapUrl,
+    counts: s.counts,
+  }));
 }
 
 function ScenesHomeInner({ bootstrap }: Props) {
   const { sheet, open, close } = useSheetFromQuery();
   useAppToast();
+  const [sceneDialogOpen, setSceneDialogOpen] = useState(
+    () => !(sheet.action && isHomeAction(sheet.action)),
+  );
+
+  useOpenSceneHotkey(() => setSceneDialogOpen(true));
+
+  useEffect(() => {
+    document.documentElement.classList.add("ss-scene-workspace");
+    document.body.classList.add("ss-scene-workspace");
+    return () => {
+      document.documentElement.classList.remove("ss-scene-workspace");
+      document.body.classList.remove("ss-scene-workspace");
+    };
+  }, []);
+
+  // Browser Back restores this page from bfcache with whatever React state
+  // was frozen at navigate-away (often gallery closed). Re-open the gallery
+  // so home matches a fresh visit unless a sheet is active.
+  const sheetActionRef = useRef(sheet.action);
+  sheetActionRef.current = sheet.action;
+  useEffect(() => {
+    const onPageShow = (ev: PageTransitionEvent) => {
+      if (!ev.persisted) {
+        return;
+      }
+      const action = sheetActionRef.current;
+      if (!(action && isHomeAction(action))) {
+        setSceneDialogOpen(true);
+      }
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   useEffect(() => {
     const onClick = (ev: Event) => {
@@ -222,32 +122,49 @@ function ScenesHomeInner({ bootstrap }: Props) {
       }
       const ss = url.searchParams.get("ss");
       if (!ss || !isHomeAction(ss)) {
-        if (link.id === "new_scene") {
-          ev.preventDefault();
-          open("scene-create");
-          return;
-        }
-        if (link.id === "import-scene") {
-          ev.preventDefault();
-          open("scene-import");
-          return;
-        }
         return;
       }
       if (url.pathname === "/" || url.pathname === "") {
         ev.preventDefault();
         open(ss, url.searchParams.get("id"));
+        setSceneDialogOpen(false);
       }
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
   }, [open]);
 
+  // Sheets hide the gallery while open; dismissing a sheet reopens it.
+  const prevSheetAction = useRef(sheet.action);
+  useEffect(() => {
+    const prev = prevSheetAction.current;
+    prevSheetAction.current = sheet.action;
+    if (sheet.action && isHomeAction(sheet.action)) {
+      setSceneDialogOpen(false);
+    } else if (prev && !sheet.action) {
+      setSceneDialogOpen(true);
+    }
+  }, [sheet.action]);
+
   const reload = useCallback(() => {
     window.location.reload();
   }, []);
 
-  const openCreate = useCallback(() => open("scene-create"), [open]);
+  const openCreate = useCallback(() => {
+    setSceneDialogOpen(false);
+    open("scene-create");
+  }, [open]);
+
+  const openImport = useCallback(() => {
+    setSceneDialogOpen(false);
+    open("scene-import");
+  }, [open]);
+
+  const galleryScenes = useMemo(
+    () => toGalleryScenes(bootstrap.scenes || []),
+    [bootstrap.scenes],
+  );
+
   const sceneOptions = useMemo(
     () =>
       (bootstrap.scenes || []).map((s) => ({
@@ -262,39 +179,32 @@ function ScenesHomeInner({ bootstrap }: Props) {
     sheet.action === "scene-manage" && sheet.id ? sheet.id : "";
 
   return (
-    <>
-      <PageHeader
-        title="Scenes"
-        titleEnd={
-          bootstrap.isSuperuser ? (
-            <div
-              className="ss-scenes-home-actions"
-              role="group"
-              aria-label="Scene actions"
-            >
-              <a
-                id="import-scene"
-                className="ss-btn ss-btn--secondary"
-                href="?ss=scene-import"
-              >
-                Import Scene
-              </a>
-              <a
-                id="new_scene"
-                className="ss-btn ss-btn--primary"
-                href="?ss=scene-create"
-              >
-                + New Scene
-              </a>
-            </div>
-          ) : null
-        }
-      />
-      <ScenesGallery
-        scenes={bootstrap.scenes || []}
+    <div className="ss-scenes-home ss-scenes-home--workspace">
+      <div className="ss-single-pane">
+        <div className="ss-sp-viewport">
+          <SceneViewport
+            authToken={bootstrap.authToken}
+            isSuperuser={bootstrap.isSuperuser}
+            onOpenScene={() => setSceneDialogOpen(true)}
+          />
+        </div>
+      </div>
+
+      <OpenSceneDialog
+        open={sceneDialogOpen}
+        onClose={() => setSceneDialogOpen(false)}
+        onOpenScene={(uid) => {
+          // Leave the dialog open in page state so bfcache / Back restores
+          // home with the gallery visible.
+          window.location.assign(`/${uid}/`);
+        }}
+        authToken={bootstrap.authToken}
         isSuperuser={bootstrap.isSuperuser}
-        onCreate={openCreate}
+        initialScenes={galleryScenes}
+        onNewScene={openCreate}
+        onImportScene={openImport}
       />
+
       {bootstrap.isSuperuser ? (
         <>
           <SceneSheet
@@ -337,7 +247,7 @@ function ScenesHomeInner({ bootstrap }: Props) {
           />
         </>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -345,9 +255,7 @@ export function ScenesHomeApp({ bootstrap }: Props) {
   return (
     <ToastProvider>
       <LegacyConfirmHost>
-        <div className="ss-scenes-home">
-          <ScenesHomeInner bootstrap={bootstrap} />
-        </div>
+        <ScenesHomeInner bootstrap={bootstrap} />
       </LegacyConfirmHost>
     </ToastProvider>
   );

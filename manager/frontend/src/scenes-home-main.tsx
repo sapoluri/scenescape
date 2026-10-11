@@ -9,6 +9,7 @@ import {
   type ScenesHomeBootstrap,
 } from "./scenes/ScenesHomeApp";
 import "./tokens/tokens.css";
+import "./scene-detail.css";
 
 async function main(): Promise<void> {
   const bootstrap = await loadUiBootstrap<ScenesHomeBootstrap>(
