@@ -504,8 +504,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
   const activeTool = useViewportStore((s) => s.activeTool);
   const selectedId = useViewportStore((s) => s.selectedId);
   const structVersion = useViewportStore((s) => s.structVersion);
-  // While calibrating, left-click places map points (start or finish a pair).
-  const calPickScene = useCalibrateStore((s) => s.active);
+  // Calibrate uses double-click to add points; left-drag must still orbit.
+  const calActive = useCalibrateStore((s) => s.active);
 
   useEffect(() => {
     if (!world) {
@@ -528,14 +528,14 @@ export function useViewportTools(world: ViewportWorld | null): void {
         (tool === "scale" &&
           (entity.type === "region" || entity.type === "tripwire")));
 
-    // Left-drag orbits only for navigation/transform tools; creation and
-    // precise-select tools reserve it. Calibrate map-pick always wins.
+    // Left-drag orbits for navigation/transform tools. During calibrate,
+    // empty left-drag orbits too (marker drag temporarily disables orbit).
     const orbitLeftDrag =
-      !calPickScene &&
-      (tool === "live" ||
-        tool === "move" ||
-        tool === "rotate" ||
-        tool === "scale");
+      calActive ||
+      tool === "live" ||
+      tool === "move" ||
+      tool === "rotate" ||
+      tool === "scale";
     world.orbit.mouseButtons.LEFT = orbitLeftDrag ? MOUSE.ROTATE : null;
 
     if (!canTransform || !nodes || !entity) {
@@ -568,7 +568,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
       gizmo.showY = true;
       gizmo.showZ = true;
     };
-  }, [world, activeTool, selectedId, structVersion, calPickScene]);
+  }, [world, activeTool, selectedId, structVersion, calActive]);
 
   /* ---------------- keyboard ------------------------------------------- */
   useEffect(() => {

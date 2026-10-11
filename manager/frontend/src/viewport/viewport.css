@@ -261,6 +261,15 @@
   font-weight: 500;
 }
 
+.ss-vlabel--cal {
+  min-width: 1.1rem;
+  text-align: center;
+  padding: 1px 6px;
+  font-size: 12px;
+  border-width: 2px;
+  pointer-events: none;
+}
+
 .ss-vlabel--measure {
   background: rgb(10 132 255 / 0.9);
   border-color: transparent;

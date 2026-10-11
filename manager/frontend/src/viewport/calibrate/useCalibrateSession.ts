@@ -17,7 +17,7 @@ import { restPoseToRigEuler } from "../entities";
 import { getViewportState } from "../store";
 import type { ViewportWorld } from "../world";
 import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
-import { calibrationPointColorHex } from "./colors";
+import { calibrationPointColor, calibrationPointColorHex } from "./colors";
 import { solveCameraPose } from "./poseSolve";
 
 const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
@@ -258,15 +258,17 @@ export function useCalibrateSession(
     };
   }, [active, world]);
 
-  // Floor markers for map-side points (colors match camera feed by index).
+  // Floor markers + numbered labels (match camera-feed index colors).
   useEffect(() => {
     if (!world) {
       return;
     }
     const group = world.entityRoot;
     const markers: Mesh[] = [];
+    const labels: HTMLDivElement[] = [];
     const mats: MeshBasicMaterial[] = [];
     const geo = new SphereGeometry(MARKER_RADIUS, 12, 12);
+    const proj = new Vector3();
     if (active) {
       mapPoints.forEach((p, i) => {
         const mat = new MeshBasicMaterial({
@@ -282,11 +284,47 @@ export function useCalibrateSession(
         m.frustumCulled = false;
         group.add(m);
         markers.push(m);
+
+        const el = document.createElement("div");
+        el.className = "ss-vlabel ss-vlabel--cal";
+        el.textContent = String(i + 1);
+        el.style.borderColor = calibrationPointColor(i);
+        world.labelLayer.appendChild(el);
+        labels.push(el);
       });
     }
+
+    const updateLabels = () => {
+      if (!active || markers.length === 0) {
+        return;
+      }
+      const cam = world.getActiveCamera();
+      const w = world.host.clientWidth;
+      const h = world.host.clientHeight;
+      for (let i = 0; i < markers.length; i++) {
+        const el = labels[i];
+        proj.copy(markers[i].position);
+        proj.z += MARKER_RADIUS;
+        proj.project(cam);
+        if (proj.z > 1 || proj.z < -1) {
+          el.style.display = "none";
+          continue;
+        }
+        el.style.display = "";
+        el.style.transform = `translate(-50%, -120%) translate(${
+          (proj.x * 0.5 + 0.5) * w
+        }px, ${(-proj.y * 0.5 + 0.5) * h}px)`;
+      }
+    };
+    world.onFrame.add(updateLabels);
+
     return () => {
+      world.onFrame.delete(updateLabels);
       markers.forEach((m) => {
         group.remove(m);
+      });
+      labels.forEach((el) => {
+        el.remove();
       });
       geo.dispose();
       mats.forEach((mat) => mat.dispose());

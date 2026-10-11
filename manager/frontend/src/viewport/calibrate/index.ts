@@ -19,7 +19,7 @@ export function enterCameraCalibrate(args: {
   ) {
     return;
   }
-  // Select tool so orbit / pick are free for double-click + drag points.
+  // Select tool: double-click adds points; empty left-drag still orbits.
   getViewportState().setTool("select");
   useCalibrateStore.getState().enter(args);
 }
