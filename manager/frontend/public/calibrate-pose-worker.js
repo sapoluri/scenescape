@@ -183,6 +183,7 @@ function solveRt(mod, pairs, optics) {
 self.onmessage = (ev) => {
   const msg = ev.data || {};
   if (msg.type === "preload") {
+    self.postMessage({ type: "progress", stage: "importScripts" });
     loadOpenCv()
       .then(() => {
         self.postMessage({ type: "ready" });

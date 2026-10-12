@@ -78,14 +78,16 @@ let latestRequestId = 0;
 let loggedWorkerFallback = false;
 const pending = new Map<number, Pending>();
 
-const SOLVE_TIMEOUT_MS = 20000;
+/** Worker OpenCV importScripts is often slow/stuck; don't block pose apply. */
+const WORKER_READY_TIMEOUT_MS = 4000;
+const SOLVE_TIMEOUT_MS = 8000;
 
 function workerScriptUrl(): string {
   // BASE_URL is a path ("/static/ui/"); URL() needs an absolute base.
   // Cache-bust so iterate-on-docker-cp picks up worker fixes.
   const base = import.meta.env.BASE_URL || "/static/ui/";
   const path = `${base.endsWith("/") ? base : `${base}/`}calibrate-pose-worker.js`;
-  return new URL(`${path}?v=3`, window.location.origin).toString();
+  return new URL(`${path}?v=4`, window.location.origin).toString();
 }
 
 function attachWorkerDispatcher(w: Worker): void {
@@ -192,16 +194,19 @@ function ensureWorker(): Promise<Worker> {
     };
     readyTimer = window.setTimeout(() => {
       fail(new Error("OpenCV worker ready timed out"));
-    }, 60000);
+    }, WORKER_READY_TIMEOUT_MS);
     w.postMessage({ type: "preload" });
   });
   return workerBoot;
 }
 
-/** Prefetch OpenCV in the worker (idle) so the first solve is warm. */
+/** Prefetch OpenCV (worker best-effort + main-thread script). */
 export function preloadOpenCv(): void {
   void ensureWorker().catch(() => {
-    /* first solve falls back to main thread */
+    /* worker optional — main-thread solve is the reliable path */
+  });
+  void loadOpenCvMain().catch(() => {
+    /* first solve will surface the error */
   });
 }
 
@@ -422,7 +427,9 @@ async function solveOnMainThread(
 
 /**
  * Mirror legacy cameracalibrate.js solvePnP + OpenCV→OpenGL flip + invert.
- * Prefers a Web Worker; falls back to the main thread if the worker fails.
+ * Uses the worker only when it is already warm; otherwise solves on the main
+ * thread immediately. (Worker OpenCV importScripts often never becomes ready,
+ * which previously left pose updates stuck on "Updating…".)
  * Stale results (superseded requestId) are dropped.
  */
 export async function solveCameraPose(
@@ -438,32 +445,36 @@ export async function solveCameraPose(
   }
   const requestId = ++nextRequestId;
   latestRequestId = requestId;
-  try {
-    const pose = await solveInWorker(pairs, optics, requestId);
-    if (requestId !== latestRequestId) {
-      return null;
-    }
-    return pose;
-  } catch (err) {
-    if (requestId !== latestRequestId) {
-      return null;
-    }
-    if (!loggedWorkerFallback) {
-      loggedWorkerFallback = true;
-      console.warn(
-        "Calibrate OpenCV worker solve failed; using main thread",
-        err,
-      );
-    }
+
+  if (worker && !workerFailed) {
     try {
-      const pose = await solveOnMainThread(pairs, optics);
+      const pose = await solveInWorker(pairs, optics, requestId);
       if (requestId !== latestRequestId) {
         return null;
       }
       return pose;
-    } catch (mainErr) {
-      console.warn("Calibrate main-thread solve failed", mainErr);
+    } catch (err) {
+      if (requestId !== latestRequestId) {
+        return null;
+      }
+      if (!loggedWorkerFallback) {
+        loggedWorkerFallback = true;
+        console.warn(
+          "Calibrate OpenCV worker solve failed; using main thread",
+          err,
+        );
+      }
+    }
+  }
+
+  try {
+    const pose = await solveOnMainThread(pairs, optics);
+    if (requestId !== latestRequestId) {
       return null;
     }
+    return pose;
+  } catch (mainErr) {
+    console.warn("Calibrate main-thread solve failed", mainErr);
+    return null;
   }
 }

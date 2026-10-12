@@ -284,3 +284,20 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
 
 /** Non-reactive snapshot access for the imperative three.js layer. */
 export const getViewportState = useViewportStore.getState;
+
+declare global {
+  interface Window {
+    /** Debug/test handle for in-browser viewport automation. */
+    __ssViewport?: {
+      getState: typeof getViewportState;
+      store: typeof useViewportStore;
+    };
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__ssViewport = {
+    getState: getViewportState,
+    store: useViewportStore,
+  };
+}

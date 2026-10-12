@@ -216,3 +216,22 @@ export function getCalibratePairs(): ReturnType<typeof zipCalibratePairs> {
   }
   return zipCalibratePairs(s.camPoints, s.mapPoints);
 }
+
+declare global {
+  interface Window {
+    /** Debug/test handle for in-browser calibrate automation. */
+    __ssCalibrate?: {
+      getState: typeof getCalibrateState;
+      getPairs: typeof getCalibratePairs;
+      store: typeof useCalibrateStore;
+    };
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__ssCalibrate = {
+    getState: getCalibrateState,
+    getPairs: getCalibratePairs,
+    store: useCalibrateStore,
+  };
+}
