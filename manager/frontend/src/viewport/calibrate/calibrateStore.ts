@@ -66,6 +66,11 @@ export type CalibrateState = {
   removeMapPointAt: (index: number) => void;
   undoPoint: () => void;
   resetPoints: () => void;
+  /** Replace both sides (e.g. AprilTag auto-calibrate result). */
+  replacePoints: (
+    camPoints: [number, number][],
+    mapPoints: [number, number, number][],
+  ) => void;
   markClean: () => void;
 };
 
@@ -201,6 +206,8 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
       dirty: true,
       step: "pick",
     }),
+  replacePoints: (camPoints, mapPoints) =>
+    set(afterPoints(camPoints, mapPoints, true)),
   markClean: () => set({ dirty: false }),
 }));
 

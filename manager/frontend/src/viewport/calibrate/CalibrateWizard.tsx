@@ -5,13 +5,15 @@ import { useEffect, useState } from "react";
 import { useAppToast } from "../../components/ToastProvider";
 import {
   frameToBase64,
-  getAutocalibrationStatus,
+  pointsFromAutocalibResult,
+  resolveAutocalibAvailability,
   startCameraAutocalibration,
+  waitForCameraAutocalibration,
 } from "../../lib/autocalibration";
 import { api, type RestError } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
 import { getViewportState, useViewportStore } from "../store";
-import { useCalibrateStore } from "./calibrateStore";
+import { getCalibrateState, useCalibrateStore } from "./calibrateStore";
 import {
   pairsToTransforms,
   TRANSFORM_TYPE_POINT,
@@ -67,25 +69,17 @@ export function CalibrateWizard({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const status = await getAutocalibrationStatus();
+      const avail = await resolveAutocalibAvailability(sceneId, authToken);
       if (cancelled) {
         return;
       }
-      if (status?.status === "running" || status?.status === "success") {
-        setAutoReady(true);
-        setAutoTitle("Click to calibrate the camera automatically");
-      } else {
-        setAutoReady(false);
-        setAutoTitle(
-          status?.message ||
-            "Auto Calibrate system not available for this scene",
-        );
-      }
+      setAutoReady(avail.ready);
+      setAutoTitle(avail.title);
     })();
     return () => {
       cancelled = true;
     };
-  }, [sceneId, sensorId]);
+  }, [sceneId, sensorId, authToken]);
 
   const restorePrior = () => {
     if (!cameraId || !priorPose) {
@@ -117,16 +111,35 @@ export function CalibrateWizard({
     setAutoBusy(true);
     try {
       const image = await frameToBase64(feedImageUrl);
-      const result = await startCameraAutocalibration(sensorId, image, [
+      const started = await startCameraAutocalibration(sensorId, image, [
         [optics.fx, 0, optics.cx],
         [0, optics.fy, optics.cy],
         [0, 0, 1],
       ]);
-      if (result.status === "error") {
-        toast.show(result.message || "Auto calibrate failed", "bad");
-      } else {
-        toast.show("Auto calibrate started", "ok");
+      if (started.status === "error") {
+        toast.show(started.message || "Auto calibrate failed", "bad");
+        return;
       }
+      toast.show("Detecting AprilTags…", "ok");
+      const result = await waitForCameraAutocalibration(sensorId);
+      if (result.status !== "success") {
+        toast.show(
+          result.message ||
+            "Auto calibrate failed. Check that tags are visible in the frame.",
+          "bad",
+        );
+        return;
+      }
+      const pts = pointsFromAutocalibResult(result);
+      if (!pts) {
+        toast.show("Auto calibrate returned no point correspondences", "bad");
+        return;
+      }
+      getCalibrateState().replacePoints(pts.camPoints, pts.mapPoints);
+      toast.show(
+        `Auto calibrate found ${pts.camPoints.length} tag correspondences`,
+        "ok",
+      );
     } catch (err) {
       toast.show((err as Error).message || "Auto calibrate failed", "bad");
     } finally {
@@ -304,12 +317,12 @@ export function CalibrateWizard({
         className="ss-tool-btn"
         id="auto-autocalibration"
         disabled={!autoReady || autoBusy || !feedImageUrl || busy}
-        title={autoTitle}
+        title={autoBusy ? "Waiting for AprilTag calibration…" : autoTitle}
         onClick={() => void onAutoCalibrate()}
       >
         <i className="bi bi-lightning" aria-hidden="true" />
         <span className="ss-tool-label">
-          {autoBusy ? "Starting…" : "Auto Calibrate"}
+          {autoBusy ? "Calibrating…" : "Auto Calibrate"}
         </span>
       </button>
       <button

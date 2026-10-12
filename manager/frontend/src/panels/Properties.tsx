@@ -6,7 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
 import {
   frameToBase64,
-  getAutocalibrationStatus,
+  resolveAutocalibAvailability,
   startCameraAutocalibration,
 } from "../lib/autocalibration";
 import {
@@ -471,25 +471,22 @@ function CameraProps({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const status = await getAutocalibrationStatus();
+      if (!sceneId) {
+        setAutoReady(false);
+        setAutoTitle("Auto Calibrate system not available for this scene");
+        return;
+      }
+      const avail = await resolveAutocalibAvailability(sceneId, authToken);
       if (cancelled) {
         return;
       }
-      if (status?.status === "running" || status?.status === "success") {
-        setAutoReady(true);
-        setAutoTitle("Click to calibrate the camera automatically");
-      } else {
-        setAutoReady(false);
-        setAutoTitle(
-          status?.message ||
-            "Auto Calibrate system not available for this scene",
-        );
-      }
+      setAutoReady(avail.ready);
+      setAutoTitle(avail.title);
     })();
     return () => {
       cancelled = true;
     };
-  }, [sensorId]);
+  }, [sensorId, sceneId, authToken]);
 
   const patch = (p: Partial<CameraEntity>) =>
     getViewportState().updateEntity(e.id, p);
@@ -783,7 +780,8 @@ function CameraProps({
         />
         <span>Project frame</span>
       </label>
-      {(calibrating || (e.posed && projecting)) && (
+      {/* While calibrating, opacity lives on the wizard toolbar only. */}
+      {!calibrating && e.posed && projecting ? (
         <label className="ss-prop-field">
           <span className="ss-prop-label">Opacity</span>
           <input
@@ -801,7 +799,7 @@ function CameraProps({
           />
           <span className="ss-prop-value">{Math.round(projectOpacity * 100)}%</span>
         </label>
-      )}
+      ) : null}
       {!calibrating ? (
         <SaveBar
           dirty={dirty}
