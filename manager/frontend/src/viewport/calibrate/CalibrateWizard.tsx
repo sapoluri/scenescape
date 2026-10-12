@@ -10,7 +10,7 @@ import {
 } from "../../lib/autocalibration";
 import { api, type RestError } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
-import { getViewportState } from "../store";
+import { getViewportState, useViewportStore } from "../store";
 import { useCalibrateStore } from "./calibrateStore";
 import {
   pairsToTransforms,
@@ -59,6 +59,7 @@ export function CalibrateWizard({
     "Checking auto-calibration service…",
   );
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
+  const projectOpacity = useViewportStore((s) => s.projectOpacity);
 
   const canSave = pairCount >= 4 && dirty && !busy && Boolean(optics);
 
@@ -206,7 +207,9 @@ export function CalibrateWizard({
       ? camPoints.length !== mapPoints.length
         ? `Step 2 · Pick points (cam ${camPoints.length} / map ${mapPoints.length})`
         : `Step 2 · Pick points (${pairCount}/4+)`
-      : "Step 3–4 · Frustum updated · Save when ready";
+      : pairCount >= 6
+        ? "Step 3–4 · Pose + fx/fy updated · Save when ready"
+        : "Step 3–4 · Frustum updated · Save when ready";
 
   return (
     <div className="ss-cal-wizard" role="toolbar" aria-label="Calibration wizard">
@@ -243,6 +246,28 @@ export function CalibrateWizard({
       <span className="ss-cal-wizard-step" title={stepLabel}>
         {stepLabel}
       </span>
+      <label
+        className="ss-cal-wizard-opacity"
+        title="Map projection opacity"
+      >
+        <span className="ss-viewport-bar-label">Overlay</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={Math.round(projectOpacity * 100)}
+          onChange={(ev) =>
+            getViewportState().setProjectOpacity(
+              Number(ev.target.value) / 100,
+            )
+          }
+          aria-label="Projection opacity"
+        />
+        <span className="ss-cal-wizard-opacity-val">
+          {Math.round(projectOpacity * 100)}%
+        </span>
+      </label>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <button
         type="button"

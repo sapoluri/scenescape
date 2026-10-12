@@ -53,6 +53,26 @@
   white-space: nowrap;
 }
 
+.ss-cal-wizard-opacity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+  font-size: 12px;
+  color: #a2a4ae;
+}
+
+.ss-cal-wizard-opacity input[type="range"] {
+  width: 5.5rem;
+  accent-color: #0a84ff;
+}
+
+.ss-cal-wizard-opacity-val {
+  min-width: 2.25rem;
+  font-variant-numeric: tabular-nums;
+  color: #e9eaee;
+}
+
 .ss-cal-wizard-exit {
   margin-left: auto;
 }

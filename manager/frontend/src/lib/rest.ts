@@ -118,6 +118,25 @@ export const api = {
       `/camera/${encodeURIComponent(uid)}`,
       token,
     ),
+  /** OpenCV calibrateCamera for ≥6 correspondences (legacy calibrate panel). */
+  calculateIntrinsics: (
+    token: string,
+    data: {
+      camPoints: number[][];
+      mapPoints: number[][];
+      fixIntrinsics: Record<string, boolean>;
+      intrinsics: number[][];
+      distortion: number[];
+      imageSize: [number, number];
+    },
+  ) =>
+    restJson<{
+      mtx: number[][];
+      dist: number[] | number[][];
+      euler?: number[];
+      position?: number[];
+      error?: string;
+    }>("POST", "/calculateintrinsics", token, data),
   createSensor: (token: string, data: unknown) =>
     restJson<Record<string, unknown>>("POST", "/sensor", token, data),
   updateSensor: (token: string, uid: string, data: unknown) =>

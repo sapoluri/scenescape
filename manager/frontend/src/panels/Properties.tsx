@@ -410,6 +410,9 @@ function CameraProps({
   const calibrating = useCalibrateStore(
     (s) => s.active && s.cameraId === e.id,
   );
+  const calOptics = useCalibrateStore((s) =>
+    s.active && s.cameraId === e.id ? s.optics : null,
+  );
   const poseDirty = useEntityDirty(e);
   const [optics, setOptics] = useState<CameraOptics | null>(null);
   const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
@@ -455,6 +458,14 @@ function CameraProps({
       cancelled = true;
     };
   }, [sensorId, authToken, e.name, e.id]);
+
+  // Live fx/fy (and friends) from in-viewport calibrate (≥6 pairs).
+  useEffect(() => {
+    if (!calibrating || !calOptics) {
+      return;
+    }
+    setOptics(calOptics);
+  }, [calibrating, calOptics]);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
@@ -500,7 +511,16 @@ function CameraProps({
   };
 
   const patchOptics = (p: Partial<CameraOptics>) => {
-    setOptics((prev) => (prev ? { ...prev, ...p } : prev));
+    setOptics((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const next = { ...prev, ...p };
+      if (calibrating) {
+        useCalibrateStore.getState().setOptics(next);
+      }
+      return next;
+    });
   };
 
   const onFovCommit = (v: number) => {
@@ -742,17 +762,19 @@ function CameraProps({
       ) : null}
       <ReadField label="Pose" value={e.posed ? "Calibrated" : "Unset"} />
       <label
-        className={`ss-prop-check${e.posed ? "" : " is-disabled"}`}
+        className={`ss-prop-check${e.posed || calibrating ? "" : " is-disabled"}`}
         title={
-          e.posed
-            ? "Project the live camera frame onto the scene map"
-            : "Calibrate this camera first — projection needs a pose"
+          calibrating
+            ? "Projection stays on while calibrating"
+            : e.posed
+              ? "Project the live camera frame onto the scene map"
+              : "Calibrate this camera first — projection needs a pose"
         }
       >
         <input
           type="checkbox"
-          checked={projecting}
-          disabled={!e.posed}
+          checked={calibrating || projecting}
+          disabled={calibrating || !e.posed}
           onChange={(ev) =>
             getViewportState().setProjectCamera(
               ev.target.checked ? e.id : null,
@@ -761,7 +783,7 @@ function CameraProps({
         />
         <span>Project frame</span>
       </label>
-      {e.posed && projecting && (
+      {(calibrating || (e.posed && projecting)) && (
         <label className="ss-prop-field">
           <span className="ss-prop-label">Opacity</span>
           <input

@@ -14,11 +14,12 @@ import {
 import { parseCameraOptics } from "../../lib/cameraOptics";
 import { api } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
-import { getViewportState } from "../store";
+import { getViewportState, useViewportStore } from "../store";
 import type { ViewportWorld } from "../world";
 import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
 import { calibrationPointColor, calibrationPointColorHex } from "./colors";
-import { solveCameraPose } from "./poseSolve";
+import { preloadOpenCv, solveCameraPose } from "./poseSolve";
+import { fovFromOptics, refineIntrinsics } from "./refineIntrinsics";
 
 const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
 /** World-space marker radius (legacy `SPHERE_RADIUS` ≈ 0.05). */
@@ -108,10 +109,9 @@ export function useCalibrateSession(
   const cameraName = useCalibrateStore((s) => s.cameraName);
   const mapPoints = useCalibrateStore((s) => s.mapPoints);
   const camPoints = useCalibrateStore((s) => s.camPoints);
-  const optics = useCalibrateStore((s) => s.optics);
 
   // Load optics + snapshot prior pose when entering / switching camera.
-  // Do not preload OpenCV.js here — parsing/WASM init freezes the UI.
+  // Prefetch OpenCV after a tick so the calibrate UI paints first.
   useEffect(() => {
     if (!active || !cameraId || !sensorId || !authToken) {
       return;
@@ -119,13 +119,32 @@ export function useCalibrateSession(
     let cancelled = false;
     const entity = getViewportState().entities[cameraId];
     if (entity?.type === "camera") {
-      useCalibrateStore.getState().setPriorPose({
+      const prior = {
         position: [...entity.position] as [number, number, number],
         rotation: [...entity.rotation] as [number, number, number],
         fov: entity.fov,
-      });
+      };
+      useCalibrateStore.getState().setPriorPose(prior);
+      // Seed coverage from the current frustum when already posed.
+      if (entity.posed) {
+        const restRot = entity.restRotation
+          ? ([...entity.restRotation] as [number, number, number])
+          : restPoseToRigEuler(entity.rotation);
+        useCalibrateStore.getState().setPreviewPose({
+          position: prior.position,
+          rotation: restRot,
+          fov: prior.fov,
+        });
+      }
       getViewportState().select(cameraId);
     }
+    // Coverage overlay on while calibrating.
+    getViewportState().setProjectCamera(cameraId);
+    const preloadTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        preloadOpenCv();
+      }
+    }, 400);
     (async () => {
       try {
         const row = (await api.getCamera(authToken, sensorId)) ?? {};
@@ -145,6 +164,7 @@ export function useCalibrateSession(
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(preloadTimer);
     };
   }, [active, cameraId, sensorId, authToken, cameraName]);
 
@@ -347,55 +367,86 @@ export function useCalibrateSession(
           .join("|")
       : "";
 
+  // Debounce solve — dragging a map point with ≥4 pairs used to call
+  // solvePnP on every pointermove and freeze the UI. At ≥6 pairs, refine
+  // fx/fy via /calculateintrinsics first (legacy calibrate behaviour).
   useEffect(() => {
-    if (!active || !cameraId || !optics || equalCount < 4) {
+    if (!active || !cameraId || !authToken || equalCount < 4) {
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const pairs = getCalibratePairs();
-        if (pairs.length < 4) {
-          return;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const pairs = getCalibratePairs();
+          let working = useCalibrateStore.getState().optics;
+          if (cancelled || pairs.length < 4 || !working) {
+            return;
+          }
+          if (pairs.length >= 6) {
+            try {
+              const refined = await refineIntrinsics(
+                authToken,
+                pairs,
+                working,
+              );
+              if (cancelled) {
+                return;
+              }
+              if (refined) {
+                working = refined;
+                useCalibrateStore.getState().setOptics(refined);
+              }
+            } catch (err) {
+              console.warn("Calibrate intrinsics refine failed", err);
+            }
+          }
+          const pose = await solveCameraPose(pairs, working);
+          if (cancelled || !pose) {
+            return;
+          }
+          const fov = fovFromOptics(working);
+          const withFov = { ...pose, fov };
+          useCalibrateStore.getState().setPreviewPose(withFov);
+          getViewportState().updateEntity(cameraId, {
+            position: withFov.position,
+            rotation: restPoseToRigEuler(withFov.rotation),
+            restRotation: withFov.rotation,
+            posed: true,
+            fov,
+          });
+          getViewportState().setProjectCamera(cameraId);
+        } catch (err) {
+          console.warn("Calibrate pose solve failed", err);
         }
-        const pose = await solveCameraPose(pairs, optics);
-        if (cancelled || !pose) {
-          return;
-        }
-        useCalibrateStore.getState().setPreviewPose(pose);
-        getViewportState().updateEntity(cameraId, {
-          position: pose.position,
-          rotation: restPoseToRigEuler(pose.rotation),
-          restRotation: pose.rotation,
-          posed: true,
-          fov: pose.fov,
-        });
-      } catch (err) {
-        console.warn("Calibrate pose solve failed", err);
-      }
-    })();
+      })();
+    }, 180);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
-  }, [active, cameraId, optics, pairsKey, equalCount]);
+  }, [active, cameraId, authToken, pairsKey, equalCount]);
 
-  // Apply solved pose to the projector once (reproject camera matrices).
+  // Apply solved pose to the projector (reproject camera matrices).
   useEffect(() => {
     if (!active || !world?.cameraProjection || !previewPose) {
       return;
     }
-    world.cameraProjection.updatePose({
-      fov: previewPose.fov,
-      position: previewPose.position,
-      rotationDeg: restPoseToRigEuler(previewPose.rotation),
+    const handle = world.cameraProjection;
+    const raf = window.requestAnimationFrame(() => {
+      handle.updatePose({
+        fov: previewPose.fov,
+        position: previewPose.position,
+        rotationDeg: restPoseToRigEuler(previewPose.rotation),
+      });
+      handle.setOpacity(getViewportState().projectOpacity);
+      handle.setVisible(true);
     });
-    world.cameraProjection.setOpacity(getViewportState().projectOpacity);
-    world.cameraProjection.setVisible(true);
+    return () => window.cancelAnimationFrame(raf);
   }, [active, world, previewPose]);
 
   // Refresh projection JPEG without reprojecting on every MQTT frame.
-  // Throttle so decode/upload cannot freeze the UI after the 4th point.
   useEffect(() => {
     if (!active || !world?.cameraProjection || !feedImageUrl || !previewPose) {
       return;
@@ -427,10 +478,19 @@ export function useCalibrateSession(
     };
   }, [active, world, feedImageUrl, previewPose]);
 
+  // Keep opacity slider live while calibrate owns the projector.
+  const projectOpacity = useViewportStore((s) => s.projectOpacity);
+  useEffect(() => {
+    if (!active || !world?.cameraProjection) {
+      return;
+    }
+    world.cameraProjection.setOpacity(projectOpacity);
+  }, [active, world, projectOpacity]);
+
   useEffect(() => {
     if (!active) {
       useCalibrateStore.getState().setPreviewPose(null);
-      // Leave the overlay up when Live "Project frame" is still on.
+      // Leave coverage up when Project frame is still enabled.
       if (!getViewportState().projectCameraId) {
         world?.cameraProjection?.setVisible(false);
       }

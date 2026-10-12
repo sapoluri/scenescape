@@ -53,14 +53,15 @@ export function useLiveCameraProjection(
 
   // Drop projection only when the camera is known and unposed (not while seed
   // is still loading — that would make Project appear to do nothing).
+  // Calibrate owns projection for its camera even before the first solve.
   useEffect(() => {
-    if (!projectCameraId || !camEntity) {
+    if (!projectCameraId || !camEntity || calibrating) {
       return;
     }
     if (!camEntity.posed) {
       getViewportState().setProjectCamera(null);
     }
-  }, [projectCameraId, camEntity]);
+  }, [projectCameraId, camEntity, calibrating]);
 
   // Wait until the map projector exists (async map load), then keep applying
   // the latest strip JPEG for the selected posed camera.
@@ -160,10 +161,11 @@ export function useLiveCameraProjection(
   ]);
 
   // Opacity-only updates without reloading the texture.
+  // Calibrate session also listens; either path is fine while active.
   useEffect(() => {
-    if (calibrating || !world?.cameraProjection || !projectCameraId) {
+    if (!world?.cameraProjection || !projectCameraId) {
       return;
     }
     world.cameraProjection.setOpacity(projectOpacity);
-  }, [world, calibrating, projectCameraId, projectOpacity]);
+  }, [world, projectCameraId, projectOpacity]);
 }

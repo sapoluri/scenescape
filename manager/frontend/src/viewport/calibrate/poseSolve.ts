@@ -30,7 +30,6 @@ type CvModule = {
   Rodrigues: (src: CvMat, dst: CvMat) => void;
   CV_64F: number;
   SOLVEPNP_ITERATIVE: number;
-  SOLVEPNP_SQPNP: number;
   getBuildInformation?: () => string;
   onRuntimeInitialized?: () => void;
 };
@@ -42,6 +41,13 @@ declare global {
 }
 
 let cvReady: Promise<CvModule> | null = null;
+
+/** Prefetch OpenCV.js while the user is still picking points (idle). */
+export function preloadOpenCv(): void {
+  void loadOpenCv().catch(() => {
+    /* first solve will surface the error */
+  });
+}
 
 function loadOpenCv(): Promise<CvModule> {
   if (cvReady) {
@@ -90,33 +96,6 @@ function loadOpenCv(): Promise<CvModule> {
     document.head.appendChild(script);
   });
   return cvReady;
-}
-
-function arePointsCoplanar(pts: [number, number, number][]): boolean {
-  if (pts.length < 4) {
-    return true;
-  }
-  const [a, b, c] = pts;
-  const ab = new Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-  const ac = new Vector3(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
-  const n = new Vector3().crossVectors(ab, ac);
-  if (n.lengthSq() < 1e-12) {
-    return true;
-  }
-  n.normalize();
-  for (let i = 3; i < pts.length; i++) {
-    const d = new Vector3(
-      pts[i][0] - a[0],
-      pts[i][1] - a[1],
-      pts[i][2] - a[2],
-    );
-    // Loose threshold: floor-map mesh hits often vary by a few cm in Z and
-    // should still use ITERATIVE (SQPNP can freeze opencv.js on near-planar sets).
-    if (Math.abs(d.dot(n)) > 0.05) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export type SolvedPose = {
@@ -179,16 +158,8 @@ function solvePnPOnce(
   const tvec = new cv.Mat();
   const R = new cv.Mat();
   try {
-    // Floor-map picks are nearly coplanar. SQPNP in opencv.js can hang the
-    // main thread on degenerate / near-planar sets, so prefer ITERATIVE and
-    // only try SQPNP when it exists and points are clearly non-planar.
-    const iterative = cv.SOLVEPNP_ITERATIVE;
-    const sqpnp = cv.SOLVEPNP_SQPNP;
-    const useSqpnp =
-      typeof sqpnp === "number" &&
-      sqpnp !== iterative &&
-      !arePointsCoplanar(objectPts);
-    const method = useSqpnp ? sqpnp : iterative;
+    // Always ITERATIVE. SQPNP in opencv.js can freeze the main thread on
+    // near-planar floor correspondences (the calibrate default).
     const ok = cv.solvePnP(
       objectPointsMat,
       imagePointsMat,
@@ -197,7 +168,7 @@ function solvePnPOnce(
       rvec,
       tvec,
       false,
-      method,
+      cv.SOLVEPNP_ITERATIVE,
     );
     if (!ok) {
       return null;
