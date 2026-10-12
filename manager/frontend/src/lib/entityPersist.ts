@@ -5,8 +5,10 @@ import { restPoseToRigEuler } from "../viewport/entities";
 import {
   listDirtyPersistableEntities,
   markEntityPersistClean,
+  getPersistState,
+  usePersistStore,
 } from "../viewport/persistStore";
-import { getViewportState } from "../viewport/store";
+import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
   RegionEntity,
@@ -15,6 +17,7 @@ import type {
   ViewportEntity,
 } from "../viewport/types";
 import { persistGeometry } from "./legacyBridge";
+import type { PersistGeometryResult } from "./roiPersist";
 import { api } from "./rest";
 import {
   writeRegionToModel,
@@ -160,14 +163,82 @@ export async function persistSensorEntity(
   await api.updateSensor(authToken, sensorId, payload);
 }
 
-export async function persistRegionEntity(e: RegionEntity): Promise<void> {
-  writeRegionToModel(e);
-  await Promise.resolve(persistGeometry());
+/**
+ * Rekey temp `draft-*` viewport ids to server uids after a geometry save.
+ * Prevents duplicate Outliner rows when the geometry model is rekeyed and
+ * reseeded while the store still holds the pre-save draft id.
+ */
+export function remapGeometryEntityIds(idMap: Record<string, string>): void {
+  const s = getViewportState();
+  let changed = false;
+  const next = { ...s.entities };
+  const baselines = { ...getPersistState().baselines };
+  for (const [oldId, newId] of Object.entries(idMap)) {
+    if (!oldId || !newId || oldId === newId) {
+      continue;
+    }
+    const entity = next[oldId];
+    if (!entity) {
+      continue;
+    }
+    delete next[oldId];
+    next[newId] = { ...entity, id: newId };
+    if (oldId in baselines) {
+      baselines[newId] = baselines[oldId];
+      delete baselines[oldId];
+    }
+    changed = true;
+  }
+  if (!changed) {
+    return;
+  }
+  usePersistStore.setState({ baselines });
+  useViewportStore.setState((state) => ({
+    entities: next,
+    selectedId:
+      state.selectedId && idMap[state.selectedId]
+        ? idMap[state.selectedId]
+        : state.selectedId,
+    structVersion: state.structVersion + 1,
+  }));
+  getPersistState().captureBaselines(Object.values(idMap));
 }
 
-export async function persistTripwireEntity(e: TripwireEntity): Promise<void> {
+function applyGeometryPersistResult(
+  geo: PersistGeometryResult | void | undefined,
+): PersistGeometryResult | undefined {
+  if (!geo || typeof geo !== "object") {
+    return undefined;
+  }
+  if (geo.roiIds) {
+    remapGeometryEntityIds(geo.roiIds);
+  }
+  if (geo.tripIds) {
+    remapGeometryEntityIds(geo.tripIds);
+  }
+  return geo;
+}
+
+export async function persistRegionEntity(
+  e: RegionEntity,
+): Promise<PersistGeometryResult | undefined> {
+  writeRegionToModel(e);
+  const geo = await Promise.resolve(persistGeometry());
+  const result = applyGeometryPersistResult(geo || undefined);
+  const newId = result?.roiIds?.[e.id] ?? e.id;
+  markEntityPersistClean(newId);
+  return result;
+}
+
+export async function persistTripwireEntity(
+  e: TripwireEntity,
+): Promise<PersistGeometryResult | undefined> {
   writeTripwireToModel(e);
-  await Promise.resolve(persistGeometry());
+  const geo = await Promise.resolve(persistGeometry());
+  const result = applyGeometryPersistResult(geo || undefined);
+  const newId = result?.tripIds?.[e.id] ?? e.id;
+  markEntityPersistClean(newId);
+  return result;
 }
 
 /**
@@ -256,14 +327,18 @@ export async function saveAllDirtyEntities(args: {
       if (geo && typeof geo === "object") {
         roiIds = geo.roiIds;
         tripIds = geo.tripIds;
+        // Rekey draft-* store ids before marking clean so Outliner/baselines
+        // do not keep a pre-save duplicate beside the server uid.
+        applyGeometryPersistResult(geo);
       }
-      // Mark clean under current (pre-remap) ids; caller remaps store + baselines.
       for (const r of regions) {
-        markEntityPersistClean(r.id);
+        const newId = roiIds?.[r.id] ?? r.id;
+        markEntityPersistClean(newId);
         saved += 1;
       }
       for (const t of trips) {
-        markEntityPersistClean(t.id);
+        const newId = tripIds?.[t.id] ?? t.id;
+        markEntityPersistClean(newId);
         saved += 1;
       }
       // Geometry-only dirty (no entity fingerprint change) still counts.

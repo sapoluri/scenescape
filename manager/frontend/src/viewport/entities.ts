@@ -702,11 +702,13 @@ export function useViewportEntities(
         keep.add(e.id);
       }
       const state = getViewportState();
-      // Drop model-backed entities deleted in 2D; never in-progress drafts.
+      // Drop regions/tripwires no longer in the geometry model. In-progress
+      // drafts are written into the model on create, so they stay in `keep`.
+      // Orphan `draft-*` rows left after a server rekey must be removed or
+      // the Outliner shows the same region twice.
       for (const [id, e] of Object.entries(state.entities)) {
         if (
           (e.type === "region" || e.type === "tripwire") &&
-          !id.startsWith("draft-") &&
           !keep.has(id)
         ) {
           state.removeEntity(id);

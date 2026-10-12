@@ -261,7 +261,6 @@ function RegionProps({ e }: { e: RegionEntity }) {
         return;
       }
       await persistRegionEntity(cur);
-      markEntityPersistClean(e.id);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       toast.show("Region saved", "ok");
@@ -330,7 +329,6 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
         return;
       }
       await persistTripwireEntity(cur);
-      markEntityPersistClean(e.id);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       toast.show("Tripwire saved", "ok");

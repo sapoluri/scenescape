@@ -15,11 +15,7 @@ import { useCalibrateStore } from "./calibrate/calibrateStore";
 import { useCalibrateSession } from "./calibrate/useCalibrateSession";
 import { useViewportEntities } from "./entities";
 import { useViewportMarks } from "./marks";
-import {
-  countDirtyPersistable,
-  getPersistState,
-  usePersistStore,
-} from "./persistStore";
+import { countDirtyPersistable, usePersistStore } from "./persistStore";
 import { attachMarkRenderer } from "./renderMarks";
 import { useLiveCameraProjection } from "./useLiveCameraProjection";
 import { useSceneMap } from "./useSceneMap";
@@ -97,42 +93,6 @@ function OverlayCheck({
   );
 }
 
-/** Rekey temp `draft-*` ids to server uids after a geometry save. */
-function remapStoreIds(idMap: Record<string, string>): void {
-  const s = getViewportState();
-  let changed = false;
-  const next = { ...s.entities };
-  const baselines = { ...getPersistState().baselines };
-  for (const [oldId, newId] of Object.entries(idMap)) {
-    if (!oldId || !newId || oldId === newId) {
-      continue;
-    }
-    const entity = next[oldId];
-    if (!entity) {
-      continue;
-    }
-    delete next[oldId];
-    next[newId] = { ...entity, id: newId };
-    if (oldId in baselines) {
-      baselines[newId] = baselines[oldId];
-      delete baselines[oldId];
-    }
-    changed = true;
-  }
-  if (!changed) {
-    return;
-  }
-  usePersistStore.setState({ baselines });
-  useViewportStore.setState((state) => ({
-    entities: next,
-    selectedId:
-      state.selectedId && idMap[state.selectedId]
-        ? idMap[state.selectedId]
-        : state.selectedId,
-    structVersion: state.structVersion + 1,
-  }));
-  getPersistState().captureBaselines(Object.values(idMap));
-}
 
 function ToolHeader({
   sceneId,
@@ -192,12 +152,6 @@ function ToolHeader({
         sensors,
         geometryDirty,
       });
-      if (result.roiIds) {
-        remapStoreIds(result.roiIds);
-      }
-      if (result.tripIds) {
-        remapStoreIds(result.tripIds);
-      }
       if (result.saved > 0 && !result.errors.length) {
         toast.show(
           result.saved === 1
