@@ -823,21 +823,28 @@ class Cam(Sensor):
       kwargs.setdefault(name, value)
     args = ()
 
-    # Reset camera pose when reassigned to a different scene
+    # Reset camera pose when reassigned to a different scene.
+    # Compare as strings: REST/CharField writes often leave scene_id as str
+    # while the DB value is uuid.UUID — bare != false-triggers a wipe and
+    # stores transforms=[] (identity pose / Rx=180 in the UI).
     original_scene = None
     scene_changed = False
     if self.pk is not None:
       # This is an update, check if scene has changed
       try:
         original = Cam.objects.get(pk=self.pk)
-        if original.scene_id != self.scene_id:
+        original_sid = str(original.scene_id) if original.scene_id is not None else None
+        current_sid = str(self.scene_id) if self.scene_id is not None else None
+        if original_sid != current_sid:
           original_scene = original.scene
-          # Scene has changed, clear pose-related fields
-          self.transforms = []
-          self.scene_x = None
-          self.scene_y = None
-          self.scene_z = None
           scene_changed = True
+          # Keep transforms when this save already supplied a new calibration
+          # (same request that reassigns the scene). Only clear the old pose.
+          if self.transforms == original.transforms:
+            self.transforms = []
+            self.scene_x = None
+            self.scene_y = None
+            self.scene_z = None
       except Cam.DoesNotExist:
         pass
 

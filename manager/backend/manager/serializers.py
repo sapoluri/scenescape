@@ -326,7 +326,8 @@ class CamSerializer(NonNullSerializer):
     is_update = instance is not None
     scene_uid = validated_data.pop('scene', None)
     if scene_uid is not None:
-      validated_data['scene_id'] = scene_uid['pk']
+      scene_pk = scene_uid['pk'] if isinstance(scene_uid, dict) else scene_uid
+      validated_data['scene_id'] = scene_pk
 
     validated_data['type'] = "camera"
 

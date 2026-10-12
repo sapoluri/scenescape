@@ -167,7 +167,8 @@ export function CalibrateWizard({
       markClean();
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
-      // Refresh pose from server (authoritative).
+      // Refresh pose from server (authoritative). Skip identity — that is
+      // the empty-transforms fallback (looks like Rx=180 after REST→rig).
       try {
         const row = (await api.getCamera(authToken, sensorId)) ?? {};
         const t = row.translation as number[] | undefined;
@@ -177,10 +178,17 @@ export function CalibrateWizard({
             Array.isArray(r) && r.length >= 3
               ? [Number(r[0]), Number(r[1]), Number(r[2])]
               : [0, 0, 0];
-          getViewportState().updateEntity(cameraId, {
-            position: [Number(t[0]), Number(t[1]), Number(t[2])],
-            rotation: restPoseToRigEuler(restRot),
-          });
+          const identity =
+            Math.hypot(Number(t[0]), Number(t[1]), Number(t[2])) < 1e-9 &&
+            Math.hypot(restRot[0], restRot[1], restRot[2]) < 1e-9;
+          if (!identity) {
+            getViewportState().updateEntity(cameraId, {
+              position: [Number(t[0]), Number(t[1]), Number(t[2])],
+              rotation: restPoseToRigEuler(restRot),
+              restRotation: restRot,
+              posed: true,
+            });
+          }
         }
       } catch {
         /* keep live preview pose */
