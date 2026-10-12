@@ -117,7 +117,7 @@ HTML). Ids remain hard contracts for `sscape.js` / UI tests.
 | `#scale` | Scene scale |
 | `#scene` | Scene id / metadata |
 | `#fullscreen`, `#show-trails`, `#show-telemetry`, `#coloring-switch` | Map chrome (`#map-controls` centered on map column via `#ss-map-toggles-slot`) |
-| `#ss-scene-chrome` / `.ss-scene-header-actions` | Scene chrome: back + title + export/3d/edit/delete + rate |
+| `#ss-scene-chrome` / `.ss-scene-header-actions` | Scene chrome on viewport options bar: title + export/edit/delete + rate (no back link; MQTT is `#mqtt_status` on the app menu bar) |
 | `#id_rois`, `#tripwires` | Hidden geometry JSON (from bootstrap) |
 | `#id_child_rois`, `#child_tripwires`, `#child_sensors` | Child overlay JSON (from bootstrap) |
 

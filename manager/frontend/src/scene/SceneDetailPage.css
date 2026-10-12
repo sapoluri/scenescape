@@ -4,7 +4,8 @@
  */
 
 /*
- * Single-pane scene detail: slim chrome header above the 3D workspace.
+ * Single-pane scene detail: 3D workspace fills the shell (scene chrome lives
+ * on the viewport option bars).
  */
 .ss-scene-detail--single-pane {
   display: flex;
@@ -14,57 +15,6 @@
   overflow: hidden;
 }
 
-.ss-scene-chrome {
-  --ss-chrome-bar-height: 2.25rem;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  width: 100%;
-  min-height: var(--ss-chrome-bar-height);
-}
-
-.ss-scene-chrome-map {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: var(--ss-chrome-bar-height);
-  padding: 0 0.5rem;
-}
-
-.ss-scene-chrome-start,
-.ss-scene-chrome-end {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.ss-scene-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.ss-scene-header-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  text-decoration: none;
-}
-
-.ss-page-title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .scene-detail-mqtt-pill {
   display: inline-flex;
   align-items: center;
@@ -72,17 +22,11 @@
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 999px;
-  color: var(--bs-secondary-color, #6c757d);
+  color: var(--ss-text-muted, #8e8e93);
 }
 
 .scene-detail-mqtt-pill.connected {
-  color: var(--bs-success, #198754);
-}
-
-.scene-rate.ss-scene-rate {
-  font-size: 0.8rem;
-  color: var(--bs-secondary-color, #6c757d);
-  white-space: nowrap;
+  color: var(--ss-success, #30d158);
 }
 
 .ss-workspace-body--single {

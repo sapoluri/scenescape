@@ -13,7 +13,8 @@ type Props = {
   onOpenCameras?: () => void;
   onOpenSensors?: () => void;
   onOpenLibrary?: () => void;
-  children?: React.ReactNode;
+  /** Scene-agnostic broker status (hard-contract #mqtt_status). */
+  mqttConnected?: boolean | null;
 };
 
 declare global {
@@ -30,20 +31,19 @@ declare global {
 }
 
 /**
- * 3D viewport menu bar: Open (scenes/cameras/sensors + gallery), Library,
- * optional mid-bar controls (Mode/View/Overlays), Help, user/Admin, theme,
- * and SceneScape version on the right.
+ * App menu bar for the 3D workspace: Open (scenes/cameras/sensors), Library,
+ * Help, user/Admin, MQTT status, theme, and SceneScape version on the right.
  *
- * Hard-contract nav ids (`#nav-scenes`, …) live here when the top navbar is
- * hidden on the workspace shell. Menu panels stay in the DOM (hidden when
- * closed) so Selenium presence checks keep working.
+ * Viewport Mode/View/Overlays and scene export/edit/delete live on
+ * ViewportOptionsBar; edit tools on ToolHeader. Hard-contract nav ids stay
+ * here when the top navbar is hidden.
  */
 export function ViewportMenuBar({
   onOpenScene,
   onOpenCameras,
   onOpenSensors,
   onOpenLibrary,
-  children,
+  mqttConnected = null,
 }: Props) {
   const chrome = useChromeBootstrap();
   const [menu, setMenu] = useState<MenuId>(null);
@@ -87,7 +87,7 @@ export function ViewportMenuBar({
       ref={rootRef}
       className="ss-viewport-bar ss-viewport-menubar"
       role="toolbar"
-      aria-label="Viewport"
+      aria-label="Application"
     >
       <div className={`ss-vmenu${menu === "open" ? " is-open" : ""}`}>
         <button
@@ -184,9 +184,19 @@ export function ViewportMenuBar({
         </button>
       ) : null}
 
-      {children}
-
       <div className="ss-viewport-bar-spacer" aria-hidden="true" />
+
+      {mqttConnected !== null ? (
+        <span
+          id="mqtt_status"
+          className={`scene-detail-mqtt-pill ss-viewport-mqtt${mqttConnected ? " connected" : ""}`}
+          title={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
+          data-ss-mqtt={mqttConnected ? "connected" : "disconnected"}
+          aria-label={mqttConnected ? "MQTT connected" : "MQTT disconnected"}
+        >
+          <i className="bi bi-arrow-down-up" aria-hidden="true" />
+        </span>
+      ) : null}
 
       {chrome && urls ? (
         <>

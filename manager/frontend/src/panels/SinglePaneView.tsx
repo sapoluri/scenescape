@@ -18,6 +18,7 @@ import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
 import { Telemetry } from "./Telemetry";
 import { ReplayPanel } from "../replay/ReplayPanel";
+import type { SceneChromeActions } from "../viewport/ViewportOptionsBar";
 import "./Outliner.css";
 import "./Properties.css";
 import "./SinglePaneView.css";
@@ -59,6 +60,8 @@ export interface SinglePaneViewProps {
   authToken: string;
   assetMarkColors?: Record<string, string>;
   isSuperuser?: boolean;
+  mqttConnected?: boolean | null;
+  sceneChrome?: SceneChromeActions | null;
 }
 
 /**
@@ -80,6 +83,8 @@ export function SinglePaneView({
   authToken,
   assetMarkColors,
   isSuperuser = false,
+  mqttConnected = null,
+  sceneChrome = null,
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
@@ -133,6 +138,8 @@ export function SinglePaneView({
             cameraRates={cameraRates}
             authToken={authToken}
             isSuperuser={isSuperuser}
+            mqttConnected={mqttConnected}
+            sceneChrome={sceneChrome}
             onOpenLibrary={() => setLibraryOpen(true)}
             onOpenScene={() => {
               setAdminListKind(null);

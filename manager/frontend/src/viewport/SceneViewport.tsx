@@ -28,6 +28,10 @@ import {
   ViewportMenuBar,
   ViewportPoweredBy,
 } from "./ViewportMenuBar";
+import {
+  ViewportOptionsBar,
+  type SceneChromeActions,
+} from "./ViewportOptionsBar";
 import "./viewport.css";
 import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./world";
 
@@ -63,6 +67,10 @@ interface SceneViewportProps {
   onOpenSensors?: () => void;
   mode?: "live" | "replay";
   onModeChange?: (mode: "live" | "replay") => void;
+  /** Scene-agnostic MQTT pill on the app menu bar. */
+  mqttConnected?: boolean | null;
+  /** Scene name / export / edit / delete / rate on the options bar. */
+  sceneChrome?: SceneChromeActions | null;
 }
 
 function readTheme(): ViewportTheme {
@@ -81,25 +89,6 @@ function useTheme(): ViewportTheme {
   }, []);
   return theme;
 }
-
-function OverlayCheck({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <label className={`vchk${checked ? " on" : ""}`}>
-      <input type="checkbox" checked={checked} onChange={onChange} />
-      <span className="box" aria-hidden="true" />
-      {label}
-    </label>
-  );
-}
-
 
 function ToolHeader({
   sceneId,
@@ -296,6 +285,8 @@ export function SceneViewport({
   onOpenSensors,
   mode = "live",
   onModeChange,
+  mqttConnected = null,
+  sceneChrome = null,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -401,13 +392,6 @@ export function SceneViewport({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const ortho = useViewportStore((s) => s.ortho);
-  const showGrid = useViewportStore((s) => s.showGrid);
-  const showLabels = useViewportStore((s) => s.showLabels);
-  const showTrails = useViewportStore((s) => s.showTrails);
-  const setOrtho = useViewportStore((s) => s.setOrtho);
-  const toggleOverlay = useViewportStore((s) => s.toggleOverlay);
-
   return (
     <div
       className={`ss-viewport${calibrating ? " is-calibrating" : ""}${emptyScene ? " is-empty" : ""}`}
@@ -418,75 +402,15 @@ export function SceneViewport({
         onOpenCameras={onOpenCameras}
         onOpenSensors={onOpenSensors}
         onOpenLibrary={onOpenLibrary}
-      >
-        {!emptyScene ? (
-          <>
-            <span className="ss-viewport-bar-sep" aria-hidden="true" />
-            <span className="ss-viewport-bar-label">Mode</span>
-            <div className="seg" role="group" aria-label="Live or replay">
-              <button
-                type="button"
-                className={mode === "live" ? "on" : ""}
-                onClick={() => onModeChange?.("live")}
-                title="Live view (MQTT)"
-                disabled={calibrating}
-              >
-                Live
-              </button>
-              <button
-                type="button"
-                className={mode === "replay" ? "on" : ""}
-                onClick={() => onModeChange?.("replay")}
-                title="Replay a recording"
-                disabled={calibrating}
-              >
-                Replay
-              </button>
-            </div>
-          </>
-        ) : null}
-        <span className="ss-viewport-bar-sep" aria-hidden="true" />
-        <span className="ss-viewport-bar-label">View</span>
-        <div className="seg" role="group" aria-label="Projection">
-          <button
-            type="button"
-            className={!ortho ? "on" : ""}
-            onClick={() => setOrtho(false)}
-            title="Perspective (5)"
-          >
-            Persp
-          </button>
-          <button
-            type="button"
-            className={ortho ? "on" : ""}
-            onClick={() => setOrtho(true)}
-            title="Orthographic (5)"
-          >
-            Ortho
-          </button>
-        </div>
-        <span className="ss-viewport-bar-sep" aria-hidden="true" />
-        <span className="ss-viewport-bar-label">Overlays</span>
-        <OverlayCheck
-          checked={showGrid}
-          onChange={() => toggleOverlay("showGrid")}
-          label="Grid"
-        />
-        {!emptyScene ? (
-          <>
-            <OverlayCheck
-              checked={showTrails}
-              onChange={() => toggleOverlay("showTrails")}
-              label="Trails"
-            />
-            <OverlayCheck
-              checked={showLabels}
-              onChange={() => toggleOverlay("showLabels")}
-              label="Labels"
-            />
-          </>
-        ) : null}
-      </ViewportMenuBar>
+        mqttConnected={mqttConnected}
+      />
+      <ViewportOptionsBar
+        emptyScene={emptyScene}
+        calibrating={calibrating}
+        mode={mode}
+        onModeChange={onModeChange}
+        sceneChrome={emptyScene ? null : sceneChrome}
+      />
       {!emptyScene &&
         (calibrating ? (
           <CalibrateWizard

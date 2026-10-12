@@ -1,14 +1,65 @@
 /* SPDX-FileCopyrightText: (C) 2026 Intel Corporation */
 /* SPDX-License-Identifier: Apache-2.0 */
 
-.ss-viewport-menubar {
+/* Beat `.ss-viewport-bar { z-index: 5 }` (viewport.css loads later) so Open /
+   Help / Admin menus paint above the options and tools bars. */
+.ss-viewport-bar.ss-viewport-menubar {
   position: relative;
-  z-index: 6;
+  z-index: 30;
+  overflow: visible;
+}
+
+.ss-viewport-bar.ss-viewport-options {
+  position: relative;
+  z-index: 5;
 }
 
 .ss-viewport-bar-spacer {
   flex: 1 1 auto;
   min-width: 8px;
+}
+
+.ss-viewport-scene-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  /* Avoid clipping descenders on the scene title. */
+  overflow: visible;
+}
+
+.ss-viewport-scene-name {
+  margin: 0;
+  max-width: 18rem;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Room for glyph descenders; horizontal ellipsis still applies. */
+  padding-block: 0.1em;
+}
+
+.ss-viewport-bar-btn--danger {
+  color: var(--ss-danger, #ff453a);
+}
+
+.ss-viewport-bar-btn--danger:hover {
+  color: var(--ss-danger, #ff453a);
+  background: color-mix(in srgb, var(--ss-danger, #ff453a) 18%, transparent);
+}
+
+.ss-viewport-mqtt {
+  flex: none;
+  margin-right: 0.15rem;
+}
+
+.ss-viewport-options .ss-scene-rate {
+  font-size: 11px;
+  color: var(--ss-text-muted, #8e8e93);
+  white-space: nowrap;
 }
 
 .ss-vmenu {
@@ -32,7 +83,7 @@
   border: 1px solid var(--ss-card-border, #2d333b);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-  z-index: 20;
+  z-index: 40;
   display: flex;
   flex-direction: column;
 }
