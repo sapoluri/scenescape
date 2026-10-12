@@ -228,6 +228,13 @@ export function useCalibrateSession(
       if (!map) {
         return;
       }
+      // Move the mesh immediately; store sync only patches the same slot.
+      const mesh = world.entityRoot.getObjectByName(
+        `ss-cal-marker-${dragIndex}`,
+      );
+      if (mesh) {
+        mesh.position.set(map[0], map[1], map[2] + MARKER_RADIUS);
+      }
       useCalibrateStore.getState().moveMapPoint(dragIndex, map);
       ev.preventDefault();
       ev.stopPropagation();
@@ -278,7 +285,7 @@ export function useCalibrateSession(
     };
   }, [active, world]);
 
-  // Floor markers + numbered labels (match camera-feed index colors).
+  // Floor markers + numbered labels — stable pool; only add/remove the delta.
   useEffect(() => {
     if (!world) {
       return;
@@ -289,21 +296,33 @@ export function useCalibrateSession(
     const mats: MeshBasicMaterial[] = [];
     const geo = new SphereGeometry(MARKER_RADIUS, 12, 12);
     const proj = new Vector3();
-    if (active) {
-      mapPoints.forEach((p, i) => {
+
+    const discardTail = (from: number) => {
+      for (let i = markers.length - 1; i >= from; i--) {
+        group.remove(markers[i]);
+        labels[i].remove();
+        mats[i].dispose();
+        markers.pop();
+        labels.pop();
+        mats.pop();
+      }
+    };
+
+    const ensureCount = (n: number) => {
+      while (markers.length < n) {
+        const i = markers.length;
         const mat = new MeshBasicMaterial({
           color: calibrationPointColorHex(i),
           depthTest: true,
           depthWrite: true,
         });
-        mats.push(mat);
         const m = new Mesh(geo, mat);
-        m.position.set(p[0], p[1], p[2] + MARKER_RADIUS);
         m.name = `ss-cal-marker-${i}`;
         m.userData.ssCalMarker = true;
         m.frustumCulled = false;
         group.add(m);
         markers.push(m);
+        mats.push(mat);
 
         const el = document.createElement("div");
         el.className = "ss-vlabel ss-vlabel--cal";
@@ -311,11 +330,47 @@ export function useCalibrateSession(
         el.style.borderColor = calibrationPointColor(i);
         world.labelLayer.appendChild(el);
         labels.push(el);
-      });
+      }
+      if (markers.length > n) {
+        discardTail(n);
+      }
+    };
+
+    const syncMarkers = (
+      points: [number, number, number][],
+      isActive: boolean,
+    ) => {
+      if (!isActive) {
+        ensureCount(0);
+        return;
+      }
+      ensureCount(points.length);
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        markers[i].position.set(p[0], p[1], p[2] + MARKER_RADIUS);
+        mats[i].color.set(calibrationPointColorHex(i));
+        const el = labels[i];
+        const text = String(i + 1);
+        if (el.textContent !== text) {
+          el.textContent = text;
+        }
+        el.style.borderColor = calibrationPointColor(i);
+      }
+    };
+
+    const unsub = useCalibrateStore.subscribe((s, prev) => {
+      if (s.mapPoints === prev.mapPoints && s.active === prev.active) {
+        return;
+      }
+      syncMarkers(s.mapPoints, s.active);
+    });
+    {
+      const s = useCalibrateStore.getState();
+      syncMarkers(s.mapPoints, s.active);
     }
 
     const updateLabels = () => {
-      if (!active || markers.length === 0) {
+      if (markers.length === 0) {
         return;
       }
       const cam = world.getActiveCamera();
@@ -339,17 +394,12 @@ export function useCalibrateSession(
     world.onFrame.add(updateLabels);
 
     return () => {
+      unsub();
       world.onFrame.delete(updateLabels);
-      markers.forEach((m) => {
-        group.remove(m);
-      });
-      labels.forEach((el) => {
-        el.remove();
-      });
+      discardTail(0);
       geo.dispose();
-      mats.forEach((mat) => mat.dispose());
     };
-  }, [world, active, mapPoints]);
+  }, [world]);
 
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
   const previewPose = useCalibrateStore((s) => s.previewPose);
