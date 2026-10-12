@@ -449,14 +449,16 @@ export function useCalibrateSession(
     };
   }, [active, equalCount]);
 
-  // Debounce solve — dragging a map point with ≥4 pairs used to call
-  // solvePnP on every pointermove and freeze the UI. At ≥6 pairs, refine
-  // fx/fy via /calculateintrinsics first (legacy calibrate behaviour).
+  // Debounce solve in a Worker. At ≥6 pairs, refine fx/fy via REST first
+  // (longer debounce to avoid refine storms while dragging).
   useEffect(() => {
     if (!active || !cameraId || !authToken || equalCount < 4) {
       return;
     }
     let cancelled = false;
+    const debounceMs = equalCount >= 6 ? 300 : 180;
+    const cal = useCalibrateStore.getState();
+    cal.setUpdatingPose(true);
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
@@ -483,12 +485,20 @@ export function useCalibrateSession(
               console.warn("Calibrate intrinsics refine failed", err);
             }
           }
+          if (cancelled) {
+            return;
+          }
           const pose = await solveCameraPose(pairs, working);
           if (cancelled || !pose) {
             return;
           }
           const fov = fovFromOptics(working);
           const withFov = { ...pose, fov };
+          // Yield so the wizard "Updating…" paint lands before apply.
+          await new Promise<void>((r) => window.setTimeout(r, 0));
+          if (cancelled) {
+            return;
+          }
           useCalibrateStore.getState().setPreviewPose(withFov);
           getViewportState().updateEntity(cameraId, {
             position: withFov.position,
@@ -500,12 +510,17 @@ export function useCalibrateSession(
           getViewportState().setProjectCamera(cameraId);
         } catch (err) {
           console.warn("Calibrate pose solve failed", err);
+        } finally {
+          if (!cancelled) {
+            useCalibrateStore.getState().setUpdatingPose(false);
+          }
         }
       })();
-    }, 180);
+    }, debounceMs);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      useCalibrateStore.getState().setUpdatingPose(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
   }, [active, cameraId, authToken, pairsKey, equalCount]);

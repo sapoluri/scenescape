@@ -32,6 +32,8 @@ export type CalibrateState = {
     rotation: [number, number, number];
     fov: number;
   } | null;
+  /** True while refine/solve is in flight (non-blocking wizard cue). */
+  updatingPose: boolean;
   enter: (args: {
     cameraId: string;
     sensorId: string;
@@ -55,6 +57,7 @@ export type CalibrateState = {
       fov: number;
     } | null,
   ) => void;
+  setUpdatingPose: (updating: boolean) => void;
   addCamPoint: (pt: [number, number]) => void;
   addMapPoint: (pt: [number, number, number]) => void;
   moveCamPoint: (index: number, pt: [number, number]) => void;
@@ -96,6 +99,7 @@ const idle = {
   feedImageUrl: null as string | null,
   previewPose: null as CalibrateState["previewPose"],
   priorPose: null as CalibrateState["priorPose"],
+  updatingPose: false,
 };
 
 /**
@@ -123,6 +127,7 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
   setFeedImageUrl: (feedImageUrl) => set({ feedImageUrl }),
   setPreviewPose: (previewPose) => set({ previewPose }),
   setPriorPose: (priorPose) => set({ priorPose }),
+  setUpdatingPose: (updatingPose) => set({ updatingPose }),
   addCamPoint: (pt) =>
     set((s) =>
       afterPoints([...s.camPoints, pt], s.mapPoints, true),

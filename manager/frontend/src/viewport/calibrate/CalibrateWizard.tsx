@@ -59,6 +59,7 @@ export function CalibrateWizard({
     "Checking auto-calibration service…",
   );
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
+  const updatingPose = useCalibrateStore((s) => s.updatingPose);
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
 
   const canSave = pairCount >= 4 && dirty && !busy && Boolean(optics);
@@ -202,8 +203,11 @@ export function CalibrateWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- exit once
   }, []);
 
-  const stepLabel =
-    pairCount < 4
+  const stepLabel = updatingPose
+    ? pairCount >= 6
+      ? "Updating pose + fx/fy…"
+      : "Updating pose…"
+    : pairCount < 4
       ? camPoints.length !== mapPoints.length
         ? `Step 2 · Pick points (cam ${camPoints.length} / map ${mapPoints.length})`
         : `Step 2 · Pick points (${pairCount}/4+)`
