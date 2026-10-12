@@ -59,6 +59,7 @@ type WorkerResultMsg = {
 
 type WorkerOutMsg =
   | { type: "ready" }
+  | { type: "progress"; stage?: string }
   | { type: "error"; error: string }
   | WorkerResultMsg;
 
@@ -78,16 +79,19 @@ let latestRequestId = 0;
 let loggedWorkerFallback = false;
 const pending = new Map<number, Pending>();
 
-/** Worker OpenCV importScripts is often slow/stuck; don't block pose apply. */
-const WORKER_READY_TIMEOUT_MS = 4000;
-const SOLVE_TIMEOUT_MS = 8000;
+/**
+ * Worker may take a while to importScripts the ~10MB OpenCV build; that is
+ * fine because it does not freeze the UI. Progress messages reset this timer.
+ * Never fall back to main-thread solvePnP — that freezes the page.
+ */
+const WORKER_READY_TIMEOUT_MS = 90000;
+const SOLVE_TIMEOUT_MS = 15000;
 
 function workerScriptUrl(): string {
   // BASE_URL is a path ("/static/ui/"); URL() needs an absolute base.
-  // Cache-bust so iterate-on-docker-cp picks up worker fixes.
   const base = import.meta.env.BASE_URL || "/static/ui/";
   const path = `${base.endsWith("/") ? base : `${base}/`}calibrate-pose-worker.js`;
-  return new URL(`${path}?v=4`, window.location.origin).toString();
+  return new URL(`${path}?v=5`, window.location.origin).toString();
 }
 
 function attachWorkerDispatcher(w: Worker): void {
@@ -96,7 +100,7 @@ function attachWorkerDispatcher(w: Worker): void {
     if (!msg || typeof msg !== "object") {
       return;
     }
-    if (msg.type === "ready") {
+    if (msg.type === "ready" || msg.type === "progress") {
       return;
     }
     if (msg.type === "error") {
@@ -168,6 +172,12 @@ function ensureWorker(): Promise<Worker> {
       }
       reject(err);
     };
+    const armReadyTimer = () => {
+      window.clearTimeout(readyTimer);
+      readyTimer = window.setTimeout(() => {
+        fail(new Error("OpenCV worker ready timed out"));
+      }, WORKER_READY_TIMEOUT_MS);
+    };
     const ok = () => {
       if (settled) {
         return;
@@ -178,9 +188,13 @@ function ensureWorker(): Promise<Worker> {
       worker = w;
       resolve(w);
     };
-    // Boot handshake only; attachWorkerDispatcher replaces this after ready.
     w.onmessage = (ev: MessageEvent<WorkerOutMsg>) => {
       const msg = ev.data;
+      // importScripts can take tens of seconds; progress keeps us alive.
+      if (msg?.type === "progress") {
+        armReadyTimer();
+        return;
+      }
       if (msg?.type === "ready") {
         ok();
         return;
@@ -192,21 +206,16 @@ function ensureWorker(): Promise<Worker> {
     w.onerror = () => {
       fail(new Error("OpenCV worker script error"));
     };
-    readyTimer = window.setTimeout(() => {
-      fail(new Error("OpenCV worker ready timed out"));
-    }, WORKER_READY_TIMEOUT_MS);
+    armReadyTimer();
     w.postMessage({ type: "preload" });
   });
   return workerBoot;
 }
 
-/** Prefetch OpenCV (worker best-effort + main-thread script). */
+/** Prefetch OpenCV in the worker only (never on the main thread). */
 export function preloadOpenCv(): void {
   void ensureWorker().catch(() => {
-    /* worker optional — main-thread solve is the reliable path */
-  });
-  void loadOpenCvMain().catch(() => {
-    /* first solve will surface the error */
+    /* solve will surface the error */
   });
 }
 
@@ -427,9 +436,8 @@ async function solveOnMainThread(
 
 /**
  * Mirror legacy cameracalibrate.js solvePnP + OpenCV→OpenGL flip + invert.
- * Uses the worker only when it is already warm; otherwise solves on the main
- * thread immediately. (Worker OpenCV importScripts often never becomes ready,
- * which previously left pose updates stuck on "Updating…".)
+ * Always solves in the Web Worker. Waiting for the worker is async and does
+ * not freeze the UI; main-thread OpenCV is intentionally not used.
  * Stale results (superseded requestId) are dropped.
  */
 export async function solveCameraPose(
@@ -445,36 +453,24 @@ export async function solveCameraPose(
   }
   const requestId = ++nextRequestId;
   latestRequestId = requestId;
-
-  if (worker && !workerFailed) {
-    try {
-      const pose = await solveInWorker(pairs, optics, requestId);
-      if (requestId !== latestRequestId) {
-        return null;
-      }
-      return pose;
-    } catch (err) {
-      if (requestId !== latestRequestId) {
-        return null;
-      }
-      if (!loggedWorkerFallback) {
-        loggedWorkerFallback = true;
-        console.warn(
-          "Calibrate OpenCV worker solve failed; using main thread",
-          err,
-        );
-      }
-    }
-  }
-
   try {
-    const pose = await solveOnMainThread(pairs, optics);
+    await ensureWorker();
+    if (requestId !== latestRequestId) {
+      return null;
+    }
+    const pose = await solveInWorker(pairs, optics, requestId);
     if (requestId !== latestRequestId) {
       return null;
     }
     return pose;
-  } catch (mainErr) {
-    console.warn("Calibrate main-thread solve failed", mainErr);
+  } catch (err) {
+    if (requestId !== latestRequestId) {
+      return null;
+    }
+    if (!loggedWorkerFallback) {
+      loggedWorkerFallback = true;
+      console.warn("Calibrate OpenCV worker solve failed", err);
+    }
     return null;
   }
 }

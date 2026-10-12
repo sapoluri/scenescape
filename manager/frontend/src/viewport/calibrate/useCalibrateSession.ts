@@ -425,34 +425,14 @@ export function useCalibrateSession(
           .join("|")
       : "";
 
-  // Prefetch OpenCV only once a few pairs exist — not on calibrate enter.
+  // Warm the OpenCV worker as soon as calibrate opens (worker-only; no
+  // main-thread load). importScripts is slow but must not freeze the UI.
   useEffect(() => {
-    if (!active || equalCount < 3) {
+    if (!active) {
       return;
     }
-    let cancelled = false;
-    const run = () => {
-      if (!cancelled) {
-        preloadOpenCv();
-      }
-    };
-    let idleId: number | undefined;
-    let timeoutId: number | undefined;
-    if (typeof window.requestIdleCallback === "function") {
-      idleId = window.requestIdleCallback(run, { timeout: 1500 });
-    } else {
-      timeoutId = window.setTimeout(run, 500);
-    }
-    return () => {
-      cancelled = true;
-      if (idleId != null && typeof window.cancelIdleCallback === "function") {
-        window.cancelIdleCallback(idleId);
-      }
-      if (timeoutId != null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [active, equalCount]);
+    preloadOpenCv();
+  }, [active]);
 
   // Debounce solve in a Worker. At ≥6 pairs, refine fx/fy via REST first
   // (longer debounce to avoid refine storms while dragging).

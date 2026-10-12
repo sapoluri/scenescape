@@ -5,6 +5,8 @@
  * Classic worker: load OpenCV via importScripts and run solvePnP off the
  * main thread. Returns raw R (3x3) + t; main thread finishes the
  * OpenCV→OpenGL pose conversion with three.js.
+ *
+ * Never run this OpenCV path on the main thread — import + solvePnP freeze UI.
  */
 /* global importScripts, cv */
 
@@ -31,15 +33,16 @@ function loadOpenCv() {
       reject(err);
     };
     try {
+      self.postMessage({ type: "progress", stage: "importScripts-start" });
       if (typeof cv === "undefined" || !cv.Mat) {
         importScripts("/static/assets/opencv.js");
       }
+      self.postMessage({ type: "progress", stage: "importScripts-done" });
     } catch (err) {
       fail(err);
       return;
     }
     const smoke = (mod) => {
-      // Prove WASM is actually callable before advertising ready.
       const m = mod.matFromArray(1, 1, mod.CV_64F, [1]);
       m.delete();
       if (typeof mod.solvePnP !== "function") {
@@ -50,6 +53,7 @@ function loadOpenCv() {
       const accept = () => {
         try {
           smoke(mod);
+          self.postMessage({ type: "progress", stage: "wasm-ready" });
           done(mod);
         } catch (err) {
           fail(err);
@@ -116,7 +120,6 @@ function solveRt(mod, pairs, optics) {
   }
   const imagePts = pairs.map((p) => p.cam);
   const objectPts = pairs.map((p) => p.map);
-  // Same mat layout as main-thread poseSolve.ts (known-good with this build).
   const imagePointsMat = mod.matFromArray(
     imagePts.length,
     2,
@@ -183,7 +186,6 @@ function solveRt(mod, pairs, optics) {
 self.onmessage = (ev) => {
   const msg = ev.data || {};
   if (msg.type === "preload") {
-    self.postMessage({ type: "progress", stage: "importScripts" });
     loadOpenCv()
       .then(() => {
         self.postMessage({ type: "ready" });
