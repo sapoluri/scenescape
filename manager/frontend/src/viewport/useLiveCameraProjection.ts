@@ -84,18 +84,27 @@ export function useLiveCameraProjection(
     let observer: MutationObserver | null = null;
     const myWait = ++waitToken.current;
 
+    let lastPoseKey = "";
     const apply = (src: string) => {
       const handle = world.cameraProjection;
-      if (cancelled || !handle || !src || src === lastSrc) {
+      if (cancelled || !handle || !src) {
         return;
       }
+      const poseChanged = poseKey !== lastPoseKey;
+      if (!poseChanged && src === lastSrc) {
+        return;
+      }
+      const firstFrame = !lastSrc;
       lastSrc = src;
+      lastPoseKey = poseKey;
       handle
         .updateFrame(src, {
           fov: camEntity.fov,
           position: camEntity.position,
           // Rig euler matches the frustum PerspectiveCamera (REST × Rx(π)).
           rotationDeg: camEntity.rotation,
+          // Pose changes reproject once; JPEG ticks only swap the texture.
+          reproject: poseChanged || firstFrame,
         })
         .then(() => {
           if (!cancelled && world.cameraProjection) {

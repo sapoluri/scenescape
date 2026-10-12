@@ -111,12 +111,13 @@ export function useCalibrateSession(
   const camPoints = useCalibrateStore((s) => s.camPoints);
 
   // Load optics + snapshot prior pose when entering / switching camera.
-  // Prefetch OpenCV after a tick so the calibrate UI paints first.
+  // Defer coverage seeding and OpenCV so the calibrate chrome can paint first.
   useEffect(() => {
     if (!active || !cameraId || !sensorId || !authToken) {
       return;
     }
     let cancelled = false;
+    let seedRaf = 0;
     const entity = getViewportState().entities[cameraId];
     if (entity?.type === "camera") {
       const prior = {
@@ -125,26 +126,28 @@ export function useCalibrateSession(
         fov: entity.fov,
       };
       useCalibrateStore.getState().setPriorPose(prior);
-      // Seed coverage from the current frustum when already posed.
+      getViewportState().select(cameraId);
+      // Seed coverage after two frames so enter does not hitch on project().
       if (entity.posed) {
         const restRot = entity.restRotation
           ? ([...entity.restRotation] as [number, number, number])
           : restPoseToRigEuler(entity.rotation);
-        useCalibrateStore.getState().setPreviewPose({
-          position: prior.position,
-          rotation: restRot,
-          fov: prior.fov,
+        seedRaf = window.requestAnimationFrame(() => {
+          seedRaf = window.requestAnimationFrame(() => {
+            if (cancelled) {
+              return;
+            }
+            useCalibrateStore.getState().setPreviewPose({
+              position: prior.position,
+              rotation: restRot,
+              fov: prior.fov,
+            });
+          });
         });
       }
-      getViewportState().select(cameraId);
     }
     // Coverage overlay on while calibrating.
     getViewportState().setProjectCamera(cameraId);
-    const preloadTimer = window.setTimeout(() => {
-      if (!cancelled) {
-        preloadOpenCv();
-      }
-    }, 400);
     (async () => {
       try {
         const row = (await api.getCamera(authToken, sensorId)) ?? {};
@@ -164,7 +167,7 @@ export function useCalibrateSession(
     })();
     return () => {
       cancelled = true;
-      window.clearTimeout(preloadTimer);
+      window.cancelAnimationFrame(seedRaf);
     };
   }, [active, cameraId, sensorId, authToken, cameraName]);
 
@@ -417,6 +420,35 @@ export function useCalibrateSession(
           .join("|")
       : "";
 
+  // Prefetch OpenCV only once a few pairs exist — not on calibrate enter.
+  useEffect(() => {
+    if (!active || equalCount < 3) {
+      return;
+    }
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) {
+        preloadOpenCv();
+      }
+    };
+    let idleId: number | undefined;
+    let timeoutId: number | undefined;
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(run, { timeout: 1500 });
+    } else {
+      timeoutId = window.setTimeout(run, 500);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [active, equalCount]);
+
   // Debounce solve — dragging a map point with ≥4 pairs used to call
   // solvePnP on every pointermove and freeze the UI. At ≥6 pairs, refine
   // fx/fy via /calculateintrinsics first (legacy calibrate behaviour).
@@ -478,55 +510,51 @@ export function useCalibrateSession(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
   }, [active, cameraId, authToken, pairsKey, equalCount]);
 
-  // Apply solved pose to the projector (reproject camera matrices).
+  // Pose on rAF; JPEG debounced — avoid stacking project() + decode on enter.
   useEffect(() => {
     if (!active || !world?.cameraProjection || !previewPose) {
       return;
     }
-    const handle = world.cameraProjection;
-    const raf = window.requestAnimationFrame(() => {
-      handle.updatePose({
-        fov: previewPose.fov,
-        position: previewPose.position,
-        rotationDeg: restPoseToRigEuler(previewPose.rotation),
-      });
-      handle.setOpacity(getViewportState().projectOpacity);
-      handle.setVisible(true);
-    });
-    return () => window.cancelAnimationFrame(raf);
-  }, [active, world, previewPose]);
-
-  // Refresh projection JPEG without reprojecting on every MQTT frame.
-  useEffect(() => {
-    if (!active || !world?.cameraProjection || !feedImageUrl || !previewPose) {
-      return;
-    }
     let cancelled = false;
     const handle = world.cameraProjection;
-    const timer = window.setTimeout(() => {
+    const pose = {
+      fov: previewPose.fov,
+      position: previewPose.position,
+      rotationDeg: restPoseToRigEuler(previewPose.rotation),
+    };
+    const raf = window.requestAnimationFrame(() => {
       if (cancelled) {
         return;
       }
-      handle
-        .updateFrame(feedImageUrl, {
-          fov: previewPose.fov,
-          position: previewPose.position,
-          rotationDeg: restPoseToRigEuler(previewPose.rotation),
-          reproject: false,
-        })
-        .then(() => {
-          if (!cancelled) {
-            handle.setOpacity(getViewportState().projectOpacity);
-            handle.setVisible(true);
-          }
-        })
-        .catch((err) => console.warn("Map projection update failed", err));
-    }, 250);
+      handle.updatePose(pose);
+      handle.setOpacity(getViewportState().projectOpacity);
+      handle.setVisible(true);
+    });
+    let feedTimer: number | undefined;
+    if (feedImageUrl) {
+      feedTimer = window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+        handle
+          .updateFrame(feedImageUrl, { ...pose, reproject: false })
+          .then(() => {
+            if (!cancelled) {
+              handle.setOpacity(getViewportState().projectOpacity);
+              handle.setVisible(true);
+            }
+          })
+          .catch((err) => console.warn("Map projection update failed", err));
+      }, 200);
+    }
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      window.cancelAnimationFrame(raf);
+      if (feedTimer != null) {
+        window.clearTimeout(feedTimer);
+      }
     };
-  }, [active, world, feedImageUrl, previewPose]);
+  }, [active, world, previewPose, feedImageUrl]);
 
   // Keep opacity slider live while calibrate owns the projector.
   const projectOpacity = useViewportStore((s) => s.projectOpacity);

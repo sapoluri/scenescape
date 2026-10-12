@@ -83,13 +83,40 @@ function extractGeometry(root: Object3D): BufferGeometry {
 const textureLoader = new TextureLoader();
 textureLoader.setCrossOrigin("anonymous");
 
+/** Pose deltas smaller than this skip ProjectedMaterial.project(). */
+const POSE_EPS_POS = 1e-4;
+const POSE_EPS_DEG = 1e-3;
+const POSE_EPS_FOV = 1e-3;
+
+function disposeProjectionTexture(
+  texture: Texture | null,
+  placeholder: Texture,
+): void {
+  if (!texture || texture === placeholder) {
+    return;
+  }
+  const img = texture.image as { close?: () => void } | null;
+  texture.dispose();
+  img?.close?.();
+}
+
 /**
- * Load a projection frame. MQTT live previews are `data:image/jpeg;base64,…`
- * — TextureLoader with crossOrigin:"anonymous" fails on data:/blob: URLs in
- * Chromium, so those go through a plain Image (legacy scenecamera.js path).
+ * Load a projection frame. Prefer createImageBitmap so JPEG decode stays
+ * off the main thread. MQTT live previews are often data:/blob: URLs —
+ * TextureLoader with crossOrigin:"anonymous" fails on those in Chromium.
  */
-function loadProjectionTexture(imageUrl: string): Promise<Texture> {
+async function loadProjectionTexture(imageUrl: string): Promise<Texture> {
   if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:")) {
+    try {
+      const blob = await (await fetch(imageUrl)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const texture = new Texture(bitmap);
+      texture.colorSpace = SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    } catch {
+      // Fall through to Image decode if bitmap path fails.
+    }
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -103,11 +130,22 @@ function loadProjectionTexture(imageUrl: string): Promise<Texture> {
       img.src = imageUrl;
     });
   }
-  return textureLoader.loadAsync(imageUrl).then((texture) => {
-    texture.colorSpace = SRGBColorSpace;
-    texture.needsUpdate = true;
-    return texture;
-  });
+  try {
+    const res = await fetch(imageUrl, { mode: "cors", credentials: "omit" });
+    if (res.ok) {
+      const bitmap = await createImageBitmap(await res.blob());
+      const texture = new Texture(bitmap);
+      texture.colorSpace = SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
+  } catch {
+    /* TextureLoader fallback below */
+  }
+  const texture = await textureLoader.loadAsync(imageUrl);
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /**
@@ -177,6 +215,83 @@ export function createCameraProjection(
   };
 
   let currentTexture: Texture | null = null;
+  let lastProjected = {
+    fov: Number.NaN,
+    aspect: Number.NaN,
+    position: [Number.NaN, Number.NaN, Number.NaN] as [
+      number,
+      number,
+      number,
+    ],
+    rotationDeg: [Number.NaN, Number.NaN, Number.NaN] as [
+      number,
+      number,
+      number,
+    ],
+  };
+  let frameSeq = 0;
+
+  const poseChangedEnough = (opts: {
+    fov?: number;
+    aspect?: number;
+    position?: [number, number, number];
+    rotationDeg?: [number, number, number];
+  }): boolean => {
+    if (
+      opts.fov != null &&
+      Number.isFinite(opts.fov) &&
+      !(Math.abs(opts.fov - lastProjected.fov) < POSE_EPS_FOV)
+    ) {
+      return true;
+    }
+    if (
+      opts.aspect != null &&
+      Number.isFinite(opts.aspect) &&
+      !(Math.abs(opts.aspect - lastProjected.aspect) < POSE_EPS_FOV)
+    ) {
+      return true;
+    }
+    if (opts.position) {
+      for (let i = 0; i < 3; i++) {
+        if (!(Math.abs(opts.position[i] - lastProjected.position[i]) < POSE_EPS_POS)) {
+          return true;
+        }
+      }
+    }
+    if (opts.rotationDeg) {
+      for (let i = 0; i < 3; i++) {
+        if (
+          !(
+            Math.abs(opts.rotationDeg[i] - lastProjected.rotationDeg[i]) <
+            POSE_EPS_DEG
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return !Number.isFinite(lastProjected.fov);
+  };
+
+  const rememberProjected = (opts: {
+    fov?: number;
+    aspect?: number;
+    position?: [number, number, number];
+    rotationDeg?: [number, number, number];
+  }) => {
+    if (opts.fov != null && Number.isFinite(opts.fov)) {
+      lastProjected.fov = opts.fov;
+    }
+    if (opts.aspect != null && Number.isFinite(opts.aspect)) {
+      lastProjected.aspect = opts.aspect;
+    }
+    if (opts.position) {
+      lastProjected.position = [...opts.position];
+    }
+    if (opts.rotationDeg) {
+      lastProjected.rotationDeg = [...opts.rotationDeg];
+    }
+  };
 
   const applyPose = (opts: {
     fov?: number;
@@ -215,7 +330,19 @@ export function createCameraProjection(
     rotationDeg?: [number, number, number];
   }) => {
     applyPose(opts);
-    projectedMaterial.project(mesh);
+    if (poseChangedEnough(opts)) {
+      projectedMaterial.project(mesh);
+      rememberProjected({
+        fov: projCam.fov,
+        aspect: projCam.aspect,
+        position: opts.position ?? [
+          projCam.position.x,
+          projCam.position.y,
+          projCam.position.z,
+        ],
+        rotationDeg: opts.rotationDeg,
+      });
+    }
     setVisible(true);
   };
 
@@ -229,7 +356,12 @@ export function createCameraProjection(
       reproject?: boolean;
     } = {},
   ) => {
+    const seq = ++frameSeq;
     const texture = await loadProjectionTexture(imageUrl);
+    if (seq !== frameSeq) {
+      disposeProjectionTexture(texture, placeholder);
+      return;
+    }
     const img = texture.image as {
       width?: number;
       height?: number;
@@ -238,21 +370,30 @@ export function createCameraProjection(
     };
     const w = img?.naturalWidth || img?.width || 1280;
     const h = img?.naturalHeight || img?.height || 720;
-    applyPose({
+    const poseOpts = {
       ...opts,
       aspect: opts.aspect ?? w / h,
-    });
+    };
+    applyPose(poseOpts);
     const prev = currentTexture;
     currentTexture = texture;
     projectedMaterial.texture = texture;
     // Texture-only refreshes skip project() — camera matrices stay valid.
-    if (opts.reproject !== false) {
+    if (opts.reproject !== false && poseChangedEnough(poseOpts)) {
       projectedMaterial.project(mesh);
+      rememberProjected({
+        fov: projCam.fov,
+        aspect: projCam.aspect,
+        position: poseOpts.position ?? [
+          projCam.position.x,
+          projCam.position.y,
+          projCam.position.z,
+        ],
+        rotationDeg: poseOpts.rotationDeg,
+      });
     }
     setVisible(true);
-    if (prev && prev !== placeholder) {
-      prev.dispose();
-    }
+    disposeProjectionTexture(prev, placeholder);
   };
 
   return {
@@ -264,13 +405,12 @@ export function createCameraProjection(
     updateFrame,
     updatePose,
     dispose: () => {
+      frameSeq += 1;
       parent.remove(mesh);
       geometry.dispose();
       physicalMaterial.dispose();
       projectedMaterial.dispose();
-      if (currentTexture && currentTexture !== placeholder) {
-        currentTexture.dispose();
-      }
+      disposeProjectionTexture(currentTexture, placeholder);
       placeholder.dispose();
     },
   };
