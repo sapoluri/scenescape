@@ -137,7 +137,7 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 - Scene-graph store: entities keyed by id (`zustand` or equivalent), mirroring the mockup's entity model; selectors per type.
 
 ### Phase 1.2 — tools & editing
-- Tool system: `select/move/rotate/scale/region/tripwire/camera/sensor/measure/live` with the tool-header options pattern; creation gestures raycast against the floor plane; command stack for undo/redo.
+- Tool system: `live/move/rotate/scale/region/tripwire/camera/sensor/measure` with the tool-header options pattern (`live` = navigate + click-to-select); creation gestures raycast against the floor plane; command stack for undo/redo.
 - Port the mockup's `makeFrustum`, volumetric region, tripwire, sensor-ring builders.
 
 ### Phase 1.3 — panels

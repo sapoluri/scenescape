@@ -12,7 +12,7 @@ describe("TOOLS", () => {
     const shortcuts = TOOLS.map((t) => t.shortcut.toLowerCase());
     expect(new Set(shortcuts).size).toBe(shortcuts.length);
     const expected: ToolId[] = [
-      "select",
+      "live",
       "move",
       "rotate",
       "scale",
@@ -21,7 +21,6 @@ describe("TOOLS", () => {
       "camera",
       "sensor",
       "measure",
-      "live",
     ];
     for (const id of expected) {
       expect(ids).toContain(id);

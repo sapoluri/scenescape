@@ -19,14 +19,7 @@ export const TOOLS: ToolDef[] = [
     label: "Live",
     icon: "bi-play-circle",
     shortcut: "L",
-    hint: "Navigate + click to select (default)",
-  },
-  {
-    id: "select",
-    label: "Select",
-    icon: "bi-cursor",
-    shortcut: "Q",
-    hint: "Click to select (orbit off while held)",
+    hint: "Orbit (left-drag) and click to select (default)",
   },
   {
     id: "move",

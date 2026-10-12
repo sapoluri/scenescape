@@ -117,9 +117,8 @@ export type ViewportEntity =
 
 export type ViewPreset = "persp" | "top" | "front" | "side";
 
-/** Phase 1.2 tool ids. `live` is the default navigation+select tool. */
+/** Phase 1.2 tool ids. `live` is the default navigate + click-to-select tool. */
 export type ToolId =
-  | "select"
   | "move"
   | "rotate"
   | "scale"

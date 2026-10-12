@@ -19,8 +19,8 @@ export function enterCameraCalibrate(args: {
   ) {
     return;
   }
-  // Select tool: double-click adds points; empty left-drag still orbits.
-  getViewportState().setTool("select");
+  // Live tool: double-click adds points; empty left-drag still orbits.
+  getViewportState().setTool("live");
   useCalibrateStore.getState().enter(args);
 }
 

@@ -576,7 +576,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
       return;
     }
     const toolKeys: Record<string, ToolId> = {
-      q: "select",
+      // Q kept as alias for Live (former Select tool merged into Live).
+      q: "live",
       w: "move",
       e: "rotate",
       r: "scale",
