@@ -38,11 +38,27 @@ function loadOpenCv() {
       fail(err);
       return;
     }
+    const smoke = (mod) => {
+      // Prove WASM is actually callable before advertising ready.
+      const m = mod.matFromArray(1, 1, mod.CV_64F, [1]);
+      m.delete();
+      if (typeof mod.solvePnP !== "function") {
+        throw new Error("OpenCV solvePnP missing after init");
+      }
+    };
     const finish = (mod) => {
+      const accept = () => {
+        try {
+          smoke(mod);
+          done(mod);
+        } catch (err) {
+          fail(err);
+        }
+      };
       if (mod.solvePnP && mod.getBuildInformation) {
         try {
           if (mod.getBuildInformation()) {
-            done(mod);
+            accept();
             return;
           }
         } catch {
@@ -54,7 +70,7 @@ function loadOpenCv() {
         if (typeof prev === "function") {
           prev();
         }
-        done(mod);
+        accept();
       };
     };
     if (typeof cv !== "undefined" && cv.Mat) {

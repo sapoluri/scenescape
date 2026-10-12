@@ -62,6 +62,13 @@ type WorkerOutMsg =
   | { type: "error"; error: string }
   | WorkerResultMsg;
 
+type Pending = {
+  resolve: (pose: SolvedPose) => void;
+  reject: (err: Error) => void;
+  optics: CameraOptics;
+  timer: number;
+};
+
 let cvReady: Promise<CvModule> | null = null;
 let worker: Worker | null = null;
 let workerFailed = false;
@@ -69,12 +76,56 @@ let workerBoot: Promise<Worker> | null = null;
 let nextRequestId = 0;
 let latestRequestId = 0;
 let loggedWorkerFallback = false;
+const pending = new Map<number, Pending>();
+
+const SOLVE_TIMEOUT_MS = 20000;
 
 function workerScriptUrl(): string {
   // BASE_URL is a path ("/static/ui/"); URL() needs an absolute base.
+  // Cache-bust so iterate-on-docker-cp picks up worker fixes.
   const base = import.meta.env.BASE_URL || "/static/ui/";
   const path = `${base.endsWith("/") ? base : `${base}/`}calibrate-pose-worker.js`;
-  return new URL(path, window.location.origin).toString();
+  return new URL(`${path}?v=3`, window.location.origin).toString();
+}
+
+function attachWorkerDispatcher(w: Worker): void {
+  w.onmessage = (ev: MessageEvent<WorkerOutMsg>) => {
+    const msg = ev.data;
+    if (!msg || typeof msg !== "object") {
+      return;
+    }
+    if (msg.type === "ready") {
+      return;
+    }
+    if (msg.type === "error") {
+      const err = new Error(msg.error || "OpenCV worker failed");
+      for (const [id, p] of pending) {
+        window.clearTimeout(p.timer);
+        p.reject(err);
+        pending.delete(id);
+      }
+      return;
+    }
+    if (msg.type !== "result") {
+      return;
+    }
+    const p = pending.get(msg.requestId);
+    if (!p) {
+      return;
+    }
+    pending.delete(msg.requestId);
+    window.clearTimeout(p.timer);
+    if (!msg.ok || !msg.R || !msg.t) {
+      p.reject(new Error(msg.error || "OpenCV worker solvePnP returned null"));
+      return;
+    }
+    const pose = poseFromRt(msg.R, msg.t, p.optics);
+    if (!pose) {
+      p.reject(new Error("OpenCV worker pose conversion failed"));
+      return;
+    }
+    p.resolve(pose);
+  };
 }
 
 function ensureWorker(): Promise<Worker> {
@@ -121,9 +172,11 @@ function ensureWorker(): Promise<Worker> {
       }
       settled = true;
       window.clearTimeout(readyTimer);
+      attachWorkerDispatcher(w);
       worker = w;
       resolve(w);
     };
+    // Boot handshake only; attachWorkerDispatcher replaces this after ready.
     w.onmessage = (ev: MessageEvent<WorkerOutMsg>) => {
       const msg = ev.data;
       if (msg?.type === "ready") {
@@ -209,6 +262,9 @@ function poseFromRt(
   t: ArrayLike<number>,
   optics: CameraOptics,
 ): SolvedPose | null {
+  if (R.length < 9 || t.length < 3) {
+    return null;
+  }
   const T = new Matrix4().set(
     R[0],
     R[1],
@@ -323,30 +379,15 @@ function solveInWorker(
   pairs: CalibratePair[],
   optics: CameraOptics,
   requestId: number,
-): Promise<SolvedPose | null> {
+): Promise<SolvedPose> {
   return ensureWorker().then(
     (w) =>
       new Promise((resolve, reject) => {
-        const onMessage = (ev: MessageEvent<WorkerOutMsg>) => {
-          const msg = ev.data;
-          if (msg?.type !== "result" || msg.requestId !== requestId) {
-            return;
-          }
-          w.removeEventListener("message", onMessage);
-          if (!msg.ok || !msg.R || !msg.t) {
-            reject(
-              new Error(msg.error || "OpenCV worker solvePnP returned null"),
-            );
-            return;
-          }
-          const pose = poseFromRt(msg.R, msg.t, optics);
-          if (!pose) {
-            reject(new Error("OpenCV worker pose conversion failed"));
-            return;
-          }
-          resolve(pose);
-        };
-        w.addEventListener("message", onMessage);
+        const timer = window.setTimeout(() => {
+          pending.delete(requestId);
+          reject(new Error("OpenCV worker solve timed out"));
+        }, SOLVE_TIMEOUT_MS);
+        pending.set(requestId, { resolve, reject, optics, timer });
         try {
           w.postMessage({
             type: "solve",
@@ -355,18 +396,27 @@ function solveInWorker(
             optics,
           });
         } catch (err) {
-          w.removeEventListener("message", onMessage);
-          reject(err);
+          window.clearTimeout(timer);
+          pending.delete(requestId);
+          reject(err instanceof Error ? err : new Error(String(err)));
         }
       }),
   );
+}
+
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 async function solveOnMainThread(
   pairs: CalibratePair[],
   optics: CameraOptics,
 ): Promise<SolvedPose | null> {
+  await yieldToUi();
   const cv = await loadOpenCvMain();
+  await yieldToUi();
   return solvePnPOnce(cv, pairs, optics);
 }
 
@@ -406,7 +456,11 @@ export async function solveCameraPose(
       );
     }
     try {
-      return await solveOnMainThread(pairs, optics);
+      const pose = await solveOnMainThread(pairs, optics);
+      if (requestId !== latestRequestId) {
+        return null;
+      }
+      return pose;
     } catch (mainErr) {
       console.warn("Calibrate main-thread solve failed", mainErr);
       return null;

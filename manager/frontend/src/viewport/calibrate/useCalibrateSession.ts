@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   Mesh,
   MeshBasicMaterial,
@@ -109,6 +109,8 @@ export function useCalibrateSession(
   const cameraName = useCalibrateStore((s) => s.cameraName);
   const mapPoints = useCalibrateStore((s) => s.mapPoints);
   const camPoints = useCalibrateStore((s) => s.camPoints);
+  /** Bumped on each solve-effect schedule; in-flight work checks this. */
+  const solveEpochRef = useRef(0);
 
   // Load optics + snapshot prior pose when entering / switching camera.
   // Defer coverage seeding and OpenCV so the calibrate chrome can paint first.
@@ -454,22 +456,28 @@ export function useCalibrateSession(
 
   // Debounce solve in a Worker. At ≥6 pairs, refine fx/fy via REST first
   // (longer debounce to avoid refine storms while dragging).
-  // Re-run when optics arrive — early 4-point solves used to no-op if the
-  // camera GET had not finished yet.
+  // Use an epoch so in-flight solves are not dropped by effect cleanup
+  // (the old `cancelled` flag discarded valid results after every re-render).
   useEffect(() => {
     if (!active || !cameraId || !authToken || equalCount < 4 || !opticsReady) {
+      // Invalidate any in-flight solve from a prior schedule.
+      solveEpochRef.current += 1;
+      useCalibrateStore.getState().setUpdatingPose(false);
       return;
     }
-    let cancelled = false;
+    const epoch = ++solveEpochRef.current;
+    const scheduledKey = pairsKey;
     const debounceMs = equalCount >= 6 ? 300 : 180;
     useCalibrateStore.getState().setUpdatingPose(true);
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
+          if (epoch !== solveEpochRef.current) {
+            return;
+          }
           const pairs = getCalibratePairs();
           let working = useCalibrateStore.getState().optics;
           if (
-            cancelled ||
             pairs.length < 4 ||
             !working ||
             !(working.fx > 0) ||
@@ -484,7 +492,7 @@ export function useCalibrateSession(
                 pairs,
                 working,
               );
-              if (cancelled) {
+              if (epoch !== solveEpochRef.current) {
                 return;
               }
               if (refined) {
@@ -495,23 +503,35 @@ export function useCalibrateSession(
               console.warn("Calibrate intrinsics refine failed", err);
             }
           }
-          if (cancelled) {
+          if (epoch !== solveEpochRef.current) {
             return;
           }
           const pose = await solveCameraPose(pairs, working);
-          if (cancelled || !pose) {
-            if (!cancelled && !pose) {
-              console.warn("Calibrate pose solve produced no result");
-            }
+          // Apply when this epoch is still latest AND points still match
+          // what we solved — do not use effect-cleanup cancelled flags.
+          if (epoch !== solveEpochRef.current) {
+            return;
+          }
+          if (!pose) {
+            console.warn("Calibrate pose solve produced no result");
+            return;
+          }
+          const liveKey =
+            pairs.length >= 4
+              ? pairs
+                  .map(
+                    (p) =>
+                      `${p.cam[0]},${p.cam[1]}:${p.map[0]},${p.map[1]},${p.map[2]}`,
+                  )
+                  .join("|")
+              : "";
+          // Prefer live pairs; fall back to scheduledKey if store zip differs
+          // only by float formatting noise (should be identical).
+          if (liveKey && liveKey !== scheduledKey) {
             return;
           }
           const fov = fovFromOptics(working);
           const withFov = { ...pose, fov };
-          // Yield so the wizard "Updating…" paint lands before apply.
-          await new Promise<void>((r) => window.setTimeout(r, 0));
-          if (cancelled) {
-            return;
-          }
           useCalibrateStore.getState().setPreviewPose(withFov);
           getViewportState().updateEntity(cameraId, {
             position: withFov.position,
@@ -524,16 +544,17 @@ export function useCalibrateSession(
         } catch (err) {
           console.warn("Calibrate pose solve failed", err);
         } finally {
-          if (!cancelled) {
+          if (epoch === solveEpochRef.current) {
             useCalibrateStore.getState().setUpdatingPose(false);
           }
         }
       })();
     }, debounceMs);
     return () => {
-      cancelled = true;
+      // Only invalidate if a newer effect run has not already claimed the epoch.
+      // Clearing the timer prevents a stale debounce from starting; in-flight
+      // work is gated by epoch === solveEpochRef.current.
       window.clearTimeout(timer);
-      useCalibrateStore.getState().setUpdatingPose(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
   }, [active, cameraId, authToken, pairsKey, equalCount, opticsReady]);
