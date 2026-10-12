@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Euler, Matrix4, Quaternion, Vector3 } from "three";
+import { restPoseToRigEuler } from "../entities";
 import type { CalibratePair, CameraOptics } from "./types";
 
 export type SolvedPose = {
   /** REST-style translation (meters, Z-up). */
   position: [number, number, number];
-  /** REST-style XYZ euler degrees (before Rx(π) frustum remapping). */
+  /**
+   * REST-style XYZ euler degrees. Frustum / PerspectiveCamera use
+   * `restPoseToRigEuler(rotation)` (Rx(π)); do not apply the solve
+   * matrix euler directly as REST — that matches legacy camera space.
+   */
   rotation: [number, number, number];
   fov: number;
 };
@@ -54,7 +59,7 @@ function workerScriptUrl(): string {
   // BASE_URL is a path ("/static/ui/"); URL() needs an absolute base.
   const base = import.meta.env.BASE_URL || "/static/ui/";
   const path = `${base.endsWith("/") ? base : `${base}/`}calibrate-pose-worker.js`;
-  return new URL(`${path}?v=5`, window.location.origin).toString();
+  return new URL(`${path}?v=14`, window.location.origin).toString();
 }
 
 function attachWorkerDispatcher(w: Worker): void {
@@ -156,6 +161,11 @@ function ensureWorker(): Promise<Worker> {
       // importScripts can take tens of seconds; progress keeps us alive.
       if (msg?.type === "progress") {
         armReadyTimer();
+        // wasm-ready means solvePnP smoke passed — treat as ready even if
+        // a separate type:ready message is dropped by the worker runtime.
+        if (msg.stage === "wasm-ready") {
+          ok();
+        }
         return;
       }
       if (msg?.type === "ready") {
@@ -183,7 +193,12 @@ export function preloadOpenCv(): void {
 }
 
 /**
- * OpenCV→OpenGL flip + invert. Same convention as REST translation/rotation.
+ * OpenCV→OpenGL flip + invert (legacy cameracalibrate.js).
+ *
+ * The inverted matrix euler is what legacy `setCameraPose` puts on the
+ * PerspectiveCamera (rig / lens -Z). Scenescape REST euler is that pose
+ * composed with Rx(π); convert here so callers can use the same
+ * rest→rig path as server-loaded cameras.
  */
 function poseFromRt(
   R: ArrayLike<number>,
@@ -227,9 +242,15 @@ function poseFromRt(
     optics.fy > 0
       ? r2d(2 * Math.atan(optics.height / (2 * optics.fy)))
       : 60;
+  // T euler === legacy projectionCamera / frustum rig. Map to REST.
+  const rigRotation: [number, number, number] = [
+    r2d(e.x),
+    r2d(e.y),
+    r2d(e.z),
+  ];
   return {
     position: [position.x, position.y, position.z],
-    rotation: [r2d(e.x), r2d(e.y), r2d(e.z)],
+    rotation: restPoseToRigEuler(rigRotation),
     fov,
   };
 }

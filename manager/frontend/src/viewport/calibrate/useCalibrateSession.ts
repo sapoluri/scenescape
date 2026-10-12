@@ -524,6 +524,8 @@ export function useCalibrateSession(
         } catch (err) {
           console.warn("Calibrate pose solve failed", err);
         } finally {
+          // Always clear when this epoch is still current. A hanging worker
+          // solve is bounded by solveCameraPose's timeout so we still get here.
           if (epoch === solveEpochRef.current) {
             useCalibrateStore.getState().setUpdatingPose(false);
           }
@@ -531,10 +533,14 @@ export function useCalibrateSession(
       })();
     }, debounceMs);
     return () => {
-      // Only invalidate if a newer effect run has not already claimed the epoch.
       // Clearing the timer prevents a stale debounce from starting; in-flight
       // work is gated by epoch === solveEpochRef.current.
       window.clearTimeout(timer);
+      // If debounce never started, drop the Updating… flag unless a newer
+      // schedule has already claimed the epoch and set it again.
+      if (epoch === solveEpochRef.current) {
+        useCalibrateStore.getState().setUpdatingPose(false);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
   }, [active, cameraId, authToken, pairsKey, equalCount, opticsReady]);

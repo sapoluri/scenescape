@@ -10,91 +10,7 @@
  */
 /* global importScripts, cv */
 
-let cvReady = null;
-
-function loadOpenCv() {
-  if (cvReady) {
-    return cvReady;
-  }
-  cvReady = new Promise((resolve, reject) => {
-    let settled = false;
-    const done = (mod) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve(mod);
-    };
-    const fail = (err) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      reject(err);
-    };
-    try {
-      self.postMessage({ type: "progress", stage: "importScripts-start" });
-      if (typeof cv === "undefined" || !cv.Mat) {
-        importScripts("/static/assets/opencv.js");
-      }
-      self.postMessage({ type: "progress", stage: "importScripts-done" });
-    } catch (err) {
-      fail(err);
-      return;
-    }
-    const smoke = (mod) => {
-      const m = mod.matFromArray(1, 1, mod.CV_64F, [1]);
-      m.delete();
-      if (typeof mod.solvePnP !== "function") {
-        throw new Error("OpenCV solvePnP missing after init");
-      }
-    };
-    const finish = (mod) => {
-      const accept = () => {
-        try {
-          smoke(mod);
-          self.postMessage({ type: "progress", stage: "wasm-ready" });
-          done(mod);
-        } catch (err) {
-          fail(err);
-        }
-      };
-      if (mod.solvePnP && mod.getBuildInformation) {
-        try {
-          if (mod.getBuildInformation()) {
-            accept();
-            return;
-          }
-        } catch {
-          /* wait for runtime init */
-        }
-      }
-      const prev = mod.onRuntimeInitialized;
-      mod.onRuntimeInitialized = () => {
-        if (typeof prev === "function") {
-          prev();
-        }
-        accept();
-      };
-    };
-    if (typeof cv !== "undefined" && cv.Mat) {
-      finish(cv);
-      return;
-    }
-    let tries = 0;
-    const poll = setInterval(() => {
-      tries += 1;
-      if (typeof cv !== "undefined" && cv.Mat) {
-        clearInterval(poll);
-        finish(cv);
-      } else if (tries > 600) {
-        clearInterval(poll);
-        fail(new Error("OpenCV.js worker load timed out"));
-      }
-    }, 50);
-  });
-  return cvReady;
-}
+let cvReady = false;
 
 function matValues(mat) {
   const n = mat.rows * mat.cols;
@@ -114,10 +30,11 @@ function matValues(mat) {
   throw new Error("OpenCV Mat has no readable float data");
 }
 
-function solveRt(mod, pairs, optics) {
+function solveRt(pairs, optics) {
   if (!pairs.length || !optics || !(optics.fx > 0) || !(optics.fy > 0)) {
     throw new Error("solvePnP missing pairs or optics");
   }
+  const mod = cv;
   const imagePts = pairs.map((p) => p.cam);
   const objectPts = pairs.map((p) => p.map);
   const imagePointsMat = mod.matFromArray(
@@ -154,7 +71,7 @@ function solveRt(mod, pairs, optics) {
   const tvec = new mod.Mat();
   const R = new mod.Mat();
   try {
-    const ok = mod.solvePnP(
+    const okPnP = mod.solvePnP(
       objectPointsMat,
       imagePointsMat,
       cameraMatrixMat,
@@ -164,7 +81,7 @@ function solveRt(mod, pairs, optics) {
       false,
       mod.SOLVEPNP_ITERATIVE,
     );
-    if (!ok) {
+    if (!okPnP) {
       return null;
     }
     mod.Rodrigues(rvec, R);
@@ -183,60 +100,89 @@ function solveRt(mod, pairs, optics) {
   }
 }
 
-self.onmessage = (ev) => {
+self.addEventListener("message", (ev) => {
   const msg = ev.data || {};
+  if (msg.type === "ping") {
+    self.postMessage({ type: "pong", t: msg.t });
+    return;
+  }
   if (msg.type === "preload") {
-    loadOpenCv()
-      .then(() => {
-        self.postMessage({ type: "ready" });
-      })
-      .catch((err) => {
-        self.postMessage({
-          type: "error",
-          error: String(err && err.message ? err.message : err),
-        });
+    try {
+      self.postMessage({ type: "progress", stage: "importScripts-start" });
+      if (typeof cv === "undefined") {
+        importScripts(
+          new URL("/static/assets/opencv.js", self.location.origin).toString(),
+        );
+      }
+      self.postMessage({ type: "progress", stage: "importScripts-done" });
+    } catch (err) {
+      self.postMessage({
+        type: "error",
+        error: String(err && err.message ? err.message : err),
       });
+      return;
+    }
+    const prev = cv.onRuntimeInitialized;
+    cv.onRuntimeInitialized = () => {
+      if (typeof prev === "function") {
+        prev();
+      }
+      setTimeout(() => {
+        cvReady = true;
+        self.postMessage({ type: "progress", stage: "wasm-ready" });
+        self.postMessage({ type: "ready" });
+      }, 0);
+    };
     return;
   }
   if (msg.type !== "solve") {
     return;
   }
   const requestId = msg.requestId;
-  loadOpenCv()
-    .then((mod) => {
-      try {
-        const rt = solveRt(mod, msg.pairs || [], msg.optics || {});
-        if (!rt) {
-          self.postMessage({
-            type: "result",
-            requestId,
-            ok: false,
-            error: "solvePnP returned false",
-          });
-          return;
-        }
-        self.postMessage({
-          type: "result",
-          requestId,
-          ok: true,
-          R: rt.R,
-          t: rt.t,
-        });
-      } catch (err) {
-        self.postMessage({
-          type: "result",
-          requestId,
-          ok: false,
-          error: String(err && err.message ? err.message : err),
-        });
-      }
-    })
-    .catch((err) => {
+  self.postMessage({ type: "progress", stage: "solve-start", requestId });
+  if (!cvReady || typeof cv === "undefined" || !cv.solvePnP) {
+    self.postMessage({
+      type: "result",
+      requestId,
+      ok: false,
+      error: "OpenCV not ready",
+    });
+    return;
+  }
+  try {
+    self.postMessage({
+      type: "progress",
+      stage: "solvePnP-enter",
+      requestId,
+    });
+    const rt = solveRt(msg.pairs || [], msg.optics || {});
+    self.postMessage({
+      type: "progress",
+      stage: "solvePnP-exit",
+      requestId,
+    });
+    if (!rt) {
       self.postMessage({
         type: "result",
         requestId,
         ok: false,
-        error: String(err && err.message ? err.message : err),
+        error: "solvePnP returned false",
       });
+      return;
+    }
+    self.postMessage({
+      type: "result",
+      requestId,
+      ok: true,
+      R: rt.R,
+      t: rt.t,
     });
-};
+  } catch (err) {
+    self.postMessage({
+      type: "result",
+      requestId,
+      ok: false,
+      error: String(err && err.message ? err.message : err),
+    });
+  }
+});
