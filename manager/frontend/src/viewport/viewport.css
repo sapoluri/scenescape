@@ -125,18 +125,6 @@
   opacity: 1;
 }
 
-.ss-viewport-beta {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--ss-brand-soft, #0099ec);
-  border: 1px solid var(--ss-brand-soft, #0099ec);
-  border-radius: 20px;
-  padding: 2px 8px;
-}
-
 .ss-viewport-host {
   position: relative;
   flex: 1 1 auto;

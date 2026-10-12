@@ -9,6 +9,10 @@ import type {
   SceneSensorBootstrap,
 } from "../scene/types";
 import { SceneViewport } from "../viewport/SceneViewport";
+import {
+  OpenAdminListDialog,
+  type OpenAdminListKind,
+} from "./OpenAdminListDialog";
 import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
@@ -86,9 +90,16 @@ export function SinglePaneView({
     undefined,
   );
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
+  const [adminListKind, setAdminListKind] = useState<OpenAdminListKind | null>(
+    null,
+  );
+  const [adminListRefresh, setAdminListRefresh] = useState(0);
   const [replayMode, setReplayMode] = useState(false);
 
-  useOpenSceneHotkey(() => setSceneDialogOpen(true));
+  useOpenSceneHotkey(() => {
+    setAdminListKind(null);
+    setSceneDialogOpen(true);
+  });
 
   const setCollapsed = useCallback((collapsed: boolean) => {
     setDockCollapsed(collapsed);
@@ -123,7 +134,18 @@ export function SinglePaneView({
             authToken={authToken}
             isSuperuser={isSuperuser}
             onOpenLibrary={() => setLibraryOpen(true)}
-            onOpenScene={() => setSceneDialogOpen(true)}
+            onOpenScene={() => {
+              setAdminListKind(null);
+              setSceneDialogOpen(true);
+            }}
+            onOpenCameras={() => {
+              setSceneDialogOpen(false);
+              setAdminListKind("cameras");
+            }}
+            onOpenSensors={() => {
+              setSceneDialogOpen(false);
+              setAdminListKind("sensors");
+            }}
             mode="live"
             onModeChange={(m) => setReplayMode(m === "replay")}
           />
@@ -244,6 +266,15 @@ export function SinglePaneView({
         }}
         authToken={authToken}
         isSuperuser={isSuperuser}
+      />
+      <OpenAdminListDialog
+        open={adminListKind !== null}
+        kind={adminListKind || "cameras"}
+        onClose={() => {
+          setAdminListKind(null);
+          setAdminListRefresh((n) => n + 1);
+        }}
+        refreshToken={adminListRefresh}
       />
     </div>
   );

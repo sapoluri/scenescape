@@ -41,7 +41,7 @@ def test_camera_deletion_main(params, record_xml_attribute):
     assert common.create_orphan_camera(browser, camera_name, camera_id)
     log.info(f"Adding orphan camera: {camera_name} to scene {scene_name}")
     # Orphan cameras expose Edit → Django cam_update (scene picker is #id_scene)
-    browser.find_element(By.ID, "nav-cameras").click()
+    common.click_nav_link(browser, "nav-cameras")
     orphan_row = wait.until(
       EC.presence_of_element_located(
         (
@@ -75,7 +75,7 @@ def test_camera_deletion_main(params, record_xml_attribute):
     common.confirm_ss_dialog(browser, "Delete")
 
     log.info("Navigating to cameras menu to verify after deletion.")
-    browser.find_element(By.ID, "nav-cameras").click()
+    common.click_nav_link(browser, "nav-cameras")
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "tbody")))
     camera_names_list = []
     rows = browser.find_elements(By.CSS_SELECTOR, "tbody > tr")

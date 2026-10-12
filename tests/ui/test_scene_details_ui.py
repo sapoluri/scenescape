@@ -33,7 +33,7 @@ def test_scene_details_main(params, record_xml_attribute):
     print("Test that the user can view scene details")
     browser = Browser()
     assert common.check_page_login(browser, params)
-    browser.find_element(By.ID, "nav-scenes").click()
+    common.click_nav_link(browser, "nav-scenes")
     assert SCENE_NAME in browser.page_source
 
     print("Scene is accessible from the list of scenes")

@@ -1,0 +1,32 @@
+/* SPDX-FileCopyrightText: (C) 2026 Intel Corporation */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.ss-open-admin-dialog {
+  width: min(64rem, 100%);
+}
+
+.ss-open-admin-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0.5rem 1rem;
+}
+
+.ss-open-admin-body .ss-admin-list {
+  max-width: none;
+  margin: 0;
+  padding: 0 0.5rem 0.5rem;
+}
+
+.ss-open-admin-body .ss-page-header {
+  margin-bottom: 0.75rem;
+}
+
+.ss-open-admin-body .ss-page-title {
+  /* Dialog chrome already shows the title. */
+  display: none;
+}
+
+.ss-open-admin-body .ss-breadcrumb {
+  display: none;
+}

@@ -1,0 +1,175 @@
+/* SPDX-FileCopyrightText: (C) 2026 Intel Corporation */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.ss-viewport-menubar {
+  position: relative;
+  z-index: 6;
+}
+
+.ss-viewport-bar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.ss-vmenu {
+  position: relative;
+  display: inline-flex;
+}
+
+.ss-vmenu-caret {
+  font-size: 0.55rem;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.ss-vmenu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 11rem;
+  padding: 0.3rem 0;
+  background: var(--ss-card-bg, #23262b);
+  border: 1px solid var(--ss-card-border, #2d333b);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Author `display:flex` would otherwise override the HTML hidden attribute. */
+.ss-vmenu-panel[hidden] {
+  display: none !important;
+}
+
+.ss-vmenu-panel--end {
+  left: auto;
+  right: 0;
+}
+
+.ss-vmenu-item {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.85rem;
+  border: 0;
+  background: transparent;
+  color: var(--ss-text, #f5f5f7);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ss-vmenu-item:hover,
+.ss-vmenu-item:focus {
+  background: color-mix(in srgb, var(--ss-brand, #0a84ff) 22%, transparent);
+  color: var(--ss-text, #fff);
+  outline: none;
+  text-decoration: none;
+}
+
+.ss-vmenu-item.is-active {
+  color: var(--ss-brand-soft, #5ac8ff);
+  font-weight: 600;
+}
+
+.ss-vmenu-sep {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--ss-card-border, #2d333b);
+}
+
+.ss-viewport-brand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  margin-left: 0.35rem;
+  padding: 0.15rem 0.35rem;
+  color: var(--ss-text, #f5f5f7);
+  line-height: 1.15;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ss-viewport-brand-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ss-viewport-brand-version {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-viewport-powered {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.42;
+  transition: opacity 160ms ease;
+  pointer-events: auto;
+}
+
+.ss-viewport-powered:hover,
+.ss-viewport-powered:focus {
+  opacity: 1;
+  text-decoration: none;
+  color: inherit;
+  background: rgb(0 0 0 / 0.25);
+}
+
+.ss-viewport-powered .powered-by-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+
+.ss-viewport-powered .intel-logo {
+  display: block;
+  height: 0.95rem;
+  width: auto;
+}
+
+.ss-viewport-theme {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.15rem;
+}
+
+.ss-viewport-theme .ss-theme-toggle {
+  transform: scale(0.85);
+  transform-origin: center right;
+}
+
+.ss-viewport-stats {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.ss-viewport-stats > div {
+  position: static !important;
+}
+
+/* Workspace shell: no top navbar — reclaim the fixed-nav body padding. */
+body.ss-workspace-chrome {
+  padding-top: 0;
+  padding-bottom: 0;
+}

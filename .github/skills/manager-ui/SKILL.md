@@ -157,10 +157,20 @@ SVG `g.roi` / `g.tripwire`, `adding-roi` / `adding-tripwire`.
 `#scene-detail-link`, `#scene-detail-button` → `sceneDetail`;
 `#2d-button`, `#3d-button` orthographic / perspective.
 
-### Navbar
+### Navbar / 3D menu bar
 
 Owned by the React **chrome** island (`ui/chrome.js`, `#ss-chrome-root` +
-`ss-chrome-bootstrap`). Ids remain hard contracts:
+`ss-chrome-bootstrap`) on browse pages. On the 3D workspace shell
+(`.ss-single-pane`), the top navbar is omitted and the same hard-contract
+ids live on the viewport menu bar (`ViewportMenuBar`): Open dropdown holds
+`#nav-scenes` / `#nav-cameras` / `#nav-sensors` / `#nav-models` (K8s);
+Help / account / theme / brand (`#home`, `#navbar-version`) sit on the bar.
+Selenium must expand `[data-ss-open-menu]` before clicking Open-menu links
+(`click_nav_link` in `tests/ui/common_ui_test_utils.py`). On the 3D shell,
+Open → Cameras / Sensors opens a floating list dialog (`#ss-admin-list-root`)
+instead of navigating to the browse pages.
+
+Ids remain hard contracts:
 
 `#nav-help` (Help menu), `#nav-docs` (OEP published docs), `#nav-support`
 (GitHub Issues), `#nav-about` / `#ss-about-modal` (About), `#nav-admin`
@@ -168,7 +178,7 @@ Owned by the React **chrome** island (`ui/chrome.js`, `#ss-chrome-root` +
 `#ss-theme-toggle`, `#home`, `#navbar-version`, `#nav-scenes`,
 `#nav-cameras`, `#nav-sensors`, `#nav-models` (K8s), `#nav-sign-out`,
 `#login-submit` (sign-in form). Object Library is the viewport Library
-drawer (`#ss-open-library`, home and scene detail) — not a navbar item.
+drawer (`#ss-open-library`, home and scene detail) — not a top-nav item.
 
 ### `window` APIs
 

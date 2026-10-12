@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Stats from "three/addons/libs/stats.module.js";
 import { useAppToast } from "../components/ToastProvider";
 import { saveAllDirtyEntities } from "../lib/entityPersist";
 import { CameraStripOverlay } from "../panels/CameraStripOverlay";
@@ -23,6 +24,10 @@ import { getViewportState, useViewportStore } from "./store";
 import { TOOLS, toolDef } from "./tools";
 import type { ToolId } from "./types";
 import { useViewportTools } from "./useViewportTools";
+import {
+  ViewportMenuBar,
+  ViewportPoweredBy,
+} from "./ViewportMenuBar";
 import "./viewport.css";
 import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./world";
 
@@ -54,6 +59,8 @@ interface SceneViewportProps {
   isSuperuser?: boolean;
   onOpenLibrary?: () => void;
   onOpenScene?: () => void;
+  onOpenCameras?: () => void;
+  onOpenSensors?: () => void;
   mode?: "live" | "replay";
   onModeChange?: (mode: "live" | "replay") => void;
 }
@@ -285,11 +292,14 @@ export function SceneViewport({
   isSuperuser = false,
   onOpenLibrary,
   onOpenScene,
+  onOpenCameras,
+  onOpenSensors,
   mode = "live",
   onModeChange,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
+  const statsHostRef = useRef<HTMLDivElement>(null);
   const [world, setWorld] = useState<ViewportWorld | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
   const theme = useTheme();
@@ -316,6 +326,22 @@ export function SceneViewport({
       w.dispose();
     };
   }, [sceneId]);
+
+  // three.js Stats (FPS) — bottom-left, same placement as the legacy 3D UI.
+  useEffect(() => {
+    if (!world || !statsHostRef.current) {
+      return;
+    }
+    const stats = new Stats();
+    stats.showPanel(0);
+    statsHostRef.current.replaceChildren(stats.dom);
+    const onFrame = () => stats.update();
+    world.onFrame.add(onFrame);
+    return () => {
+      world.onFrame.delete(onFrame);
+      statsHostRef.current?.replaceChildren();
+    };
+  }, [world]);
 
   useEffect(() => {
     world?.setTheme(theme);
@@ -387,30 +413,12 @@ export function SceneViewport({
       className={`ss-viewport${calibrating ? " is-calibrating" : ""}${emptyScene ? " is-empty" : ""}`}
       data-scene-id={sceneId || ""}
     >
-      <div className="ss-viewport-bar" role="toolbar" aria-label="Viewport">
-        {onOpenScene && (
-          <button
-            type="button"
-            className="ss-viewport-bar-btn"
-            onClick={onOpenScene}
-            title="Open scene gallery (âŒ˜O)"
-          >
-            <i className="bi bi-folder2-open" aria-hidden="true" />
-            <span>Open</span>
-          </button>
-        )}
-        {onOpenLibrary ? (
-          <button
-            type="button"
-            className="ss-viewport-bar-btn"
-            id="ss-open-library"
-            onClick={onOpenLibrary}
-            title="Object library (B)"
-          >
-            <i className="bi bi-collection" aria-hidden="true" />
-            <span>Library</span>
-          </button>
-        ) : null}
+      <ViewportMenuBar
+        onOpenScene={onOpenScene}
+        onOpenCameras={onOpenCameras}
+        onOpenSensors={onOpenSensors}
+        onOpenLibrary={onOpenLibrary}
+      >
         {!emptyScene ? (
           <>
             <span className="ss-viewport-bar-sep" aria-hidden="true" />
@@ -478,8 +486,7 @@ export function SceneViewport({
             />
           </>
         ) : null}
-        <span className="ss-viewport-beta">3D beta</span>
-      </div>
+      </ViewportMenuBar>
       {!emptyScene &&
         (calibrating ? (
           <CalibrateWizard
@@ -509,6 +516,12 @@ export function SceneViewport({
             ref={labelLayerRef}
             aria-hidden="true"
           />
+          <div
+            className="ss-viewport-stats"
+            ref={statsHostRef}
+            aria-hidden="true"
+          />
+          <ViewportPoweredBy />
         </div>
         {calibrating ? <CalibrateFeedPane /> : null}
       </div>

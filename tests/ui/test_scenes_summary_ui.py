@@ -41,7 +41,7 @@ def test_scenes_summary_main(params, record_xml_attribute):
     common.create_scene(browser, scene_name_1, scale, map_image)
 
     time.sleep(1)
-    browser.find_element(By.ID, "nav-scenes").click()
+    common.click_nav_link(browser, "nav-scenes", timeout=30)
     WebDriverWait(browser, 30).until(
       lambda drv: drv.find_elements(By.CSS_SELECTOR, ".ss-open-scene-dialog")
     )

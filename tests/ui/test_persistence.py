@@ -57,7 +57,7 @@ def test_persistence_on_page_navigate(params, result_recorder):
     camera_count = browser.find_element(By.CSS_SELECTOR, sensor_count_loc).text
     log.info("Editing scene by adding camera " + SCENE_NAME)
     assert common.add_camera_to_scene(browser, SCENE_NAME, CAMERA_ID, CAMERA_NAME)
-    browser.find_element(By.ID, "home").click()
+    common.click_nav_link(browser, "nav-scenes")
     changed_camera_count = browser.find_element(By.CSS_SELECTOR, sensor_count_loc).text
 
     assert int(changed_camera_count) == int(camera_count) + 1
@@ -94,7 +94,7 @@ def test_persistence_on_restart(params, result_recorder):
         pass
 
     map_image = os.path.join(common.TEST_MEDIA_PATH, "HazardZoneScene.png")
-    browser.find_element(By.ID, "nav-scenes").click()
+    common.click_nav_link(browser, "nav-scenes")
     time.sleep(1)
 
     sensor_count_loc = "[name='" + SCENE_NAME + "'] .sensor-count"

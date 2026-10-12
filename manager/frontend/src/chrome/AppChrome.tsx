@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AboutModal } from "./AboutModal";
 import { NavTrailingControls } from "./NavTrailingControls";
 import {
@@ -21,14 +21,37 @@ type Props = {
 /**
  * Manager navbar + about modal. Hard-contract ids match the former Django
  * base.html chrome (skill freeze table).
+ *
+ * On the 3D workspace shell (`.ss-single-pane`), the top navbar is omitted —
+ * Open / Help / Admin / brand live on the viewport menu bar instead.
  */
 export function AppChrome({ bootstrap }: Props) {
   const active = useMemo(
     () => bootstrap.activeNav ?? activeNavFromPath(window.location.pathname),
     [bootstrap.activeNav],
   );
+  const [workspace, setWorkspace] = useState(
+    () => Boolean(document.querySelector(".ss-single-pane")),
+  );
 
   useEffect(() => {
+    const sync = () =>
+      setWorkspace(Boolean(document.querySelector(".ss-single-pane")));
+    sync();
+    const mo = new MutationObserver(sync);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("ss-workspace-chrome", workspace);
+    return () => document.body.classList.remove("ss-workspace-chrome");
+  }, [workspace]);
+
+  useEffect(() => {
+    if (workspace) {
+      return;
+    }
     const about = document.getElementById("nav-about");
     const modal = document.getElementById("ss-about-modal");
     const w = window as unknown as {
@@ -53,9 +76,20 @@ export function AppChrome({ bootstrap }: Props) {
     return () => {
       $about.off?.("click", handler);
     };
-  }, [bootstrap.authenticated]);
+  }, [bootstrap.authenticated, workspace]);
 
   const { urls } = bootstrap;
+
+  if (workspace) {
+    // About modal stays mounted so viewport Help → About can open it.
+    return (
+      <AboutModal
+        appName={bootstrap.appName}
+        appVersion={bootstrap.appVersion}
+        appGitCommit={bootstrap.appGitCommit}
+      />
+    );
+  }
 
   return (
     <>

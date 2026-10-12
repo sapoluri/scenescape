@@ -54,6 +54,31 @@ CALIBRATE_IFRAME = (
   By.CSS_SELECTOR,
   'iframe[title="Point calibrator"], .ss-workspace-cal-preview-frame iframe',
 )
+OPEN_MENU_BTN = (By.CSS_SELECTOR, "[data-ss-open-menu]")
+
+
+def click_nav_link(browser, link_id, timeout=None):
+  """! Click a hard-contract nav id, expanding the 3D Open menu when needed.
+
+  On the workspace shell, Scenes / Cameras / Sensors live under the viewport
+  Open dropdown (`[data-ss-open-menu]`). Browse pages still expose the same
+  ids on the top navbar.
+  @param    browser                    Object wrapping the Selenium driver.
+  @param    link_id                    DOM id (e.g. nav-scenes).
+  @param    timeout                    Optional wait seconds.
+  @return   None
+  """
+  wait = WebDriverWait(browser, timeout if timeout is not None else BROWSER_WAIT)
+  wait.until(EC.presence_of_element_located((By.ID, link_id)))
+  link = browser.find_element(By.ID, link_id)
+  if link.is_displayed():
+    wait.until(EC.element_to_be_clickable((By.ID, link_id))).click()
+    return
+  open_btns = browser.find_elements(*OPEN_MENU_BTN)
+  if open_btns:
+    open_btns[0].click()
+  wait.until(EC.element_to_be_clickable((By.ID, link_id))).click()
+
 
 def enter_calibrate_workspace(browser, timeout=15):
   """Switch into the React calibrate iframe when the 3D workspace is embedded."""
@@ -269,7 +294,7 @@ def delete_scene(browser, scene_name):
   wait = WebDriverWait(browser, 30)
   # A drawer left open by an earlier step would swallow the nav click.
   wait_ss_drawer_closed(browser, timeout=30)
-  browser.find_element(By.ID, "nav-scenes").click()
+  click_nav_link(browser, "nav-scenes", timeout=30)
   wait.until(EC.presence_of_element_located((By.NAME, scene_name)))
   # Scene cards carry the name attribute; the delete anchor is keyed by scene id.
   card = browser.find_element(By.NAME, scene_name)
@@ -320,7 +345,7 @@ def add_child_scene(browser, parent, child):
   @param    child                   The name of the child scene.
   @return   bool                    Boolean representing success.
   """
-  browser.find_element(By.ID, "nav-scenes").click()
+  click_nav_link(browser, "nav-scenes")
   if child not in browser.page_source or parent \
     not in browser.page_source:
     print("scenes {} and {} do not exist!".format(child, parent))
@@ -342,7 +367,7 @@ def update_child_scene(browser, parent, child, transform):
   @return   transform               Euler angle transform with pose information.
   @return   bool                    Boolean representing success.
   """
-  browser.find_element(By.ID, "nav-scenes").click()
+  click_nav_link(browser, "nav-scenes")
   if child not in browser.page_source or parent \
     not in browser.page_source:
     print("scenes {} and {} do not exist!".format(child, parent))
@@ -378,7 +403,7 @@ def delete_child_scene(browser, parent, child):
   @param    child                   The name of the child scene.
   @return   bool                    Boolean representing success.
   """
-  browser.find_element(By.ID, "nav-scenes").click()
+  click_nav_link(browser, "nav-scenes")
   if child not in browser.page_source or parent \
     not in browser.page_source:
     print("scenes {} and {} do not exist!".format(child, parent))
@@ -402,7 +427,7 @@ def create_scene(browser, scene_name, scale, map_image):
   @return   bool                       Boolean representing success.
   """
   wait = WebDriverWait(browser, BROWSER_WAIT)
-  browser.find_element(By.ID, "nav-scenes").click()
+  click_nav_link(browser, "nav-scenes")
   if scene_name in browser.page_source:
     print("Scene already exists, deleting it before proceeding ...")
     if not delete_scene(browser, scene_name):
@@ -419,8 +444,8 @@ def create_scene(browser, scene_name, scale, map_image):
   browser.find_element(By.ID, "ss-scene-map").send_keys(map_image)
   submit_ss_drawer(browser)
   wait_ss_drawer_closed(browser, timeout=30)
+  click_nav_link(browser, "nav-scenes", timeout=30)
   nav_wait = WebDriverWait(browser, 30)
-  nav_wait.until(EC.element_to_be_clickable((By.ID, "nav-scenes"))).click()
   nav_wait.until(
     EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-scene-gallery"))
   )
@@ -1129,7 +1154,7 @@ def create_sensor_from_sensors_page(browser, sensor_id, sensor_name, scene_name)
   @return   bool                       Boolean representing success.
   """
   wait = WebDriverWait(browser, BROWSER_WAIT * 4)
-  wait.until(EC.element_to_be_clickable((By.ID, "nav-sensors"))).click()
+  click_nav_link(browser, "nav-sensors", timeout=BROWSER_WAIT * 4)
   wait.until(EC.element_to_be_clickable((By.ID, "new-sensor"))).click()
   create_sensor(browser, sensor_id, sensor_name, scene_name)
 
@@ -1158,7 +1183,7 @@ def open_sensor_calibrate_from_list(browser, sensor_name):
   @return   None
   """
   wait = WebDriverWait(browser, BROWSER_WAIT * 4)
-  wait.until(EC.element_to_be_clickable((By.ID, "nav-sensors"))).click()
+  click_nav_link(browser, "nav-sensors", timeout=BROWSER_WAIT * 4)
   wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#ss-admin-list-root table")))
   row = wait.until(
     EC.presence_of_element_located(
@@ -1285,7 +1310,7 @@ def delete_sensor(browser, sensor_name):
   @return   bool                       Boolean representing a success.
   """
   wait = WebDriverWait(browser, BROWSER_WAIT * 4)
-  wait.until(EC.element_to_be_clickable((By.ID, "nav-sensors"))).click()
+  click_nav_link(browser, "nav-sensors", timeout=BROWSER_WAIT * 4)
   wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#ss-admin-list-root table")))
   row = wait.until(
     EC.presence_of_element_located(
@@ -1320,7 +1345,7 @@ def verify_sensor_list(browser, sensor_names):
   @return   bool                       Boolean representing a success.
   """
   try:
-    browser.find_element(By.ID, "nav-sensors").click()
+    click_nav_link(browser, "nav-sensors")
     time.sleep(1)
     for sensor_name in sensor_names:
       browser.find_element(By.XPATH, f"//td[normalize-space()='{sensor_name}']")
@@ -2347,7 +2372,7 @@ class InteractWithSceneUpdate(InteractWithPage):
     @return   bool                     Boolean representing success.
     """
     wait = WebDriverWait(self.browser, BROWSER_WAIT)
-    self.click_element_css_selector("#home")
+    click_nav_link(self.browser, "nav-scenes")
     wait.until(
       EC.element_to_be_clickable((By.ID, f"scene-edit-{TEST_SCENE_ID}"))
     ).click()

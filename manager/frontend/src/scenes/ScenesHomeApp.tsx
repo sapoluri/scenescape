@@ -9,6 +9,10 @@ import type { SheetAction } from "../lib/sheetQuery";
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
 import {
+  OpenAdminListDialog,
+  type OpenAdminListKind,
+} from "../panels/OpenAdminListDialog";
+import {
   OpenSceneDialog,
   useOpenSceneHotkey,
   type GalleryScene,
@@ -18,6 +22,8 @@ import { SceneSheet } from "../sheets/SceneSheet";
 import { SceneImportDialog } from "../sheets/SceneImportDialog";
 import { SceneManagePanel } from "../sheets/SceneManagePanel";
 import { ChildSheet } from "../sheets/ChildSheet";
+import { CameraSheet } from "../sheets/CameraSheet";
+import { SensorSheet } from "../sheets/SensorSheet";
 import "../components/Button.css";
 import "../panels/SinglePaneView.css";
 import "./ScenesHomeApp.css";
@@ -53,6 +59,10 @@ const HOME_ACTIONS = new Set([
   "scene-import",
   "scene-manage",
   "child-create",
+  "cam-create",
+  "cam-edit",
+  "sensor-create",
+  "sensor-edit",
 ]);
 
 function isHomeAction(v: string | null): v is Exclude<SheetAction, null> {
@@ -78,6 +88,10 @@ function ScenesHomeInner({ bootstrap }: Props) {
   const [sceneDialogOpen, setSceneDialogOpen] = useState(
     () => !(sheet.action && isHomeAction(sheet.action)),
   );
+  const [adminListKind, setAdminListKind] = useState<OpenAdminListKind | null>(
+    null,
+  );
+  const [adminListRefresh, setAdminListRefresh] = useState(0);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   // undefined = editor closed; null = create-new; string = edit asset.
@@ -85,7 +99,10 @@ function ScenesHomeInner({ bootstrap }: Props) {
     undefined,
   );
 
-  useOpenSceneHotkey(() => setSceneDialogOpen(true));
+  useOpenSceneHotkey(() => {
+    setAdminListKind(null);
+    setSceneDialogOpen(true);
+  });
 
   useEffect(() => {
     document.documentElement.classList.add("ss-scene-workspace");
@@ -142,15 +159,18 @@ function ScenesHomeInner({ bootstrap }: Props) {
     return () => document.removeEventListener("click", onClick, true);
   }, [open]);
 
-  // Sheets hide the gallery while open; dismissing a sheet reopens it.
+  // Sheets hide the galleries while open; dismissing a sheet reopens scenes
+  // unless a cameras/sensors browser was the prior surface.
   const prevSheetAction = useRef(sheet.action);
   useEffect(() => {
     const prev = prevSheetAction.current;
     prevSheetAction.current = sheet.action;
     if (sheet.action && isHomeAction(sheet.action)) {
       setSceneDialogOpen(false);
+      setAdminListKind(null);
     } else if (prev && !sheet.action) {
       setSceneDialogOpen(true);
+      setAdminListRefresh((n) => n + 1);
     }
   }, [sheet.action]);
 
@@ -193,7 +213,18 @@ function ScenesHomeInner({ bootstrap }: Props) {
           <SceneViewport
             authToken={bootstrap.authToken}
             isSuperuser={bootstrap.isSuperuser}
-            onOpenScene={() => setSceneDialogOpen(true)}
+            onOpenScene={() => {
+              setAdminListKind(null);
+              setSceneDialogOpen(true);
+            }}
+            onOpenCameras={() => {
+              setSceneDialogOpen(false);
+              setAdminListKind("cameras");
+            }}
+            onOpenSensors={() => {
+              setSceneDialogOpen(false);
+              setAdminListKind("sensors");
+            }}
             onOpenLibrary={() => setLibraryOpen(true)}
           />
         </div>
@@ -236,6 +267,15 @@ function ScenesHomeInner({ bootstrap }: Props) {
         onNewScene={openCreate}
         onImportScene={openImport}
       />
+      <OpenAdminListDialog
+        open={adminListKind !== null}
+        kind={adminListKind || "cameras"}
+        onClose={() => {
+          setAdminListKind(null);
+          setAdminListRefresh((n) => n + 1);
+        }}
+        refreshToken={adminListRefresh}
+      />
 
       {bootstrap.isSuperuser ? (
         <>
@@ -276,6 +316,43 @@ function ScenesHomeInner({ bootstrap }: Props) {
             authToken={bootstrap.authToken}
             onClose={close}
             onSaved={reload}
+          />
+          <CameraSheet
+            open={
+              sheet.action === "cam-create" || sheet.action === "cam-edit"
+            }
+            mode={sheet.action === "cam-edit" ? "edit" : "create"}
+            sceneId=""
+            scenes={sceneOptions}
+            sensorUid={
+              sheet.action === "cam-edit" ? sheet.id || null : null
+            }
+            authToken={bootstrap.authToken}
+            onClose={close}
+            onSaved={() => {
+              close();
+              setAdminListKind("cameras");
+              setAdminListRefresh((n) => n + 1);
+            }}
+          />
+          <SensorSheet
+            open={
+              sheet.action === "sensor-create" ||
+              sheet.action === "sensor-edit"
+            }
+            mode={sheet.action === "sensor-edit" ? "edit" : "create"}
+            sceneId=""
+            scenes={sceneOptions}
+            sensorUid={
+              sheet.action === "sensor-edit" ? sheet.id || null : null
+            }
+            authToken={bootstrap.authToken}
+            onClose={close}
+            onSaved={() => {
+              close();
+              setAdminListKind("sensors");
+              setAdminListRefresh((n) => n + 1);
+            }}
           />
         </>
       ) : null}
