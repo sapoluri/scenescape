@@ -445,17 +445,18 @@ export function SceneViewport({
             <span>Open</span>
           </button>
         )}
-        {!emptyScene && onOpenLibrary && (
+        {onOpenLibrary ? (
           <button
             type="button"
             className="ss-viewport-bar-btn"
+            id="ss-open-library"
             onClick={onOpenLibrary}
             title="Object library (B)"
           >
             <i className="bi bi-collection" aria-hidden="true" />
             <span>Library</span>
           </button>
-        )}
+        ) : null}
         {!emptyScene ? (
           <>
             <span className="ss-viewport-bar-sep" aria-hidden="true" />

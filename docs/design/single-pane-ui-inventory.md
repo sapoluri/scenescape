@@ -84,7 +84,8 @@ live in `SceneSidePanel`.)
 `#ss-about-modal`, `#nav-admin` (staff, under account menu),
 `#navbar-username`, `#ss-theme-toggle`, `#home`, `#navbar-version`,
 `#nav-scenes`, `#nav-cameras`, `#nav-sensors`, `#nav-models` (K8s),
-`#nav-object-library`, `#nav-sign-out`, `#login-submit` (sign-in form).
+`#nav-sign-out`, `#login-submit` (sign-in form). Object Library:
+`#ss-open-library` (viewport bar on home and scene detail).
 
 ### 1.7 `window` APIs — React freeze (hybrid still required)
 

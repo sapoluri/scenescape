@@ -121,15 +121,6 @@ export function AppChrome({ bootstrap }: Props) {
                   </a>
                 </li>
               ) : null}
-              <li className="nav-item">
-                <a
-                  className={navClass("assets", active)}
-                  id="nav-object-library"
-                  href={urls.assets}
-                >
-                  Object Library
-                </a>
-              </li>
               <li className="nav-item dropdown ss-nav-hover">
                 <a
                   className="nav-link dropdown-toggle"

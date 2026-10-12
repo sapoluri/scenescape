@@ -168,7 +168,10 @@ def create_object_library(browser, object_name, tracking_radius=None,
   @return   bool                       Boolean representing success.
   """
   wait = WebDriverWait(browser, OBJECT_LIBRARY_WAIT)
-  browser.find_element(By.ID, "nav-object-library").click()
+  # Object Library lives in the scene/home Library drawer; the admin list at
+  # /asset/list/ remains for CRUD tests (navbar link removed as redundant).
+  parsed = urlparse(browser.current_url)
+  browser.get(f"{parsed.scheme}://{parsed.netloc}/asset/list/")
   wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-admin-list")))
   if object_library_row(browser, object_name):
     print("3D object already exists, deleting it before proceeding ...")
@@ -204,8 +207,8 @@ def delete_object_library(browser, object_name):
   @return   bool                       Boolean representing success.
   """
   wait = WebDriverWait(browser, OBJECT_LIBRARY_WAIT)
-  # navigate to 3D Assets page
-  browser.find_element(By.ID, "nav-object-library").click()
+  parsed = urlparse(browser.current_url)
+  browser.get(f"{parsed.scheme}://{parsed.netloc}/asset/list/")
   wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ss-admin-list")))
   browser.find_element(
     By.XPATH,

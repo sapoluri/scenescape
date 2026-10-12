@@ -29,9 +29,11 @@ def test_add_delete_3d_object(params, repo_root, result_recorder):
     print("Test that the user can create and delete 3D objects.")
     browser = Browser()
     assert common.check_page_login(browser, params)
-    browser.find_element(By.ID, "nav-object-library").click()
+    from urllib.parse import urlparse
+    parsed = urlparse(browser.current_url)
+    browser.get(f"{parsed.scheme}://{parsed.netloc}/asset/list/")
     assert PAGE_NAME in browser.page_source
-    print("Object Library exists in the navigation bar.")
+    print("Object Library admin list is reachable.")
 
     assert common.create_object_library(browser, OBJECT_NAME, model_file=FILE_TO_UPLOAD)
     print('3D object created!')

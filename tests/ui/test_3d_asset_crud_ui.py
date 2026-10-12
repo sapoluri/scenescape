@@ -32,9 +32,11 @@ def test_3d_asset_crud_ui(params, repo_root, result_recorder):
     log.info("Verify the CRUD of object library via GUI.")
     browser = Browser()
     assert common.check_page_login(browser, params)
-    browser.find_element(By.ID, "nav-object-library").click()
+    from urllib.parse import urlparse
+    parsed = urlparse(browser.current_url)
+    browser.get(f"{parsed.scheme}://{parsed.netloc}/asset/list/")
     assert PAGE_NAME in browser.page_source
-    log.info("Object Library exists in the navigation bar.")
+    log.info("Object Library admin list is reachable.")
 
     # Clean up any pre-existing object with the same name before starting
     if browser.find_elements(By.XPATH, "//td[text()='{0}']".format(OBJECT_NAME)):

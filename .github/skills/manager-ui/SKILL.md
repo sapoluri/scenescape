@@ -166,8 +166,9 @@ Owned by the React **chrome** island (`ui/chrome.js`, `#ss-chrome-root` +
 (GitHub Issues), `#nav-about` / `#ss-about-modal` (About), `#nav-admin`
 (staff; under account menu), `#navbar-username` (account menu),
 `#ss-theme-toggle`, `#home`, `#navbar-version`, `#nav-scenes`,
-`#nav-cameras`, `#nav-sensors`, `#nav-models` (K8s), `#nav-object-library`,
-`#nav-sign-out`, `#login-submit` (sign-in form).
+`#nav-cameras`, `#nav-sensors`, `#nav-models` (K8s), `#nav-sign-out`,
+`#login-submit` (sign-in form). Object Library is the viewport Library
+drawer (`#ss-open-library`, home and scene detail) — not a navbar item.
 
 ### `window` APIs
 

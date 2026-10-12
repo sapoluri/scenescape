@@ -6,6 +6,8 @@ import { ToastProvider, useAppToast } from "../components/ToastProvider";
 import { LegacyConfirmHost } from "../components/LegacyConfirmHost";
 import { useSheetFromQuery } from "../hooks/useSheetFromQuery";
 import type { SheetAction } from "../lib/sheetQuery";
+import { LibraryDrawer } from "../library/LibraryDrawer";
+import { MarkEditor } from "../library/MarkEditor";
 import {
   OpenSceneDialog,
   useOpenSceneHotkey,
@@ -75,6 +77,12 @@ function ScenesHomeInner({ bootstrap }: Props) {
   useAppToast();
   const [sceneDialogOpen, setSceneDialogOpen] = useState(
     () => !(sheet.action && isHomeAction(sheet.action)),
+  );
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryRefresh, setLibraryRefresh] = useState(0);
+  // undefined = editor closed; null = create-new; string = edit asset.
+  const [editorAsset, setEditorAsset] = useState<string | null | undefined>(
+    undefined,
   );
 
   useOpenSceneHotkey(() => setSceneDialogOpen(true));
@@ -186,9 +194,33 @@ function ScenesHomeInner({ bootstrap }: Props) {
             authToken={bootstrap.authToken}
             isSuperuser={bootstrap.isSuperuser}
             onOpenScene={() => setSceneDialogOpen(true)}
+            onOpenLibrary={() => setLibraryOpen(true)}
           />
         </div>
       </div>
+
+      <LibraryDrawer
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onOpen={() => setLibraryOpen(true)}
+        authToken={bootstrap.authToken}
+        onSelectAsset={(uid) => {
+          setEditorAsset(uid);
+          setLibraryOpen(false);
+        }}
+        refreshToken={libraryRefresh}
+      />
+      {editorAsset !== undefined ? (
+        <MarkEditor
+          assetId={editorAsset}
+          authToken={bootstrap.authToken}
+          onClose={() => setEditorAsset(undefined)}
+          onSaved={() => {
+            setLibraryRefresh((n) => n + 1);
+            setEditorAsset(undefined);
+          }}
+        />
+      ) : null}
 
       <OpenSceneDialog
         open={sceneDialogOpen}
