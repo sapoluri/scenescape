@@ -10,7 +10,13 @@ import type {
   SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import { SceneViewport } from "../viewport/SceneViewport";
+import { ViewportMenuBar } from "../viewport/ViewportMenuBar";
+import {
+  ViewportOptionsBar,
+  type SceneChromeActions,
+} from "../viewport/ViewportOptionsBar";
 import {
   OpenAdminListDialog,
   type OpenAdminListKind,
@@ -20,7 +26,6 @@ import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
 import { Telemetry } from "./Telemetry";
 import { ReplayPanel } from "../replay/ReplayPanel";
-import type { SceneChromeActions } from "../viewport/ViewportOptionsBar";
 import "./Outliner.css";
 import "./Properties.css";
 import "./SinglePaneView.css";
@@ -114,6 +119,7 @@ export function SinglePaneView({
   );
   const [adminListRefresh, setAdminListRefresh] = useState(0);
   const [replayMode, setReplayMode] = useState(false);
+  const calibrating = useCalibrateStore((s) => s.active);
 
   useOpenSceneHotkey(() => {
     setAdminListKind(null);
@@ -135,128 +141,152 @@ export function SinglePaneView({
     [dockCollapsed, setCollapsed],
   );
 
+  const openSceneDialog = useCallback(() => {
+    setAdminListKind(null);
+    setSceneDialogOpen(true);
+  }, []);
+  const openCameras = useCallback(() => {
+    setSceneDialogOpen(false);
+    setAdminListKind("cameras");
+  }, []);
+  const openSensors = useCallback(() => {
+    setSceneDialogOpen(false);
+    setAdminListKind("sensors");
+  }, []);
+
   return (
     <div className="ss-single-pane">
-      <div className="ss-sp-viewport">
-        {replayMode ? (
-          <ReplayPanel sceneId={sceneId} onClose={() => setReplayMode(false)} />
-        ) : (
-          <SceneViewport
-            sceneId={sceneId}
-            sceneName={sceneName}
-            mapUrl={mapUrl}
-            mapScale={mapScale}
-            assetMarkColors={assetMarkColors}
-            cameras={cameras}
-            sensors={sensors}
-            children={children}
-            cameraRates={cameraRates}
-            authToken={authToken}
-            isSuperuser={isSuperuser}
-            mqttConnected={mqttConnected}
-            sceneChrome={sceneChrome}
-            onOpenLibrary={() => setLibraryOpen(true)}
-            onOpenScene={() => {
-              setAdminListKind(null);
-              setSceneDialogOpen(true);
-            }}
-            onOpenCameras={() => {
-              setSceneDialogOpen(false);
-              setAdminListKind("cameras");
-            }}
-            onOpenSensors={() => {
-              setSceneDialogOpen(false);
-              setAdminListKind("sensors");
-            }}
-            mode="live"
-            onModeChange={(m) => setReplayMode(m === "replay")}
-          />
-        )}
+      <div className="ss-sp-chrome">
+        <ViewportMenuBar
+          onOpenScene={openSceneDialog}
+          onOpenCameras={openCameras}
+          onOpenSensors={openSensors}
+          onOpenLibrary={() => setLibraryOpen(true)}
+          mqttConnected={mqttConnected}
+        />
+        <ViewportOptionsBar
+          emptyScene={false}
+          calibrating={calibrating && !replayMode}
+          mode={replayMode ? "replay" : "live"}
+          onModeChange={(m) => setReplayMode(m === "replay")}
+          sceneChrome={sceneChrome}
+        />
       </div>
+      <div className="ss-sp-body">
+        <div className="ss-sp-viewport">
+          {replayMode ? (
+            <ReplayPanel
+              sceneId={sceneId}
+              onClose={() => setReplayMode(false)}
+            />
+          ) : (
+            <SceneViewport
+              sceneId={sceneId}
+              sceneName={sceneName}
+              mapUrl={mapUrl}
+              mapScale={mapScale}
+              assetMarkColors={assetMarkColors}
+              cameras={cameras}
+              sensors={sensors}
+              children={children}
+              cameraRates={cameraRates}
+              authToken={authToken}
+              isSuperuser={isSuperuser}
+              showTopChrome={false}
+              onOpenLibrary={() => setLibraryOpen(true)}
+              onOpenScene={openSceneDialog}
+              onOpenCameras={openCameras}
+              onOpenSensors={openSensors}
+              mode="live"
+              onModeChange={(m) => setReplayMode(m === "replay")}
+            />
+          )}
+        </div>
 
-      <aside
-        className={`ss-sp-dock${dockCollapsed ? " is-collapsed" : ""}`}
-        aria-label="Scene panels"
-      >
-        <div className="ss-sp-dock-rail">
-          <div className="ss-sp-dock-rail-inner">
-            <button
-              type="button"
-              className="ss-sp-dock-toggle"
-              aria-expanded={!dockCollapsed}
-              aria-controls="ss-sp-dock-main"
-              title={dockCollapsed ? "Expand panel" : "Collapse panel"}
-              onClick={() => setCollapsed(!dockCollapsed)}
-            >
-              <i
-                className={`bi ${dockCollapsed ? "bi-chevron-left" : "bi-chevron-right"}`}
-                aria-hidden="true"
-              />
-              <span className="sr-only">
-                {dockCollapsed ? "Expand panel" : "Collapse panel"}
-              </span>
-            </button>
-            {dockCollapsed ? (
-              <div
-                className="ss-sp-dock-rail-tabs"
-                role="tablist"
-                aria-label="Outliner, Properties, Telemetry"
-                aria-orientation="vertical"
-              >
-                {DOCK_TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={dockTab === t.id}
-                    className={`ss-sp-dock-rail-tab${dockTab === t.id ? " is-active" : ""}`}
-                    onClick={() => pickTab(t.id)}
-                    title={t.label}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div id="ss-sp-dock-main" className="ss-sp-dock-main">
-          <div
-            className="ss-sp-dock-tabs"
-            role="tablist"
-            aria-label="Outliner, Properties, Telemetry"
-          >
-            {DOCK_TABS.map((t) => (
+        <aside
+          className={`ss-sp-dock${dockCollapsed ? " is-collapsed" : ""}`}
+          aria-label="Scene panels"
+        >
+          <div className="ss-sp-dock-rail">
+            <div className="ss-sp-dock-rail-inner">
               <button
-                key={t.id}
                 type="button"
-                role="tab"
-                aria-selected={dockTab === t.id}
-                className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
-                onClick={() => pickTab(t.id)}
+                className="ss-sp-dock-toggle"
+                aria-expanded={!dockCollapsed}
+                aria-controls="ss-sp-dock-main"
+                title={dockCollapsed ? "Expand panel" : "Collapse panel"}
+                onClick={() => setCollapsed(!dockCollapsed)}
               >
-                {t.label}
+                <i
+                  className={`bi ${dockCollapsed ? "bi-chevron-left" : "bi-chevron-right"}`}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">
+                  {dockCollapsed ? "Expand panel" : "Collapse panel"}
+                </span>
               </button>
-            ))}
+              {dockCollapsed ? (
+                <div
+                  className="ss-sp-dock-rail-tabs"
+                  role="tablist"
+                  aria-label="Outliner, Properties, Telemetry"
+                  aria-orientation="vertical"
+                >
+                  {DOCK_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={dockTab === t.id}
+                      className={`ss-sp-dock-rail-tab${dockTab === t.id ? " is-active" : ""}`}
+                      onClick={() => pickTab(t.id)}
+                      title={t.label}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="ss-sp-dock-body">
-            {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
-            {dockTab === "properties" && (
-              <Properties
-                sceneName={sceneName}
-                sceneId={sceneId}
-                cameras={cameras}
-                sensors={sensors}
-                children={children}
-                onChildrenChange={onChildrenChange}
-                authToken={authToken}
-                isSuperuser={isSuperuser}
-              />
-            )}
-            {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+          <div id="ss-sp-dock-main" className="ss-sp-dock-main">
+            <div
+              className="ss-sp-dock-tabs"
+              role="tablist"
+              aria-label="Outliner, Properties, Telemetry"
+            >
+              {DOCK_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={dockTab === t.id}
+                  className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
+                  onClick={() => pickTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="ss-sp-dock-body">
+              {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
+              {dockTab === "properties" && (
+                <Properties
+                  sceneName={sceneName}
+                  sceneId={sceneId}
+                  cameras={cameras}
+                  sensors={sensors}
+                  children={children}
+                  onChildrenChange={onChildrenChange}
+                  authToken={authToken}
+                  isSuperuser={isSuperuser}
+                />
+              )}
+              {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
+      </div>
 
       <LibraryDrawer
         open={libraryOpen}

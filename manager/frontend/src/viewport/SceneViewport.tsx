@@ -73,6 +73,11 @@ interface SceneViewportProps {
   mqttConnected?: boolean | null;
   /** Scene name / export / edit / delete / rate on the options bar. */
   sceneChrome?: SceneChromeActions | null;
+  /**
+   * When false, parent owns ViewportMenuBar + ViewportOptionsBar (full-bleed
+   * chrome above the Outliner dock). Default true for home / standalone.
+   */
+  showTopChrome?: boolean;
 }
 
 function readTheme(): ViewportTheme {
@@ -290,6 +295,7 @@ export function SceneViewport({
   onModeChange,
   mqttConnected = null,
   sceneChrome = null,
+  showTopChrome = true,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -401,20 +407,24 @@ export function SceneViewport({
       className={`ss-viewport${calibrating ? " is-calibrating" : ""}${emptyScene ? " is-empty" : ""}`}
       data-scene-id={sceneId || ""}
     >
-      <ViewportMenuBar
-        onOpenScene={onOpenScene}
-        onOpenCameras={onOpenCameras}
-        onOpenSensors={onOpenSensors}
-        onOpenLibrary={onOpenLibrary}
-        mqttConnected={mqttConnected}
-      />
-      <ViewportOptionsBar
-        emptyScene={emptyScene}
-        calibrating={calibrating}
-        mode={mode}
-        onModeChange={onModeChange}
-        sceneChrome={emptyScene ? null : sceneChrome}
-      />
+      {showTopChrome ? (
+        <>
+          <ViewportMenuBar
+            onOpenScene={onOpenScene}
+            onOpenCameras={onOpenCameras}
+            onOpenSensors={onOpenSensors}
+            onOpenLibrary={onOpenLibrary}
+            mqttConnected={mqttConnected}
+          />
+          <ViewportOptionsBar
+            emptyScene={emptyScene}
+            calibrating={calibrating}
+            mode={mode}
+            onModeChange={onModeChange}
+            sceneChrome={emptyScene ? null : sceneChrome}
+          />
+        </>
+      ) : null}
       {!emptyScene &&
         (calibrating ? (
           <CalibrateWizard
