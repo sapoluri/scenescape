@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
 import {
   frameToBase64,
+  humanAutocalibMessage,
   resolveAutocalibAvailability,
   startCameraAutocalibration,
 } from "../lib/autocalibration";
@@ -588,7 +589,10 @@ function CameraProps({
         [0, 0, 1],
       ]);
       if (result.status === "error") {
-        toast.show(result.message || "Auto calibrate failed", "bad");
+        toast.show(
+          humanAutocalibMessage(result, "Auto calibrate failed"),
+          "bad",
+        );
       } else {
         toast.show("Auto calibrate started", "ok");
       }

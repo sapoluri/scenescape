@@ -19,10 +19,68 @@ export type AutocalibAvailability = {
   strategy: string | null;
 };
 
+/** Prefer a human message; never surface a bare scene UUID as the toast/title. */
+export function humanAutocalibMessage(
+  result: { message?: string; sceneId?: string } | null | undefined,
+  fallback: string,
+): string {
+  const msg = String(result?.message || "").trim();
+  if (!msg) {
+    return fallback;
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg)) {
+    return fallback;
+  }
+  return msg;
+}
+
 /**
- * Gate the Auto Calibrate control by scene strategy + service health.
- * Manual scenes must stay disabled; Markerless is 3D-only; AprilTag needs
- * a healthy autocalibration service (legacy calib_strategy check).
+ * Register / refresh this scene with the autocalibration service (legacy
+ * registerScene). GET registration reports "success" whenever the map is
+ * unchanged — even with too few AprilTags — so POST is required to know
+ * whether Auto Calibrate can actually run.
+ */
+export async function registerSceneForAutocalibration(
+  sceneId: string,
+): Promise<{ status?: string; message?: string; sceneId?: string }> {
+  try {
+    const resp = await fetch(
+      `${AUTOCALIB_PROXY_BASE}/scenes/${encodeURIComponent(sceneId)}/registration`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: "{}",
+      },
+    );
+    const body = (await resp.json().catch(() => ({}))) as {
+      status?: string;
+      message?: string;
+      sceneId?: string;
+    };
+    if (!resp.ok && !body.status) {
+      return {
+        status: "error",
+        message: body.message || `HTTP ${resp.status}`,
+        sceneId: body.sceneId,
+      };
+    }
+    return body;
+  } catch (err) {
+    return {
+      status: "error",
+      message: (err as Error).message || "Scene registration failed",
+    };
+  }
+}
+
+/**
+ * Gate the Auto Calibrate control by scene strategy + registration.
+ * Manual / Markerless stay disabled; AprilTag enables only after the
+ * autocalibration service successfully registers this scene (enough tags).
  */
 export async function resolveAutocalibAvailability(
   sceneId: string,
@@ -60,18 +118,38 @@ export async function resolveAutocalibAvailability(
   }
 
   const status = await getAutocalibrationStatus();
-  if (status?.status === "running" || status?.status === "success") {
+  if (!(status?.status === "running" || status?.status === "success")) {
+    return {
+      ready: false,
+      title: humanAutocalibMessage(
+        status,
+        "Auto Calibrate system not available for this scene",
+      ),
+      strategy,
+    };
+  }
+
+  const reg = await registerSceneForAutocalibration(sceneId);
+  if (reg.status === "success") {
     return {
       ready: true,
       title: "Click to calibrate the camera automatically",
       strategy,
     };
   }
+  if (reg.status === "registering" || reg.status === "busy") {
+    return {
+      ready: false,
+      title: humanAutocalibMessage(reg, "Registering the scene for Auto Calibrate…"),
+      strategy,
+    };
+  }
   return {
     ready: false,
-    title:
-      status?.message ||
-      "Auto Calibrate system not available for this scene",
+    title: humanAutocalibMessage(
+      reg,
+      "Auto Calibrate is not available for this scene",
+    ),
     strategy,
   };
 }

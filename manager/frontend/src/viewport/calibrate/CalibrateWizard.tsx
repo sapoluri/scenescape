@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAppToast } from "../../components/ToastProvider";
 import {
   frameToBase64,
+  humanAutocalibMessage,
   pointsFromAutocalibResult,
   resolveAutocalibAvailability,
   startCameraAutocalibration,
@@ -117,15 +118,20 @@ export function CalibrateWizard({
         [0, 0, 1],
       ]);
       if (started.status === "error") {
-        toast.show(started.message || "Auto calibrate failed", "bad");
+        toast.show(
+          humanAutocalibMessage(started, "Auto calibrate failed"),
+          "bad",
+        );
         return;
       }
       toast.show("Detecting AprilTags…", "ok");
       const result = await waitForCameraAutocalibration(sensorId);
       if (result.status !== "success") {
         toast.show(
-          result.message ||
+          humanAutocalibMessage(
+            result,
             "Auto calibrate failed. Check that tags are visible in the frame.",
+          ),
           "bad",
         );
         return;
