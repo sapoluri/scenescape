@@ -101,6 +101,24 @@ function disposeProjectionTexture(
 }
 
 /**
+ * ImageBitmap ignores Texture.flipY — request the flip at decode time so
+ * projection UVs match HTMLImageElement + flipY (legacy TextureLoader).
+ */
+const BITMAP_OPTS: ImageBitmapOptions = {
+  imageOrientation: "flipY",
+  colorSpaceConversion: "none",
+};
+
+function textureFromBitmap(bitmap: ImageBitmap): Texture {
+  const texture = new Texture(bitmap);
+  texture.colorSpace = SRGBColorSpace;
+  // Document intent; Three ignores flipY for ImageBitmap (see BITMAP_OPTS).
+  texture.flipY = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
  * Load a projection frame. Prefer createImageBitmap so JPEG decode stays
  * off the main thread. MQTT live previews are often data:/blob: URLs —
  * TextureLoader with crossOrigin:"anonymous" fails on those in Chromium.
@@ -109,11 +127,7 @@ async function loadProjectionTexture(imageUrl: string): Promise<Texture> {
   if (imageUrl.startsWith("data:") || imageUrl.startsWith("blob:")) {
     try {
       const blob = await (await fetch(imageUrl)).blob();
-      const bitmap = await createImageBitmap(blob);
-      const texture = new Texture(bitmap);
-      texture.colorSpace = SRGBColorSpace;
-      texture.needsUpdate = true;
-      return texture;
+      return textureFromBitmap(await createImageBitmap(blob, BITMAP_OPTS));
     } catch {
       // Fall through to Image decode if bitmap path fails.
     }
@@ -133,11 +147,9 @@ async function loadProjectionTexture(imageUrl: string): Promise<Texture> {
   try {
     const res = await fetch(imageUrl, { mode: "cors", credentials: "omit" });
     if (res.ok) {
-      const bitmap = await createImageBitmap(await res.blob());
-      const texture = new Texture(bitmap);
-      texture.colorSpace = SRGBColorSpace;
-      texture.needsUpdate = true;
-      return texture;
+      return textureFromBitmap(
+        await createImageBitmap(await res.blob(), BITMAP_OPTS),
+      );
     }
   } catch {
     /* TextureLoader fallback below */

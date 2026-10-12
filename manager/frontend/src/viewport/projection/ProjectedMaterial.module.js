@@ -487,9 +487,22 @@ function computeScaledDimensions(texture, camera, textureScale, cover) {
   if (texture.image.videoWidth === 0 && texture.image.videoHeight === 0) {
     return [1, 1];
   }
-  const sourceWidth = texture.image.naturalWidth || texture.image.videoWidth || texture.image.clientWidth;
-  const sourceHeight = texture.image.naturalHeight || texture.image.videoHeight || texture.image.clientHeight;
+  // ImageBitmap exposes width/height only — naturalWidth is undefined and
+  // produced NaN UV scales ("sheared to infinity") after createImageBitmap.
+  const sourceWidth =
+    texture.image.naturalWidth ||
+    texture.image.videoWidth ||
+    texture.image.clientWidth ||
+    texture.image.width;
+  const sourceHeight =
+    texture.image.naturalHeight ||
+    texture.image.videoHeight ||
+    texture.image.clientHeight ||
+    texture.image.height;
   const ratio = sourceWidth / sourceHeight;
+  if (!(ratio > 0) || !Number.isFinite(ratio)) {
+    return [1, 1];
+  }
   const ratioCamera = getCameraRatio(camera);
   const widthCamera = 1;
   const heightCamera = widthCamera * (1 / ratioCamera);
