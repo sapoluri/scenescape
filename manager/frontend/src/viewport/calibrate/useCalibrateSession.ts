@@ -406,6 +406,9 @@ export function useCalibrateSession(
 
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
   const previewPose = useCalibrateStore((s) => s.previewPose);
+  const opticsReady = useCalibrateStore((s) =>
+    s.optics != null && s.optics.fx > 0 && s.optics.fy > 0,
+  );
 
   // Live solve when both sides have the same count (≥4).
   const equalCount =
@@ -451,20 +454,27 @@ export function useCalibrateSession(
 
   // Debounce solve in a Worker. At ≥6 pairs, refine fx/fy via REST first
   // (longer debounce to avoid refine storms while dragging).
+  // Re-run when optics arrive — early 4-point solves used to no-op if the
+  // camera GET had not finished yet.
   useEffect(() => {
-    if (!active || !cameraId || !authToken || equalCount < 4) {
+    if (!active || !cameraId || !authToken || equalCount < 4 || !opticsReady) {
       return;
     }
     let cancelled = false;
     const debounceMs = equalCount >= 6 ? 300 : 180;
-    const cal = useCalibrateStore.getState();
-    cal.setUpdatingPose(true);
+    useCalibrateStore.getState().setUpdatingPose(true);
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
           const pairs = getCalibratePairs();
           let working = useCalibrateStore.getState().optics;
-          if (cancelled || pairs.length < 4 || !working) {
+          if (
+            cancelled ||
+            pairs.length < 4 ||
+            !working ||
+            !(working.fx > 0) ||
+            !(working.fy > 0)
+          ) {
             return;
           }
           if (pairs.length >= 6) {
@@ -490,6 +500,9 @@ export function useCalibrateSession(
           }
           const pose = await solveCameraPose(pairs, working);
           if (cancelled || !pose) {
+            if (!cancelled && !pose) {
+              console.warn("Calibrate pose solve produced no result");
+            }
             return;
           }
           const fov = fovFromOptics(working);
@@ -523,7 +536,7 @@ export function useCalibrateSession(
       useCalibrateStore.getState().setUpdatingPose(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
-  }, [active, cameraId, authToken, pairsKey, equalCount]);
+  }, [active, cameraId, authToken, pairsKey, equalCount, opticsReady]);
 
   // Pose on rAF; JPEG debounced — avoid stacking project() + decode on enter.
   useEffect(() => {

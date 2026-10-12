@@ -334,10 +334,17 @@ function solveInWorker(
           }
           w.removeEventListener("message", onMessage);
           if (!msg.ok || !msg.R || !msg.t) {
-            resolve(null);
+            reject(
+              new Error(msg.error || "OpenCV worker solvePnP returned null"),
+            );
             return;
           }
-          resolve(poseFromRt(msg.R, msg.t, optics));
+          const pose = poseFromRt(msg.R, msg.t, optics);
+          if (!pose) {
+            reject(new Error("OpenCV worker pose conversion failed"));
+            return;
+          }
+          resolve(pose);
         };
         w.addEventListener("message", onMessage);
         try {
@@ -375,6 +382,10 @@ export async function solveCameraPose(
   if (pairs.length < 4) {
     return null;
   }
+  if (!(optics.fx > 0) || !(optics.fy > 0)) {
+    console.warn("Calibrate solve skipped: optics not ready");
+    return null;
+  }
   const requestId = ++nextRequestId;
   latestRequestId = requestId;
   try {
@@ -390,10 +401,15 @@ export async function solveCameraPose(
     if (!loggedWorkerFallback) {
       loggedWorkerFallback = true;
       console.warn(
-        "Calibrate OpenCV worker unavailable; solving on main thread",
+        "Calibrate OpenCV worker solve failed; using main thread",
         err,
       );
     }
-    return solveOnMainThread(pairs, optics);
+    try {
+      return await solveOnMainThread(pairs, optics);
+    } catch (mainErr) {
+      console.warn("Calibrate main-thread solve failed", mainErr);
+      return null;
+    }
   }
 }

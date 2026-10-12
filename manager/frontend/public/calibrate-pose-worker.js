@@ -3,7 +3,7 @@
 
 /**
  * Classic worker: load OpenCV via importScripts and run solvePnP off the
- * main thread. Returns raw R (3x3 row-major) + t; main thread finishes the
+ * main thread. Returns raw R (3x3) + t; main thread finishes the
  * OpenCV→OpenGL pose conversion with three.js.
  */
 /* global importScripts, cv */
@@ -15,20 +15,47 @@ function loadOpenCv() {
     return cvReady;
   }
   cvReady = new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (mod) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(mod);
+    };
+    const fail = (err) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(err);
+    };
     try {
       if (typeof cv === "undefined" || !cv.Mat) {
         importScripts("/static/assets/opencv.js");
       }
     } catch (err) {
-      reject(err);
+      fail(err);
       return;
     }
     const finish = (mod) => {
-      if (mod.getBuildInformation && mod.getBuildInformation()) {
-        resolve(mod);
-        return;
+      if (mod.solvePnP && mod.getBuildInformation) {
+        try {
+          if (mod.getBuildInformation()) {
+            done(mod);
+            return;
+          }
+        } catch {
+          /* wait for runtime init */
+        }
       }
-      mod.onRuntimeInitialized = () => resolve(mod);
+      const prev = mod.onRuntimeInitialized;
+      mod.onRuntimeInitialized = () => {
+        if (typeof prev === "function") {
+          prev();
+        }
+        done(mod);
+      };
     };
     if (typeof cv !== "undefined" && cv.Mat) {
       finish(cv);
@@ -42,16 +69,38 @@ function loadOpenCv() {
         finish(cv);
       } else if (tries > 600) {
         clearInterval(poll);
-        reject(new Error("OpenCV.js worker load timed out"));
+        fail(new Error("OpenCV.js worker load timed out"));
       }
     }, 50);
   });
   return cvReady;
 }
 
+function matValues(mat) {
+  const n = mat.rows * mat.cols;
+  const out = new Array(n);
+  if (mat.data64F && mat.data64F.length >= n) {
+    for (let i = 0; i < n; i++) {
+      out[i] = mat.data64F[i];
+    }
+    return out;
+  }
+  if (mat.data32F && mat.data32F.length >= n) {
+    for (let i = 0; i < n; i++) {
+      out[i] = mat.data32F[i];
+    }
+    return out;
+  }
+  throw new Error("OpenCV Mat has no readable float data");
+}
+
 function solveRt(mod, pairs, optics) {
+  if (!pairs.length || !optics || !(optics.fx > 0) || !(optics.fy > 0)) {
+    throw new Error("solvePnP missing pairs or optics");
+  }
   const imagePts = pairs.map((p) => p.cam);
   const objectPts = pairs.map((p) => p.map);
+  // Same mat layout as main-thread poseSolve.ts (known-good with this build).
   const imagePointsMat = mod.matFromArray(
     imagePts.length,
     2,
@@ -76,11 +125,11 @@ function solveRt(mod, pairs, optics) {
     1,
   ]);
   const distCoeffsMat = mod.matFromArray(1, 5, mod.CV_64F, [
-    optics.k1,
-    optics.k2,
-    optics.p1,
-    optics.p2,
-    optics.k3,
+    optics.k1 || 0,
+    optics.k2 || 0,
+    optics.p1 || 0,
+    optics.p2 || 0,
+    optics.k3 || 0,
   ]);
   const rvec = new mod.Mat();
   const tvec = new mod.Mat();
@@ -101,8 +150,8 @@ function solveRt(mod, pairs, optics) {
     }
     mod.Rodrigues(rvec, R);
     return {
-      R: Array.from(R.data64F),
-      t: Array.from(tvec.data64F),
+      R: matValues(R),
+      t: matValues(tvec),
     };
   } finally {
     imagePointsMat.delete();
@@ -136,18 +185,32 @@ self.onmessage = (ev) => {
   const requestId = msg.requestId;
   loadOpenCv()
     .then((mod) => {
-      const rt = solveRt(mod, msg.pairs || [], msg.optics || {});
-      if (!rt) {
-        self.postMessage({ type: "result", requestId, ok: false });
-        return;
+      try {
+        const rt = solveRt(mod, msg.pairs || [], msg.optics || {});
+        if (!rt) {
+          self.postMessage({
+            type: "result",
+            requestId,
+            ok: false,
+            error: "solvePnP returned false",
+          });
+          return;
+        }
+        self.postMessage({
+          type: "result",
+          requestId,
+          ok: true,
+          R: rt.R,
+          t: rt.t,
+        });
+      } catch (err) {
+        self.postMessage({
+          type: "result",
+          requestId,
+          ok: false,
+          error: String(err && err.message ? err.message : err),
+        });
       }
-      self.postMessage({
-        type: "result",
-        requestId,
-        ok: true,
-        R: rt.R,
-        t: rt.t,
-      });
     })
     .catch((err) => {
       self.postMessage({
