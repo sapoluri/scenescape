@@ -352,7 +352,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
       dragging = Boolean(ev.value);
       orbit.enabled = !dragging;
       if (!dragging) {
-        // Bake the finished drag into the record (uniform scale).
+        // Bake the finished drag into the record (per-axis scale).
         const r = recRef.current;
         if (r) {
           const baked = readDefaultPose(poseGroup);
@@ -361,22 +361,12 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         }
       }
     };
-    const onObjectChange = () => {
-      // Asset3D scale is uniform: mirror the X handle onto Y/Z live so the
-      // gizmo never shows a non-uniform state the model cannot store.
-      if (gizmo.getMode() === "scale") {
-        const s = poseGroup.scale.x;
-        poseGroup.scale.set(s, s, s);
-      }
-    };
     gizmo.addEventListener("dragging-changed", onDraggingChanged);
-    gizmo.addEventListener("objectChange", onObjectChange);
     const setGizmoMode = (m: GizmoMode) => {
       gizmo.setMode(m);
-      const scaleOnly = m === "scale";
       gizmo.showX = true;
-      gizmo.showY = !scaleOnly;
-      gizmo.showZ = !scaleOnly;
+      gizmo.showY = true;
+      gizmo.showZ = true;
     };
 
     // Simulation state (driven from React).
@@ -446,7 +436,6 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         window.cancelAnimationFrame(frame);
         ro.disconnect();
         gizmo.removeEventListener("dragging-changed", onDraggingChanged);
-        gizmo.removeEventListener("objectChange", onObjectChange);
         gizmo.detach();
         gizmo.dispose();
         orbit.dispose();
@@ -475,7 +464,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
   /* Sync record -> stage (pose, model, footprints). Skipped mid-drag so the
      gizmo never fights the fields. */
   const poseKey = rec
-    ? [...rec.rotation, ...rec.translation, rec.scale].join(",")
+    ? [...rec.rotation, ...rec.translation, ...rec.scale].join(",")
     : "";
   useEffect(() => {
     const stage = stageRef.current;
@@ -544,7 +533,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
 
   const setTriple = useCallback(
     (
-      key: "rotation" | "translation" | "geometricCenter" | "centerOfMass",
+      key: "rotation" | "translation" | "scale" | "geometricCenter" | "centerOfMass",
       i: number,
       raw: string,
     ) => {
@@ -571,7 +560,6 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         | "xBuffer"
         | "yBuffer"
         | "zBuffer"
-        | "scale"
         | "trackingRadius"
         | "mass"
         | "ttl"
@@ -822,16 +810,21 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
                     />
                   ))}
                 </div>
-                <TextField
-                  id="ss-lib-scale"
-                  label="Scale (uniform)"
-                  type="number"
-                  step="any"
-                  min="0"
-                  value={fmt(rec.scale)}
-                  onChange={(ev) => setNum("scale", ev.target.value)}
-                  disabled={busy}
-                />
+                <div className="ss-mark-editor-triple">
+                  {(["X", "Y", "Z"] as const).map((axis, i) => (
+                    <TextField
+                      key={axis}
+                      id={`ss-lib-sx-${axis}`}
+                      label={`Scale ${axis}`}
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={fmt(rec.scale[i])}
+                      onChange={(ev) => setTriple("scale", i, ev.target.value)}
+                      disabled={busy}
+                    />
+                  ))}
+                </div>
               </FormSection>
 
               <FormSection

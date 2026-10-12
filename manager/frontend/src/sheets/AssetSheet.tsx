@@ -45,7 +45,7 @@ export function AssetSheet({
   const [existingModelUrl, setExistingModelUrl] = useState<string | null>(null);
   const [clearModel, setClearModel] = useState(false);
   const [markColor, setMarkColor] = useState("#00ff00");
-  const [scale, setScale] = useState("1");
+  const [scale, setScale] = useState<[string, string, string]>(["1", "1", "1"]);
   const [xSize, setXSize] = useState("1");
   const [ySize, setYSize] = useState("1");
   const [zSize, setZSize] = useState("1");
@@ -95,7 +95,7 @@ export function AssetSheet({
       setName("");
       setExistingModelUrl(null);
       setMarkColor("#00ff00");
-      setScale("1");
+      setScale(["1", "1", "1"]);
       setXSize("1");
       setYSize("1");
       setZSize("1");
@@ -138,7 +138,14 @@ export function AssetSheet({
         setExistingModelUrl(modelUrl);
         setClearModel(false);
         setMarkColor(str(a.mark_color, "#00ff00"));
-        setScale(a.scale != null ? str(a.scale) : "1");
+        {
+          const uniform = a.scale != null ? str(a.scale) : "1";
+          setScale([
+            a.scale_x != null ? str(a.scale_x) : uniform,
+            a.scale_y != null ? str(a.scale_y) : uniform,
+            a.scale_z != null ? str(a.scale_z) : uniform,
+          ]);
+        }
         setXSize(a.x_size != null ? str(a.x_size) : "1");
         setYSize(a.y_size != null ? str(a.y_size) : "1");
         setZSize(a.z_size != null ? str(a.z_size) : "1");
@@ -217,7 +224,13 @@ export function AssetSheet({
   const appendCommon = (form: FormData) => {
     form.append("name", name.trim());
     form.append("mark_color", markColor);
-    form.append("scale", scale.trim() || "1");
+    const sx = scale[0].trim() || "1";
+    const sy = scale[1].trim() || "1";
+    const sz = scale[2].trim() || "1";
+    form.append("scale_x", sx);
+    form.append("scale_y", sy);
+    form.append("scale_z", sz);
+    form.append("scale", sx);
     form.append("x_size", xSize.trim() || "1");
     form.append("y_size", ySize.trim() || "1");
     form.append("z_size", zSize.trim() || "1");
@@ -414,12 +427,30 @@ export function AssetSheet({
             </div>
           </div>
         </FormSection>
-        <FormSection title="Size" description="Object extents and scale.">
+        <FormSection
+          title="Size"
+          description="Object extents and per-axis scale."
+          className="ss-form-section--columns"
+        >
           <TextField
-            id="ss-asset-scale"
-            label="Scale"
-            value={scale}
-            onChange={(ev) => setScale(ev.target.value)}
+            id="ss-asset-sx"
+            label="Scale X"
+            value={scale[0]}
+            onChange={(ev) => setScale([ev.target.value, scale[1], scale[2]])}
+            disabled={busy}
+          />
+          <TextField
+            id="ss-asset-sy"
+            label="Scale Y"
+            value={scale[1]}
+            onChange={(ev) => setScale([scale[0], ev.target.value, scale[2]])}
+            disabled={busy}
+          />
+          <TextField
+            id="ss-asset-sz"
+            label="Scale Z"
+            value={scale[2]}
+            onChange={(ev) => setScale([scale[0], scale[1], ev.target.value])}
             disabled={busy}
           />
           <TextField

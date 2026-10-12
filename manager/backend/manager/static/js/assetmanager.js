@@ -145,7 +145,11 @@ export default function AssetManager(
       let scale = new THREE.Vector3(1, 1, 1);
       let translate;
       if (obj.asset_scale) {
-        scale.fromArray(Array(3).fill(obj.asset_scale));
+        if (Array.isArray(obj.asset_scale)) {
+          scale.fromArray(obj.asset_scale);
+        } else {
+          scale.fromArray(Array(3).fill(obj.asset_scale));
+        }
         translate = 0;
       } else if (obj.size) {
         scale.fromArray(obj.size);

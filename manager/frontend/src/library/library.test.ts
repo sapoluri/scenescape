@@ -25,6 +25,9 @@ describe("parseAsset3D", () => {
       rotation_x: 90,
       translation_z: 0.4,
       scale: 1.5,
+      scale_x: 1.5,
+      scale_y: 2,
+      scale_z: 0.5,
       rotation_from_velocity: true,
       model_3d: "/media/models/forklift.glb",
       geometric_center: [0.1, 0, 0.2],
@@ -37,7 +40,7 @@ describe("parseAsset3D", () => {
     expect(rec.markColor).toBe("#ff0000");
     expect(rec.rotation).toEqual([90, 0, 0]);
     expect(rec.translation).toEqual([0, 0, 0.4]);
-    expect(rec.scale).toBe(1.5);
+    expect(rec.scale).toEqual([1.5, 2, 0.5]);
     expect(rec.rotationFromVelocity).toBe(true);
     expect(rec.modelUrl).toBe("/media/models/forklift.glb");
     expect(rec.geometricCenter).toEqual([0.1, 0, 0.2]);
@@ -51,7 +54,12 @@ describe("parseAsset3D", () => {
     expect(rec.markColor).toBe("#888888");
     expect(rec.modelUrl).toBeNull();
     expect(rec.rotation).toEqual([0, 0, 0]);
-    expect(rec.scale).toBe(1);
+    expect(rec.scale).toEqual([1, 1, 1]);
+  });
+
+  it("falls back to uniform scale when per-axis fields are absent", () => {
+    const rec = parseAsset3D({ uid: "9", name: "box", scale: 3 });
+    expect(rec.scale).toEqual([3, 3, 3]);
   });
 
   it("defaultAsset3D mirrors the model defaults", () => {
@@ -83,6 +91,22 @@ describe("buildAssetFormData", () => {
     expect(form.get("geometric_center")).toBe("[0.1,0.2,0.3]");
     expect(form.get("friction_coefficients")).toBe("[0.6,0.5]");
     expect(form.get("shift_type")).toBe("1");
+    expect(form.get("scale_x")).toBe("1");
+    expect(form.get("scale_y")).toBe("1");
+    expect(form.get("scale_z")).toBe("1");
+  });
+
+  it("encodes per-axis scale and mirrors X into legacy scale", () => {
+    const rec = {
+      ...defaultAsset3D(),
+      name: "crate",
+      scale: [1.25, 2, 0.75] as [number, number, number],
+    };
+    const form = buildAssetFormData(rec);
+    expect(form.get("scale_x")).toBe("1.25");
+    expect(form.get("scale_y")).toBe("2");
+    expect(form.get("scale_z")).toBe("0.75");
+    expect(form.get("scale")).toBe("1.25");
   });
 
   it("appends a GLB file part or the clear flag", () => {
@@ -125,19 +149,22 @@ describe("default pose round-trip", () => {
       ...defaultAsset3D(),
       rotation: [10, -20, 30] as [number, number, number],
       translation: [1.5, -0.5, 0.25] as [number, number, number],
-      scale: 2,
+      scale: [2, 1.5, 0.5] as [number, number, number],
     };
     const obj = new Object3D();
     applyDefaultPose(obj, rec);
     expect(obj.position.x).toBeCloseTo(1.5, 9);
     expect(obj.scale.x).toBeCloseTo(2, 9);
-    expect(obj.scale.y).toBeCloseTo(2, 9);
+    expect(obj.scale.y).toBeCloseTo(1.5, 9);
+    expect(obj.scale.z).toBeCloseTo(0.5, 9);
     const back = readDefaultPose(obj);
     expect(back.rotation[0]).toBeCloseTo(10, 6);
     expect(back.rotation[1]).toBeCloseTo(-20, 6);
     expect(back.rotation[2]).toBeCloseTo(30, 6);
     expect(back.translation).toEqual([1.5, -0.5, 0.25]);
-    expect(back.scale).toBeCloseTo(2, 9);
+    expect(back.scale[0]).toBeCloseTo(2, 9);
+    expect(back.scale[1]).toBeCloseTo(1.5, 9);
+    expect(back.scale[2]).toBeCloseTo(0.5, 9);
   });
 });
 

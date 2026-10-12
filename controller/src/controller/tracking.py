@@ -231,7 +231,14 @@ class Tracking(Thread):
       oclass = object_classes[sensorType]
       mobj = oclass['class'](info, when, sensor)
       if 'model_3d' in oclass:
-        mobj.asset_scale = oclass['scale']
+        if all(k in oclass for k in ('scale_x', 'scale_y', 'scale_z')):
+          mobj.asset_scale = [
+            oclass.get('scale_x', 1.0),
+            oclass.get('scale_y', 1.0),
+            oclass.get('scale_z', 1.0),
+          ]
+        else:
+          mobj.asset_scale = oclass.get('scale', 1.0)
       mobj.size = [oclass.get('x_size', DEFAULT_EDGE_LENGTH),
                    oclass.get('y_size', DEFAULT_EDGE_LENGTH),
                    oclass.get('z_size', DEFAULT_EDGE_LENGTH)]

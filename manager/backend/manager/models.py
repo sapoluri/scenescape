@@ -1058,7 +1058,11 @@ class Asset3D(models.Model):
                                     null=True, blank=True)
   translation_z = models.FloatField("Z Translation (meters)", default=0.0,
                                     null=True, blank=True)
+  # Legacy uniform scale; kept in sync with scale_x for older consumers.
   scale = models.FloatField("Scale", default=1.0, null=True, blank=True)
+  scale_x = models.FloatField("X Scale", default=1.0, null=True, blank=True)
+  scale_y = models.FloatField("Y Scale", default=1.0, null=True, blank=True)
+  scale_z = models.FloatField("Z Scale", default=1.0, null=True, blank=True)
   rotation_from_velocity = models.BooleanField(choices=BOOLEAN_CHOICES, default=False, null=True)
   tracking_radius = models.FloatField("Tracking radius (meters)", default=2.0)
   shift_type = models.IntegerField(choices=SHIFT_TYPE, default=1, null=True)
@@ -1117,6 +1121,16 @@ class Asset3D(models.Model):
     return
 
   def save(self, *args, **kwargs):
+    # Prefer per-axis scale; fill gaps from legacy uniform `scale` (or 1.0).
+    uniform = self.scale if self.scale is not None else 1.0
+    if self.scale_x is None:
+      self.scale_x = uniform
+    if self.scale_y is None:
+      self.scale_y = uniform
+    if self.scale_z is None:
+      self.scale_z = uniform
+    # Keep scalar `scale` aligned with X for older readers.
+    self.scale = self.scale_x
     super().save(*args, **kwargs)
     transaction.on_commit(sendUpdateCommand)
     return

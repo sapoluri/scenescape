@@ -185,9 +185,23 @@
   gap: 8px;
 }
 
+/* Sidebar triples are ~1/3 of ~340px — stack label above control so the
+   fixed 2-column TextField layout does not crush/overlap neighbors. */
 .ss-mark-editor-triple .ss-text-field,
 .ss-mark-editor-double .ss-text-field {
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
   margin-bottom: 0.6rem;
+}
+
+.ss-mark-editor-triple .ss-text-field-label,
+.ss-mark-editor-double .ss-text-field-label {
+  padding-top: 0;
+}
+
+.ss-mark-editor-triple .ss-text-field-control,
+.ss-mark-editor-double .ss-text-field-control {
+  max-width: none;
 }
 
 .ss-mark-editor-footnote {

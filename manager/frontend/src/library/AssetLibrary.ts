@@ -12,7 +12,7 @@ import { api, restJson } from "../lib/rest";
  *
  *   tracker transform (scene controller) × default pose × GLB
  *
- * where the default pose is the Asset3D rotation/translation/scale triple.
+ * where the default pose is the Asset3D rotation/translation/scale axes.
  * This module owns the REST mapping and the pure geometry helpers the mark
  * editor stage uses; it adds no new window bridges.
  */
@@ -30,7 +30,8 @@ export type Asset3DRecord = {
   modelUrl: string | null;
   rotation: [number, number, number];
   translation: [number, number, number];
-  scale: number;
+  /** Per-axis default pose scale (X/Y/Z). */
+  scale: [number, number, number];
   rotationFromVelocity: boolean;
   trackingRadius: number;
   shiftType: number;
@@ -86,7 +87,17 @@ export function parseAsset3D(row: Record<string, unknown>): Asset3DRecord {
       num(row.translation_y, 0),
       num(row.translation_z, 0),
     ],
-    scale: num(row.scale, 1) || 1,
+    scale: (() => {
+      const uniform = num(row.scale, 1) || 1;
+      const sx = num(row.scale_x, NaN);
+      const sy = num(row.scale_y, NaN);
+      const sz = num(row.scale_z, NaN);
+      return [
+        Number.isFinite(sx) && sx > 0 ? sx : uniform,
+        Number.isFinite(sy) && sy > 0 ? sy : uniform,
+        Number.isFinite(sz) && sz > 0 ? sz : uniform,
+      ] as [number, number, number];
+    })(),
     rotationFromVelocity: bool(row.rotation_from_velocity),
     trackingRadius: num(row.tracking_radius, 2),
     shiftType: num(row.shift_type, 1),
@@ -148,7 +159,11 @@ export function buildAssetFormData(
   const f = (k: string, v: string) => form.append(k, v);
   f("name", rec.name.trim());
   f("mark_color", rec.markColor);
-  f("scale", String(rec.scale));
+  f("scale_x", String(rec.scale[0]));
+  f("scale_y", String(rec.scale[1]));
+  f("scale_z", String(rec.scale[2]));
+  // Legacy uniform field — keep aligned with X for older consumers.
+  f("scale", String(rec.scale[0]));
   f("x_size", String(rec.xSize));
   f("y_size", String(rec.ySize));
   f("z_size", String(rec.zSize));
@@ -250,7 +265,7 @@ const DEG = Math.PI / 180;
 
 /**
  * Apply an Asset3D default pose to a three.js object (Z-up, XYZ euler in
- * degrees, uniform scale) — the same convention the placement canvas uses
+ * degrees, per-axis scale) — the same convention the placement canvas uses
  * for SceneEulerPose.
  */
 export function applyDefaultPose(obj: Object3D, rec: Asset3DRecord): void {
@@ -261,8 +276,10 @@ export function applyDefaultPose(obj: Object3D, rec: Asset3DRecord): void {
     rec.rotation[1] * DEG,
     rec.rotation[2] * DEG,
   );
-  const s = Number.isFinite(rec.scale) && rec.scale > 0 ? rec.scale : 1;
-  obj.scale.setScalar(s);
+  const sx = Number.isFinite(rec.scale[0]) && rec.scale[0] > 0 ? rec.scale[0] : 1;
+  const sy = Number.isFinite(rec.scale[1]) && rec.scale[1] > 0 ? rec.scale[1] : 1;
+  const sz = Number.isFinite(rec.scale[2]) && rec.scale[2] > 0 ? rec.scale[2] : 1;
+  obj.scale.set(sx, sy, sz);
   obj.updateMatrix();
 }
 
@@ -270,9 +287,10 @@ export function applyDefaultPose(obj: Object3D, rec: Asset3DRecord): void {
 export function readDefaultPose(obj: Object3D): {
   rotation: [number, number, number];
   translation: [number, number, number];
-  scale: number;
+  scale: [number, number, number];
 } {
   const e = new Euler().setFromQuaternion(obj.quaternion, "XYZ");
+  const axis = (v: number) => (Number.isFinite(v) && v > 0 ? v : 1);
   return {
     rotation: [
       (e.x / DEG + 540) % 360 - 180,
@@ -280,7 +298,7 @@ export function readDefaultPose(obj: Object3D): {
       (e.z / DEG + 540) % 360 - 180,
     ],
     translation: [obj.position.x, obj.position.y, obj.position.z],
-    scale: obj.scale.x,
+    scale: [axis(obj.scale.x), axis(obj.scale.y), axis(obj.scale.z)],
   };
 }
 
