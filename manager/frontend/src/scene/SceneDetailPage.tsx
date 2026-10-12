@@ -28,6 +28,7 @@ function SceneDetailInner({ bootstrap }: Props) {
   const cameraRates = useCameraRates();
   const [cameras, setCameras] = useState(bootstrap.cameras);
   const [sensors, setSensors] = useState(bootstrap.sensors || []);
+  const [children, setChildren] = useState(bootstrap.children || []);
   const [sceneRate, setSceneRate] = useState("--");
 
   useSceneMqtt({
@@ -107,6 +108,8 @@ function SceneDetailInner({ bootstrap }: Props) {
           assetMarkColors={bootstrap.assetMarkColors}
           cameras={cameras}
           sensors={sensors}
+          children={children}
+          onChildrenChange={setChildren}
           cameraRates={cameraRates}
           authToken={bootstrap.authToken}
           isSuperuser={isSuperuser}
@@ -138,7 +141,7 @@ function SceneDetailInner({ bootstrap }: Props) {
         sensors={sensors}
         onCamerasChange={setCameras}
         onSensorsChange={setSensors}
-        onChildrenChange={() => {}}
+        onChildrenChange={setChildren}
         mapUrl={scene.mapUrl}
         mapScale={scene.scale}
       />

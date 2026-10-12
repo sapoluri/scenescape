@@ -4,6 +4,11 @@
 /** Scene-detail MQTT ownership (connect + camera strip). */
 export { useSceneMqtt } from "./useSceneMqtt";
 export { useCameraStripMqtt, refreshCameraStrip } from "./useCameraStripMqtt";
+export { useChildStatusMqtt } from "./useChildStatusMqtt";
+export {
+  useChildStatusStore,
+  reduceChildStatusPayload,
+} from "./childStatusStore";
 export {
   rewriteBrokerUrl,
   connectMqtt,

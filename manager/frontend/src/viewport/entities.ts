@@ -17,6 +17,7 @@ import {
   Group,
   Line,
   LineBasicMaterial,
+  LineDashedMaterial,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -35,8 +36,15 @@ import { api } from "../lib/rest";
 import { subscribeGeometry } from "../scene/map/geometryModel";
 import type {
   SceneCameraBootstrap,
+  SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import {
+  applyChildPoseToObject,
+  CHILD_FOOTPRINT_COLOR,
+  CHILD_FOOTPRINT_SIZE,
+  parseChildPose,
+} from "./childPose";
 import {
   bboxOf,
   centroidOf,
@@ -46,6 +54,7 @@ import { getPersistState } from "./persistStore";
 import { getViewportState, useViewportStore } from "./store";
 import type {
   CameraEntity,
+  ChildSceneEntity,
   RegionEntity,
   SensorEntity,
   TripwireEntity,
@@ -453,6 +462,88 @@ function buildSensor(e: SensorEntity): EntityNodes {
 /* Dispatcher + seeding                                              */
 /* ------------------------------------------------------------------ */
 
+/** Dashed yellow AABB footprint for a linked child scene. */
+export function buildChild(e: ChildSceneEntity): EntityNodes {
+  const group = new Group();
+  const [sx, sy, sz] = e.size;
+  const edgeSrc = new BoxGeometry(sx, sy, sz);
+  const edges = new EdgesGeometry(edgeSrc);
+  edgeSrc.dispose();
+  const lineMat = new LineDashedMaterial({
+    color: new Color(e.color || CHILD_FOOTPRINT_COLOR),
+    dashSize: 0.45,
+    gapSize: 0.28,
+    linewidth: 1,
+  });
+  const lines = new LineSegments(edges, lineMat);
+  lines.computeLineDistances();
+  group.add(lines);
+
+  // Invisible fill so ray picks hit the footprint volume, not only edges.
+  const hitMat = new MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const hit = new Mesh(new BoxGeometry(sx, sy, sz), hitMat);
+  group.add(hit);
+
+  applyChildPoseToObject(group, {
+    position: e.position,
+    rotation: e.rotation,
+    scale: e.scale,
+  });
+  group.userData.entityId = e.id;
+
+  const labelPos = new Vector3(
+    e.position[0],
+    e.position[1],
+    e.position[2] + Math.max(sz * e.scale[2], 0.5) + 0.4,
+  );
+
+  const selectedMat = new LineDashedMaterial({
+    color: new Color("#ffffff"),
+    dashSize: 0.45,
+    gapSize: 0.28,
+  });
+
+  return {
+    group,
+    gizmoTarget: group,
+    labelPos,
+    setSelected: (on: boolean) => {
+      lines.material = on ? selectedMat : lineMat;
+      lines.computeLineDistances();
+    },
+    applyPose: (ent) => {
+      if (ent.type !== "child") {
+        return;
+      }
+      applyChildPoseToObject(group, {
+        position: ent.position,
+        rotation: ent.rotation,
+        scale: ent.scale,
+      });
+      labelPos.set(
+        ent.position[0],
+        ent.position[1],
+        ent.position[2] + Math.max(ent.size[2] * ent.scale[2], 0.5) + 0.4,
+      );
+    },
+    dispose: () => {
+      const attached = lines.material;
+      disposeObject(group);
+      if (attached !== selectedMat) {
+        selectedMat.dispose();
+      }
+      if (attached !== lineMat) {
+        lineMat.dispose();
+      }
+    },
+  };
+}
+
 function buildEntityNodes(e: ViewportEntity): EntityNodes | null {
   switch (e.type) {
     case "region":
@@ -463,8 +554,10 @@ function buildEntityNodes(e: ViewportEntity): EntityNodes | null {
       return buildCamera(e);
     case "sensor":
       return buildSensor(e);
+    case "child":
+      return buildChild(e);
     default:
-      return null; // marks + child scenes render elsewhere / later phases
+      return null; // marks render via attachMarkRenderer
   }
 }
 
@@ -672,7 +765,48 @@ function geometrySignature(): string {
 export interface EntitySeed {
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
+  children?: SceneChildBootstrap[];
   authToken: string;
+}
+
+async function seedChildren(
+  children: SceneChildBootstrap[],
+  authToken: string,
+): Promise<ChildSceneEntity[]> {
+  return Promise.all(
+    children.map(async (c) => {
+      let pose = parseChildPose({});
+      let transformSource: string | null = null;
+      if (authToken && c.restUid) {
+        try {
+          const row = await api.getChild(authToken, c.restUid);
+          pose = parseChildPose(row);
+          transformSource =
+            row.transform_source != null ? String(row.transform_source) : null;
+        } catch {
+          /* keep identity pose */
+        }
+      }
+      return {
+        id: c.id,
+        type: "child",
+        name: c.name,
+        visible: true,
+        position: pose.position,
+        rotation: pose.rotation,
+        scale: pose.scale,
+        size: CHILD_FOOTPRINT_SIZE,
+        color: CHILD_FOOTPRINT_COLOR,
+        childType: c.childType || "local",
+        restUid: c.restUid,
+        remoteChildId: c.remoteChildId,
+        detailUrl: c.detailUrl,
+        editHref: c.editHref || `?ss=child-edit&id=${c.restUid}`,
+        transformSource,
+        deleteUrl: c.deleteUrl,
+      } satisfies ChildSceneEntity;
+    }),
+  );
 }
 
 export function useViewportEntities(
@@ -746,10 +880,40 @@ export function useViewportEntities(
       const state = getViewportState();
       state.removeEntitiesByType("camera");
       state.removeEntitiesByType("sensor");
+      state.removeEntitiesByType("child");
       getPersistState().clearBaselines();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);
+
+  // Child scenes: re-seed when the linked-children list reference changes
+  // (create/edit/unlink via ChildSheet or Properties).
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    const children = seed.children ?? [];
+    let cancelled = false;
+    (async () => {
+      const childEntities = await seedChildren(children, seed.authToken);
+      if (cancelled) {
+        return;
+      }
+      const keep = new Set(childEntities.map((e) => e.id));
+      const state = getViewportState();
+      for (const [id, e] of Object.entries(state.entities)) {
+        if (e.type === "child" && !keep.has(id)) {
+          state.removeEntity(id);
+        }
+      }
+      if (childEntities.length) {
+        state.upsertEntities(childEntities);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [world, seed.children, seed.authToken]);
 
   // Reconcile three nodes off structVersion; selection + frustums separately.
   useEffect(() => {

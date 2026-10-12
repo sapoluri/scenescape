@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useCallback, useState } from "react";
+import { useChildStatusStore } from "../mqtt/childStatusStore";
 import { useViewportStore } from "../viewport/store";
-import type { ViewportEntity, ViewportEntityType } from "../viewport/types";
+import type { ChildSceneEntity, ViewportEntity, ViewportEntityType } from "../viewport/types";
 import "./Outliner.css";
 
 const GROUPS: {
@@ -17,7 +18,12 @@ const GROUPS: {
   { type: "camera", label: "Cameras", addHref: "?ss=cam-create", addLabel: "Add camera" },
   { type: "sensor", label: "Sensors", addHref: "?ss=sensor-create", addLabel: "Add sensor" },
   { type: "mark", label: "Tracked objects" },
-  { type: "child", label: "Child scenes" },
+  {
+    type: "child",
+    label: "Child scenes",
+    addHref: "?ss=child-create",
+    addLabel: "Link child",
+  },
 ];
 
 const TYPE_ICON: Record<ViewportEntityType, string> = {
@@ -53,6 +59,36 @@ function writeCollapsed(collapsed: Set<ViewportEntityType>): void {
   } catch {
     /* private mode / quota */
   }
+}
+
+function ChildStatusBadge({ entity }: { entity: ChildSceneEntity }) {
+  const remoteId = entity.remoteChildId;
+  const entry = useChildStatusStore((s) =>
+    remoteId ? s.byRemoteId[remoteId] : undefined,
+  );
+  if (entity.childType !== "remote" || !remoteId) {
+    return (
+      <span className="ss-outliner-status ss-outliner-status--local" title="Local child">
+        local
+      </span>
+    );
+  }
+  const status = entry?.status || "unknown";
+  const title =
+    status === "error"
+      ? entry?.message || "Error"
+      : status === "connected"
+        ? "Connected"
+        : status === "disconnected"
+          ? "Disconnected"
+          : "Status unknown";
+  return (
+    <span
+      className={`ss-outliner-status ss-outliner-status--${status}`}
+      title={title}
+      aria-label={title}
+    />
+  );
 }
 
 function OutlinerRow({ entity }: { entity: ViewportEntity }) {
@@ -104,6 +140,18 @@ function OutlinerRow({ entity }: { entity: ViewportEntity }) {
           aria-hidden="true"
         />
       )}
+      {entity.type === "child" && <ChildStatusBadge entity={entity} />}
+      {entity.type === "child" && entity.editHref ? (
+        <a
+          className="ss-outliner-edit"
+          href={entity.editHref}
+          title={`Edit ${entity.name}`}
+          aria-label={`Edit ${entity.name}`}
+          onClick={(ev) => ev.stopPropagation()}
+        >
+          <i className="bi bi-pencil" aria-hidden="true" />
+        </a>
+      ) : null}
     </div>
   );
 }

@@ -103,8 +103,22 @@ export interface MarkEntity extends ViewportEntityBase {
 
 export interface ChildSceneEntity extends ViewportEntityBase {
   type: "child";
+  /** Parent-scene pose translation [x, y, z] meters, Z-up. */
   position: [number, number, number];
+  /** Euler degrees XYZ (Z-up), matching SceneEulerPose / REST transform. */
+  rotation: [number, number, number];
+  /** Non-uniform scale from the child link transform. */
+  scale: [number, number, number];
+  /** Local AABB size in meters before scale (map footprint). */
+  size: [number, number, number];
   color: string;
+  childType: string;
+  restUid: string;
+  remoteChildId: string | null;
+  detailUrl: string | null;
+  editHref: string;
+  transformSource: string | null;
+  deleteUrl: string | null;
 }
 
 export type ViewportEntity =

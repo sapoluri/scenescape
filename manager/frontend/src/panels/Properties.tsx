@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
+import { useChildStatusStore } from "../mqtt/childStatusStore";
+import type { SceneChildBootstrap } from "../scene/types";
 import {
   frameToBase64,
   humanAutocalibMessage,
@@ -24,7 +26,7 @@ import {
   persistTripwireEntity,
 } from "../lib/entityPersist";
 import { api, type RestError } from "../lib/rest";
-import { restDeleteTarget } from "../lib/restDelete";
+import { parseDeleteTarget, restDeleteTarget } from "../lib/restDelete";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import type { CameraOptics } from "../viewport/calibrate/types";
@@ -40,6 +42,7 @@ import {
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
+  ChildSceneEntity,
   MarkEntity,
   RegionEntity,
   SensorAreaMode,
@@ -1024,9 +1027,142 @@ function MarkProps({ e }: { e: MarkEntity }) {
   );
 }
 
+function ChildProps({
+  e,
+  boot,
+  authToken,
+  isSuperuser,
+  onChildrenChange,
+}: {
+  e: ChildSceneEntity;
+  boot?: SceneChildBootstrap;
+  authToken: string;
+  isSuperuser: boolean;
+  onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
+}) {
+  const toast = useAppToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const remoteId = e.remoteChildId || boot?.remoteChildId;
+  const statusEntry = useChildStatusStore((s) =>
+    remoteId ? s.byRemoteId[remoteId] : undefined,
+  );
+  const deleteUrl = isSuperuser ? e.deleteUrl || boot?.deleteUrl : null;
+  const detailUrl = e.detailUrl || boot?.detailUrl;
+  const editHref = e.editHref || boot?.editHref;
+  const childType = e.childType || boot?.childType || "local";
+  const transformSource = e.transformSource || "—";
+  const statusLabel =
+    childType !== "remote"
+      ? "Local"
+      : statusEntry?.status === "connected"
+        ? "Connected"
+        : statusEntry?.status === "disconnected"
+          ? "Disconnected"
+          : statusEntry?.status === "error"
+            ? statusEntry.message || "Error"
+            : "Unknown";
+
+  const onDelete = async () => {
+    if (!deleteUrl || !authToken) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const target = parseDeleteTarget(deleteUrl);
+      if (!target) {
+        throw new Error("Unrecognized child delete URL");
+      }
+      await restDeleteTarget(authToken, target);
+      getViewportState().removeEntity(e.id);
+      onChildrenChange?.((prev) =>
+        prev.filter((c) => c.id !== e.id && c.restUid !== e.restUid),
+      );
+      toast.show(`Unlinked ${e.name}`, "ok");
+      setConfirmDelete(false);
+    } catch (err) {
+      toast.show((err as RestError).message || "Delete failed", "bad");
+      setDeleteBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <NameRow entity={e} />
+      <ReadField label="Type" value={childType === "remote" ? "Remote" : "Local"} />
+      <ReadField label="Status" value={statusLabel} />
+      <ReadField
+        label="Transform"
+        value={typeof transformSource === "string" ? transformSource : "—"}
+      />
+      <ReadField
+        label="Position"
+        value={`${fmt(e.position[0])} , ${fmt(e.position[1])} , ${fmt(e.position[2])}`}
+      />
+      <ReadField
+        label="Rotation"
+        value={`${fmt(e.rotation[0])}° , ${fmt(e.rotation[1])}° , ${fmt(e.rotation[2])}°`}
+      />
+      <div className="ss-prop-actions">
+        {detailUrl ? (
+          <a href={detailUrl} className="ss-prop-calibrate">
+            <i className="bi bi-box-arrow-up-right" aria-hidden="true" />
+            <span>Open child scene</span>
+          </a>
+        ) : null}
+        {isSuperuser && editHref ? (
+          <a href={editHref} className="ss-prop-calibrate">
+            <i className="bi bi-pencil" aria-hidden="true" />
+            <span>Edit link</span>
+          </a>
+        ) : null}
+        {deleteUrl && authToken ? (
+          <button
+            type="button"
+            className="ss-prop-danger"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <i className="bi bi-trash" aria-hidden="true" />
+            <span>Unlink</span>
+          </button>
+        ) : null}
+      </div>
+      <p className="ss-prop-hint">
+        Pose editing stays in the child placement workspace. Use Edit link to
+        change transform or connection settings.
+      </p>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Unlink child scene?"
+        confirmLabel="Unlink"
+        danger
+        busy={deleteBusy}
+        onConfirm={() => void onDelete()}
+        onCancel={() => {
+          if (!deleteBusy) {
+            setConfirmDelete(false);
+          }
+        }}
+      >
+        <p>
+          Are you sure you want to unlink <strong>{e.name}</strong> from this
+          scene?
+        </p>
+      </ConfirmDialog>
+    </>
+  );
+}
+
 function EmptyProps({ sceneName }: { sceneName: string }) {
   const entities = useViewportStore((s) => s.entities);
-  const counts = { region: 0, tripwire: 0, camera: 0, sensor: 0, mark: 0 };
+  const counts = {
+    region: 0,
+    tripwire: 0,
+    camera: 0,
+    sensor: 0,
+    mark: 0,
+    child: 0,
+  };
   for (const e of Object.values(entities)) {
     if (e.type in counts) {
       counts[e.type as keyof typeof counts] += 1;
@@ -1039,6 +1175,7 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
       <ReadField label="Tripwires" value={String(counts.tripwire)} />
       <ReadField label="Cameras" value={String(counts.camera)} />
       <ReadField label="Sensors" value={String(counts.sensor)} />
+      <ReadField label="Child scenes" value={String(counts.child)} />
       <ReadField label="Tracked now" value={String(counts.mark)} />
       <p className="ss-prop-hint">
         Select anything in the viewport or Outliner to inspect it. Press{" "}
@@ -1058,6 +1195,8 @@ export function Properties({
   sceneId,
   cameras = [],
   sensors = [],
+  children = [],
+  onChildrenChange,
   authToken = "",
   isSuperuser = false,
 }: {
@@ -1077,6 +1216,8 @@ export function Properties({
     calibrateHref: string;
     deleteUrl?: string | null;
   }[];
+  children?: SceneChildBootstrap[];
+  onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
   authToken?: string;
   isSuperuser?: boolean;
 }) {
@@ -1087,6 +1228,8 @@ export function Properties({
     e?.type === "camera" ? cameras.find((c) => c.id === e.id) : undefined;
   const senBoot =
     e?.type === "sensor" ? sensors.find((s) => s.id === e.id) : undefined;
+  const childBoot =
+    e?.type === "child" ? children.find((c) => c.id === e.id) : undefined;
 
   return (
     <div className="ss-props">
@@ -1125,10 +1268,13 @@ export function Properties({
       )}
       {e?.type === "mark" && <MarkProps e={e} />}
       {e?.type === "child" && (
-        <>
-          <NameRow entity={e} />
-          <p className="ss-prop-hint">Linked child scene.</p>
-        </>
+        <ChildProps
+          e={e}
+          boot={childBoot}
+          authToken={authToken}
+          isSuperuser={isSuperuser}
+          onChildrenChange={onChildrenChange}
+        />
       )}
     </div>
   );

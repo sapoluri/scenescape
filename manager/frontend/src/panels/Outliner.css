@@ -140,7 +140,8 @@
   flex: none;
 }
 
-.ss-outliner-add {
+.ss-outliner-add,
+.ss-outliner-edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -151,7 +152,42 @@
   text-decoration: none;
   flex: none;
 }
-.ss-outliner-add:hover {
+.ss-outliner-add:hover,
+.ss-outliner-edit:hover {
   background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
   color: var(--ss-accent, #0a84ff);
+}
+
+.ss-outliner-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-outliner-status--local {
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ss-text-muted, #8e8e93);
+  background: var(--ss-fill-tertiary, rgba(120, 120, 128, 0.16));
+}
+
+.ss-outliner-status--connected {
+  background: #30d158;
+}
+
+.ss-outliner-status--disconnected,
+.ss-outliner-status--unknown {
+  background: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-outliner-status--error {
+  background: #ff453a;
 }

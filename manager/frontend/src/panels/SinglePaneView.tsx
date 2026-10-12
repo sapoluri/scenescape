@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
+import { useChildStatusMqtt } from "../mqtt/useChildStatusMqtt";
 import type {
   SceneCameraBootstrap,
+  SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
 import { SceneViewport } from "../viewport/SceneViewport";
@@ -56,6 +58,8 @@ export interface SinglePaneViewProps {
   mapScale?: number | null;
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
+  children?: SceneChildBootstrap[];
+  onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
   cameraRates?: Record<string, string>;
   authToken: string;
   assetMarkColors?: Record<string, string>;
@@ -79,6 +83,8 @@ export function SinglePaneView({
   mapScale = null,
   cameras,
   sensors,
+  children = [],
+  onChildrenChange,
   cameraRates = {},
   authToken,
   assetMarkColors,
@@ -90,6 +96,14 @@ export function SinglePaneView({
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
+  const remoteChildIds = useMemo(
+    () =>
+      children
+        .filter((c) => c.childType === "remote" && c.remoteChildId)
+        .map((c) => String(c.remoteChildId)),
+    [children],
+  );
+  useChildStatusMqtt(remoteChildIds);
   // undefined = editor closed; null = create-new form; string = edit asset.
   const [editorAsset, setEditorAsset] = useState<string | null | undefined>(
     undefined,
@@ -135,6 +149,7 @@ export function SinglePaneView({
             assetMarkColors={assetMarkColors}
             cameras={cameras}
             sensors={sensors}
+            children={children}
             cameraRates={cameraRates}
             authToken={authToken}
             isSuperuser={isSuperuser}
@@ -232,6 +247,8 @@ export function SinglePaneView({
                 sceneId={sceneId}
                 cameras={cameras}
                 sensors={sensors}
+                children={children}
+                onChildrenChange={onChildrenChange}
                 authToken={authToken}
                 isSuperuser={isSuperuser}
               />

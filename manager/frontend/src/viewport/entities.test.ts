@@ -3,8 +3,14 @@
 
 import { Euler, Object3D, Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { buildCamera, lookAtOriginEuler, restPoseToRigEuler } from "./entities";
-import type { CameraEntity } from "./types";
+import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
+import {
+  buildCamera,
+  buildChild,
+  lookAtOriginEuler,
+  restPoseToRigEuler,
+} from "./entities";
+import type { CameraEntity, ChildSceneEntity } from "./types";
 
 const D2R = Math.PI / 180;
 
@@ -120,6 +126,42 @@ describe("buildCamera frustum alignment", () => {
       const camPos = new Vector3().setFromMatrixPosition(persp.matrixWorld);
       const frustumDir = camPoint.sub(camPos).normalize();
       expect(frustumDir.dot(rigDir)).toBeGreaterThan(1 - 1e-9);
+    } finally {
+      nodes.dispose();
+    }
+  });
+});
+
+describe("buildChild footprint", () => {
+  function makeChild(): ChildSceneEntity {
+    return {
+      id: "child1",
+      type: "child",
+      name: "Annex",
+      visible: true,
+      position: [2, 3, 0.5],
+      rotation: [0, 0, 45],
+      scale: [1, 1, 1],
+      size: CHILD_FOOTPRINT_SIZE,
+      color: CHILD_FOOTPRINT_COLOR,
+      childType: "local",
+      restUid: "scene-uid",
+      remoteChildId: null,
+      detailUrl: "/scene-uid/",
+      editHref: "?ss=child-edit&id=scene-uid",
+      transformSource: "visual",
+      deleteUrl: "/child/delete/1/",
+    };
+  }
+
+  it("applies pose translation and entityId for picking", () => {
+    const nodes = buildChild(makeChild());
+    try {
+      expect(nodes.group.userData.entityId).toBe("child1");
+      expect(nodes.group.position.x).toBeCloseTo(2, 9);
+      expect(nodes.group.position.y).toBeCloseTo(3, 9);
+      expect(nodes.group.position.z).toBeCloseTo(0.5, 9);
+      expect(nodes.group.rotation.z).toBeCloseTo(Math.PI / 4, 9);
     } finally {
       nodes.dispose();
     }

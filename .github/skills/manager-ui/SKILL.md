@@ -143,8 +143,9 @@ SVG `g.roi` / `g.tripwire`, `adding-roi` / `adding-tripwire`.
 | --- | --- |
 | `#ss-cameras-mount`, `.snapshot-image[topic]`, `#rate-{sensorId}`, `.camera-card` | Camera strip |
 | `#ss-sensors-mount`, `.singleton`, `.area-json`, `.sensor-id` | Sensors |
-| `#ss-children-mount`, `.child-card`, `#mqtt_status_remote_{id}` | Children |
-| `?ss=child-edit&id={restUid}` | ChildSheet |
+| `#ss-children-mount`, `.child-card`, `#mqtt_status_remote_{id}` | Children (legacy 2D cards / Snap status) |
+| `?ss=child-create` / `?ss=child-edit&id={restUid}` | ChildSheet (3D Outliner Link/Edit + Properties) |
+| React `useChildStatusStore` / `scenescape/sys/child/status/+` | 3D remote child connection badges (no new freeze DOM ids) |
 | `a[id^='sensor_calibrate_']` | Scene-tab Manage → calibrate |
 | `?ss=calibrate-sensor&id={pk}` / admin `a.ss-table-action[title='Manage']` | List → calibrate |
 | `#ss-sensor-calibrate-form`, `#ss-sensor-cal-area` (`scene`/`circle`/`poly`) | Calibrate area |

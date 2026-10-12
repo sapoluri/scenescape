@@ -8,6 +8,7 @@ import { saveAllDirtyEntities } from "../lib/entityPersist";
 import { CameraStripOverlay } from "../panels/CameraStripOverlay";
 import type {
   SceneCameraBootstrap,
+  SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
 import { CalibrateFeedPane } from "./calibrate/CalibrateFeedPane";
@@ -58,6 +59,7 @@ interface SceneViewportProps {
   assetMarkColors?: Record<string, string>;
   cameras?: SceneCameraBootstrap[];
   sensors?: SceneSensorBootstrap[];
+  children?: SceneChildBootstrap[];
   cameraRates?: Record<string, string>;
   authToken: string;
   isSuperuser?: boolean;
@@ -276,6 +278,7 @@ export function SceneViewport({
   assetMarkColors,
   cameras = [],
   sensors = [],
+  children = [],
   cameraRates = {},
   authToken,
   isSuperuser = false,
@@ -348,6 +351,7 @@ export function SceneViewport({
   useViewportEntities(world, {
     cameras: emptyScene ? [] : cameras,
     sensors: emptyScene ? [] : sensors,
+    children: emptyScene ? [] : children,
     authToken: emptyScene ? "" : authToken,
   });
   useViewportTools(world);
