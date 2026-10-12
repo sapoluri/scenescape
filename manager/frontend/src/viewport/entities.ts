@@ -70,6 +70,11 @@ export interface EntityNodes {
   labelPos: Vector3;
   setSelected: (on: boolean) => void;
   setFrustumVisible?: (visible: boolean) => void;
+  /**
+   * Apply pose/optics from the store without disposing meshes. Used when
+   * `poseVersion` bumps (calibrate preview, gizmo drag, properties).
+   */
+  applyPose?: (e: ViewportEntity) => void;
   dispose: () => void;
 }
 
@@ -320,19 +325,45 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   group.add(helper);
   group.userData.entityId = e.id;
 
+  const labelPos = new Vector3(
+    e.position[0],
+    e.position[1],
+    e.position[2] + 1.2,
+  );
+
   return {
     group,
     gizmoTarget: rig,
-    labelPos: new Vector3(
-      e.position[0],
-      e.position[1],
-      e.position[2] + 1.2,
-    ),
+    labelPos,
     setSelected: (on: boolean) => {
       bodyMat.emissiveIntensity = on ? 0.9 : 0;
     },
     setFrustumVisible: (visible: boolean) => {
       helper.visible = visible;
+    },
+    applyPose: (ent) => {
+      if (ent.type !== "camera") {
+        return;
+      }
+      rig.position.set(ent.position[0], ent.position[1], ent.position[2]);
+      rig.quaternion.setFromEuler(
+        new Euler(
+          d2r(ent.rotation[0]),
+          d2r(ent.rotation[1]),
+          d2r(ent.rotation[2]),
+          "XYZ",
+        ),
+      );
+      if (persp.fov !== ent.fov) {
+        persp.fov = ent.fov;
+        persp.updateProjectionMatrix();
+        helper.update();
+      }
+      labelPos.set(
+        ent.position[0],
+        ent.position[1],
+        ent.position[2] + 1.2,
+      );
     },
     dispose: () => {
       helper.dispose();
@@ -398,12 +429,21 @@ function buildSensor(e: SensorEntity): EntityNodes {
   group.position.set(x, y, z);
   group.userData.entityId = e.id;
 
+  const labelPos = new Vector3(x, y, z + 2.9);
+
   return {
     group,
     gizmoTarget: group,
-    labelPos: new Vector3(x, y, z + 2.9),
+    labelPos,
     setSelected: (on: boolean) => {
       headMat.emissiveIntensity = on ? 1.6 : 0.6;
+    },
+    applyPose: (ent) => {
+      if (ent.type !== "sensor") {
+        return;
+      }
+      group.position.set(ent.position[0], ent.position[1], ent.position[2]);
+      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 2.9);
     },
     dispose: () => disposeObject(group),
   };
@@ -785,9 +825,25 @@ export function useViewportEntities(
       }
     };
 
+    const applyPoses = () => {
+      const { entities } = getViewportState();
+      for (const [id, nodes] of world.entityNodes) {
+        const e = entities[id];
+        if (!e || !nodes.applyPose) {
+          continue;
+        }
+        nodes.applyPose(e);
+        const entry = labelEls.get(id);
+        entry?.pos.copy(nodes.labelPos);
+      }
+    };
+
     const unsubscribe = useViewportStore.subscribe((s, prev) => {
       if (s.structVersion !== prev.structVersion) {
         reconcile();
+      }
+      if (s.poseVersion !== prev.poseVersion) {
+        applyPoses();
       }
       if (s.selectedId !== prev.selectedId) {
         updateSelection(s.selectedId);

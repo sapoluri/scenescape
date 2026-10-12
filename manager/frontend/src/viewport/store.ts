@@ -34,6 +34,36 @@ interface HistorySnapshot {
   geometry: GeometrySnapshot;
 }
 
+/** Camera fields that only move/aim the existing three.js rig (no rebuild). */
+const CAMERA_POSE_KEYS = new Set([
+  "position",
+  "rotation",
+  "restRotation",
+  "posed",
+  "fov",
+  "target",
+]);
+
+/** Sensor fields that only translate the existing node (no rebuild). */
+const SENSOR_POSE_KEYS = new Set(["position"]);
+
+function isPoseOnlyPatch(
+  prev: ViewportEntity,
+  patch: Partial<ViewportEntity>,
+): boolean {
+  const keys = Object.keys(patch);
+  if (keys.length === 0) {
+    return false;
+  }
+  if (prev.type === "camera") {
+    return keys.every((k) => CAMERA_POSE_KEYS.has(k));
+  }
+  if (prev.type === "sensor") {
+    return keys.every((k) => SENSOR_POSE_KEYS.has(k));
+  }
+  return false;
+}
+
 interface ViewportStore extends ViewportUiState {
   entities: Record<string, ViewportEntity>;
   /**
@@ -41,6 +71,11 @@ interface ViewportStore extends ViewportUiState {
    * can reconcile without re-hashing on every live-mark update.
    */
   structVersion: number;
+  /**
+   * Bumped when only camera/sensor pose fields change so the three.js layer
+   * can update transforms without disposing and rebuilding meshes.
+   */
+  poseVersion: number;
   past: HistorySnapshot[];
   future: HistorySnapshot[];
   /** Insert or replace entities by id. */
@@ -105,6 +140,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   ...initialUi,
   entities: {},
   structVersion: 0,
+  poseVersion: 0,
   past: [],
   future: [],
   upsertEntities: (entities, opts) =>
@@ -124,9 +160,15 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       if (!prev) {
         return s;
       }
+      const poseOnly = isPoseOnlyPatch(prev, patch);
       return {
-        entities: { ...s.entities, [id]: { ...prev, ...patch } as ViewportEntity },
-        structVersion: s.structVersion + 1,
+        entities: {
+          ...s.entities,
+          [id]: { ...prev, ...patch } as ViewportEntity,
+        },
+        ...(poseOnly
+          ? { poseVersion: s.poseVersion + 1 }
+          : { structVersion: s.structVersion + 1 }),
       };
     }),
   removeEntity: (id) =>
