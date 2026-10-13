@@ -69,6 +69,26 @@ function markKey(id: string | number): string {
   return `${MARK_ID_PREFIX}${id}`;
 }
 
+/** Label text matching legacy 3D UI: `category #objectId`. */
+export function markLabel(className: string, objectId: string | number): string {
+  return `${className} #${objectId}`;
+}
+
+/** Raw tracker id from a `mark:` store key (or pass-through). */
+export function trackIdFromMarkKey(key: string): string {
+  return key.startsWith(MARK_ID_PREFIX)
+    ? key.slice(MARK_ID_PREFIX.length)
+    : key;
+}
+
+/**
+ * Track color from object id — same rule as the 2D map marks
+ * (`marks.js` / `liveMarks.ts`: `#` + first 6 characters of the id).
+ */
+export function colorFromTrackId(id: string | number): string {
+  return `#${String(id).substring(0, 6)}`;
+}
+
 interface MarkHookOptions {
   /** Asset3D class name → mark color, from scene bootstrap. */
   assetMarkColors?: Record<string, string>;
@@ -123,7 +143,7 @@ export function useViewportMarks({ assetMarkColors }: MarkHookOptions): void {
         entities.push({
           id,
           type: "mark",
-          name: className,
+          name: markLabel(className, m.id),
           visible: true,
           className,
           color: colors[className] ?? DEFAULT_MARK_COLOR,

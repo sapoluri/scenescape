@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { deriveHeading, parseMarkPosition } from "./marks";
+import {
+  colorFromTrackId,
+  deriveHeading,
+  markLabel,
+  parseMarkPosition,
+  trackIdFromMarkKey,
+} from "./marks";
 
 describe("parseMarkPosition", () => {
   it("parses array translations", () => {
@@ -33,5 +39,28 @@ describe("deriveHeading", () => {
 
   it("keeps the previous heading when barely moved", () => {
     expect(deriveHeading(0, 0, 0.01, 0.01, 1.23)).toBeCloseTo(1.23);
+  });
+});
+
+describe("markLabel", () => {
+  it("matches legacy 3D category #id format", () => {
+    expect(markLabel("person", "a1b2c3d4-e5f6")).toBe(
+      "person #a1b2c3d4-e5f6",
+    );
+    expect(markLabel("vehicle", 42)).toBe("vehicle #42");
+  });
+});
+
+describe("colorFromTrackId", () => {
+  it("matches 2D UI: # + first 6 characters of the id", () => {
+    expect(colorFromTrackId("a1b2c3d4-e5f6-7890")).toBe("#a1b2c3");
+    expect(colorFromTrackId("ff00aa")).toBe("#ff00aa");
+  });
+});
+
+describe("trackIdFromMarkKey", () => {
+  it("strips the mark: prefix", () => {
+    expect(trackIdFromMarkKey("mark:a1b2c3d4")).toBe("a1b2c3d4");
+    expect(trackIdFromMarkKey("a1b2c3d4")).toBe("a1b2c3d4");
   });
 });

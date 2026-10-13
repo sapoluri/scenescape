@@ -5,15 +5,16 @@ import {
   Box3,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
   Color,
   Group,
   Line,
   LineBasicMaterial,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
-  RingGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector3,
 } from "three";
 import {
@@ -27,6 +28,10 @@ import {
   LIBRARY_CHANGED_EVENT,
   MarkAssetCatalog,
 } from "./markAssets";
+import {
+  colorFromTrackId,
+  trackIdFromMarkKey,
+} from "./marks";
 import { getViewportState, useViewportStore } from "./store";
 import type { MarkEntity } from "./types";
 import type { ViewportWorld } from "./world";
@@ -39,10 +44,15 @@ import type { ViewportWorld } from "./world";
  *
  * Classes without a GLB use Asset3D `mark_geometry` (box / capsule /
  * cylinder) sized to the class footprint, with the default pose applied.
+ *
+ * Trail + hover triangle use the 2D UUID track color (`colorFromTrackId`);
+ * the body keeps the Asset3D mark color.
  */
 
 const TRAIL_POINTS = 40;
 const LABEL_Z_FALLBACK = 1.6;
+const INDICATOR_GAP = 0.5;
+const LABEL_GAP = 1.2;
 
 /** Fingerprint of library fields that affect mark body geometry/appearance. */
 function assetBodySig(asset: Asset3DRecord | null, className: string): string {
@@ -67,30 +77,69 @@ interface MarkNodes {
   group: Group;
   /** Pose / model holder; replaced when the library asset resolves. */
   bodyRoot: Group;
-  ring: Mesh;
+  /** Downward triangle sprite above the body (UUID track color). */
+  indicator: Sprite;
   trail: Line;
   className: string;
   /** True when bodyRoot holds a cloned library GLB (not a primitive). */
   hasGlb: boolean;
   /** Library pose/size/color/model fingerprint for this body. */
   assetSig: string;
+  /** World/local Z for the HTML label (above the indicator). */
   labelZ: number;
+  trackColor: string;
 }
 
 function disposeObjectTree(root: Object3D): void {
   root.traverse((o) => {
     const mesh = o as Mesh;
     mesh.geometry?.dispose?.();
-    const mat = mesh.material as
-      | { dispose?: () => void }
-      | { dispose?: () => void }[]
+    const sprite = o as Sprite;
+    const mat = (mesh.material ?? sprite.material) as
+      | { dispose?: () => void; map?: { dispose?: () => void } }
+      | { dispose?: () => void; map?: { dispose?: () => void } }[]
       | undefined;
     if (Array.isArray(mat)) {
-      mat.forEach((m) => m.dispose?.());
+      mat.forEach((m) => {
+        m.map?.dispose?.();
+        m.dispose?.();
+      });
     } else {
+      mat?.map?.dispose?.();
       mat?.dispose?.();
     }
   });
+}
+
+/**
+ * Downward triangle hover marker — port of legacy `createIndicator` in
+ * draw.js, colored with the 2D track id rule.
+ */
+function createTrackIndicator(trackColor: string): Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = trackColor;
+    ctx.beginPath();
+    ctx.moveTo(32, 56); // bottom point
+    ctx.lineTo(8, 8); // top left
+    ctx.lineTo(56, 8); // top right
+    ctx.closePath();
+    ctx.fill();
+  }
+  const texture = new CanvasTexture(canvas);
+  const sprite = new Sprite(
+    new SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+    }),
+  );
+  sprite.name = "indicator";
+  sprite.scale.set(1, 1, 1);
+  return sprite;
 }
 
 /**
@@ -139,19 +188,30 @@ function buildMarkBody(
   body.position.z = size.z / 2;
   pose.add(body);
   if (asset) {
-    applyDefaultPose(pose, asset);
+    // Geometry already uses absolute x/y/z meters — skip GLB pose scale.
+    applyDefaultPose(pose, asset, { applyScale: false });
   }
   return { bodyRoot: pose, hasGlb: false };
 }
 
-function labelHeightFor(root: Object3D): number {
+function bodyTopZ(root: Object3D): number {
   root.updateMatrixWorld(true);
   const box = new Box3().setFromObject(root);
   if (box.isEmpty()) {
-    return LABEL_Z_FALLBACK;
+    return LABEL_Z_FALLBACK - LABEL_GAP;
   }
-  // Root is at identity when first built; world Z ≈ local Z.
-  return Math.max(box.max.z + 0.4, LABEL_Z_FALLBACK);
+  return box.max.z;
+}
+
+/** Place indicator + label height from the current body bounds (legacy gaps). */
+function layoutChrome(nodes: MarkNodes): void {
+  const top = bodyTopZ(nodes.bodyRoot);
+  nodes.indicator.position.set(0, 0, top + INDICATOR_GAP);
+  nodes.labelZ = Math.max(top + LABEL_GAP, LABEL_Z_FALLBACK);
+}
+
+function trackColorFor(entity: MarkEntity): string {
+  return colorFromTrackId(trackIdFromMarkKey(entity.id));
 }
 
 function buildMarkNodes(
@@ -161,20 +221,10 @@ function buildMarkNodes(
   const group = new Group();
   const asset = catalog.assetOf(entity.className);
   const { bodyRoot, hasGlb } = buildMarkBody(entity, catalog);
-  const color = new Color(asset?.markColor || entity.color);
+  const trackColor = trackColorFor(entity);
+  const track = new Color(trackColor);
 
-  // RingGeometry already lies in the XY plane = the Z-up floor plane.
-  const ringR = ringRadiusFor(asset);
-  const ring = new Mesh(
-    new RingGeometry(Math.max(ringR - 0.16, 0.2), ringR, 32),
-    new MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.8,
-      side: 2, // DoubleSide
-    }),
-  );
-  ring.position.z = 0.05;
+  const indicator = createTrackIndicator(trackColor);
   const trailGeo = new BufferGeometry();
   trailGeo.setAttribute(
     "position",
@@ -182,28 +232,23 @@ function buildMarkNodes(
   );
   const trail = new Line(
     trailGeo,
-    new LineBasicMaterial({ color, transparent: true, opacity: 0.5 }),
+    new LineBasicMaterial({ color: track, transparent: true, opacity: 0.5 }),
   );
   trail.frustumCulled = false;
-  group.add(bodyRoot, ring, trail);
-  return {
+  group.add(bodyRoot, indicator, trail);
+  const nodes: MarkNodes = {
     group,
     bodyRoot,
-    ring,
+    indicator,
     trail,
     className: entity.className,
     hasGlb,
     assetSig: assetBodySig(asset, entity.className),
-    labelZ: labelHeightFor(bodyRoot),
+    labelZ: LABEL_Z_FALLBACK,
+    trackColor,
   };
-}
-
-function ringRadiusFor(asset: Asset3DRecord | null): number {
-  if (!asset) {
-    return 0.66;
-  }
-  const fp = footprintOf(asset);
-  return Math.max(fp.outer.x, fp.outer.y) * 0.5;
+  layoutChrome(nodes);
+  return nodes;
 }
 
 function rebuildBody(
@@ -219,16 +264,8 @@ function rebuildBody(
   nodes.hasGlb = built.hasGlb;
   nodes.className = entity.className;
   nodes.assetSig = assetBodySig(asset, entity.className);
-  nodes.labelZ = labelHeightFor(nodes.bodyRoot);
-  // Footprint / color may have changed with the library row — rebuild ring.
-  nodes.group.remove(nodes.ring);
-  nodes.ring.geometry.dispose();
-  const ringR = ringRadiusFor(asset);
-  nodes.ring.geometry = new RingGeometry(Math.max(ringR - 0.16, 0.2), ringR, 32);
-  const c = new Color(asset?.markColor || entity.color);
-  (nodes.ring.material as MeshBasicMaterial).color.copy(c);
-  (nodes.trail.material as LineBasicMaterial).color.copy(c);
-  nodes.group.add(nodes.bodyRoot, nodes.ring, nodes.trail);
+  nodes.group.add(nodes.bodyRoot, nodes.indicator, nodes.trail);
+  layoutChrome(nodes);
 }
 
 function disposeMarkNodes(nodes: MarkNodes): void {
@@ -254,7 +291,7 @@ export function attachMarkRenderer(
     let el = labelEls.get(id);
     if (!el) {
       el = document.createElement("div");
-      el.className = "ss-vlabel";
+      el.className = "ss-vlabel ss-vlabel--mark";
       el.textContent = name;
       labelLayer.appendChild(el);
       labelEls.set(id, el);
@@ -329,18 +366,20 @@ export function attachMarkRenderer(
       const applyHeading =
         (!asset || asset.rotationFromVelocity) && Number.isFinite(e.heading);
       nodes.group.rotation.z = applyHeading ? e.heading : 0;
-      const c = new Color(asset?.markColor || e.color);
-      (nodes.ring.material as MeshBasicMaterial).color.copy(c);
-      (nodes.trail.material as LineBasicMaterial).color.copy(c);
+      // Trail stays on the UUID track color (same as the hover triangle).
+      const track = new Color(nodes.trackColor);
+      (nodes.trail.material as LineBasicMaterial).color.copy(track);
       if (!nodes.hasGlb) {
+        const bodyColor = new Color(asset?.markColor || e.color);
         nodes.bodyRoot.traverse((o) => {
           const mesh = o as Mesh;
           const mat = mesh.material as MeshStandardMaterial | undefined;
           if (mat && "color" in mat && mat.color) {
-            mat.color.copy(c);
+            mat.color.copy(bodyColor);
           }
         });
       }
+      layoutChrome(nodes);
       const label = labelEls.get(e.id);
       if (label && label.textContent !== e.name) {
         label.textContent = e.name;
