@@ -46,16 +46,24 @@ import type { RestError } from "../lib/rest";
 import {
   applyDefaultPose,
   createAssetRecord,
+  createMarkPrimitiveGeometry,
   defaultAsset3D,
   footprintOf,
   getAssetRecord,
   glbBasename,
+  isCircularMarkGeometry,
+  markDiameter,
+  MARK_GEOMETRY_LABELS,
+  MARK_GEOMETRY_VALUES,
+  parseMarkGeometry,
   readDefaultPose,
   saveAssetRecord,
   SHIFT_TYPE_LABELS,
   simulateTrackerPath,
+  withMarkGeometry,
   type Asset3DRecord,
 } from "./AssetLibrary";
+import { notifyLibraryChanged } from "../viewport/markAssets";
 import "./MarkEditor.css";
 
 type Props = {
@@ -274,6 +282,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
     let lastModelUrl: string | null | undefined;
     let currentModel: Group | null = null;
     let placeholder: Mesh | null = null;
+    let placeholderKey = "";
     const clearModel = () => {
       if (currentModel) {
         poseGroup.remove(currentModel);
@@ -290,34 +299,72 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         currentModel = null;
       }
       placeholder = null;
+      placeholderKey = "";
     };
-    const ensurePlaceholder = () => {
-      if (placeholder || currentModel) {
+    const syncPlaceholder = (r: Asset3DRecord) => {
+      const fp = footprintOf(r);
+      const kind = parseMarkGeometry(r.markGeometry);
+      const key = `${kind}|${fp.inner.x}|${fp.inner.y}|${fp.height}`;
+      if (placeholder && placeholderKey === key) {
+        (placeholder.material as MeshStandardMaterial).color.set(
+          r.markColor || "#888888",
+        );
         return;
       }
-      // Unit box, scaled to the class footprint — no GLB configured.
+      // Drop only the placeholder holder (not a loaded GLB).
+      if (placeholder && currentModel) {
+        poseGroup.remove(currentModel);
+        currentModel.traverse((o) => {
+          const mesh = o as Mesh;
+          mesh.geometry?.dispose?.();
+          const mat = mesh.material as { dispose?: () => void } | undefined;
+          if (Array.isArray(mat)) {
+            mat.forEach((m) => m.dispose?.());
+          } else {
+            mat?.dispose?.();
+          }
+        });
+        currentModel = null;
+        placeholder = null;
+      }
+      if (currentModel && !placeholder) {
+        // GLB is showing — leave it alone.
+        return;
+      }
+      const color = new Color(r.markColor || "#888888");
       placeholder = new Mesh(
-        new BoxGeometry(1, 1, 1),
+        createMarkPrimitiveGeometry(kind, {
+          x: fp.inner.x,
+          y: fp.inner.y,
+          z: fp.height,
+        }),
         new MeshStandardMaterial({
+          color,
           roughness: 0.6,
           transparent: true,
           opacity: 0.85,
         }),
       );
+      placeholder.name = "model";
+      placeholder.position.z = fp.height / 2;
       const holder = new Group();
       holder.add(placeholder);
       currentModel = holder;
       poseGroup.add(holder);
+      placeholderKey = key;
     };
     const setModelUrl = (url: string | null) => {
-      if (url === lastModelUrl) {
+      if (url === lastModelUrl && (url || placeholder)) {
         return;
       }
       lastModelUrl = url;
       const token = ++modelToken;
       clearModel();
       if (!url) {
-        ensurePlaceholder();
+        const r = recRef.current;
+        if (r) {
+          syncPlaceholder(r);
+        }
         return;
       }
       const group = new Group();
@@ -337,7 +384,10 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
           }
           // Unreachable/broken GLB: fall back to the placeholder.
           lastModelUrl = null;
-          ensurePlaceholder();
+          const r = recRef.current;
+          if (r) {
+            syncPlaceholder(r);
+          }
         });
     };
 
@@ -418,13 +468,8 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
       syncRecord: (r: Asset3DRecord) => {
         rebuildFootprints();
         setModelUrl(r.modelUrl);
-        if (placeholder) {
-          const fp = footprintOf(r);
-          placeholder.scale.set(fp.inner.x, fp.inner.y, fp.height);
-          placeholder.position.z = fp.height / 2;
-          (placeholder.material as MeshStandardMaterial).color.set(
-            r.markColor || "#888888",
-          );
+        if (!r.modelUrl) {
+          syncPlaceholder(r);
         }
       },
       setSimulate: (on: boolean) => {
@@ -574,6 +619,28 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
     [set],
   );
 
+  /** Diameter for capsule/cylinder — keeps x/y sizes equal. */
+  const setDiameter = useCallback(
+    (raw: string) => {
+      const v = Number(raw);
+      const d = Number.isFinite(v) && v >= 0 ? v : 0;
+      setRec((prev) => (prev ? { ...prev, xSize: d, ySize: d } : prev));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  /** Plan buffer for capsule/cylinder — keeps x/y buffers equal. */
+  const setPlanBuffer = useCallback(
+    (raw: string) => {
+      const v = Number(raw);
+      const b = Number.isFinite(v) && v >= 0 ? v : 0;
+      setRec((prev) => (prev ? { ...prev, xBuffer: b, yBuffer: b } : prev));
+      markDirty();
+    },
+    [markDirty],
+  );
+
   /* ---------------- save / close ---------------- */
   const requestClose = useCallback(() => {
     if (dirty) {
@@ -602,6 +669,9 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         await saveAssetRecord(authToken, assetId, r, opts);
       }
       setDirty(false);
+      // Live 3D marks keep an Object Library cache — force a reload so pose /
+      // GLB / color edits appear without a page refresh.
+      notifyLibraryChanged();
       onSaved();
       onClose();
     } catch (e) {
@@ -829,7 +899,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
 
               <FormSection
                 title="Mark"
-                description="How the tracker draws this class."
+                description="How the tracker draws this class. Geometry is used when no GLB is set."
               >
                 <div className="ss-text-field">
                   <label className="ss-text-field-label" htmlFor="ss-lib-color">
@@ -848,74 +918,151 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
                     </output>
                   </div>
                 </div>
-                <div className="ss-mark-editor-triple">
-                  <TextField
-                    id="ss-lib-xs"
-                    label="X size (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.xSize)}
-                    onChange={(ev) => setNum("xSize", ev.target.value)}
-                    disabled={busy}
-                  />
-                  <TextField
-                    id="ss-lib-ys"
-                    label="Y size (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.ySize)}
-                    onChange={(ev) => setNum("ySize", ev.target.value)}
-                    disabled={busy}
-                  />
-                  <TextField
-                    id="ss-lib-zs"
-                    label="Z size (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.zSize)}
-                    onChange={(ev) => setNum("zSize", ev.target.value)}
-                    disabled={busy}
-                  />
-                </div>
-                <div className="ss-mark-editor-triple">
-                  <TextField
-                    id="ss-lib-xb"
-                    label="X buffer (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.xBuffer)}
-                    onChange={(ev) => setNum("xBuffer", ev.target.value)}
-                    disabled={busy}
-                  />
-                  <TextField
-                    id="ss-lib-yb"
-                    label="Y buffer (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.yBuffer)}
-                    onChange={(ev) => setNum("yBuffer", ev.target.value)}
-                    disabled={busy}
-                  />
-                  <TextField
-                    id="ss-lib-zb"
-                    label="Z buffer (m)"
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fmt(rec.zBuffer)}
-                    onChange={(ev) => setNum("zBuffer", ev.target.value)}
-                    disabled={busy}
-                  />
-                </div>
+                <SelectField
+                  id="ss-lib-geometry"
+                  label="Geometry"
+                  value={parseMarkGeometry(rec.markGeometry)}
+                  onChange={(ev) => {
+                    const next = withMarkGeometry(
+                      rec,
+                      parseMarkGeometry(ev.target.value),
+                    );
+                    setRec(next);
+                    markDirty();
+                  }}
+                  disabled={busy || Boolean(rec.modelUrl && !clearModel && !modelFile)}
+                  title={
+                    rec.modelUrl && !clearModel && !modelFile
+                      ? "Clear or replace the GLB to edit the placeholder geometry"
+                      : undefined
+                  }
+                >
+                  {MARK_GEOMETRY_VALUES.map((v) => (
+                    <option key={v} value={v}>
+                      {MARK_GEOMETRY_LABELS[v]}
+                    </option>
+                  ))}
+                </SelectField>
+                {isCircularMarkGeometry(parseMarkGeometry(rec.markGeometry)) ? (
+                  <>
+                    <div className="ss-mark-editor-triple">
+                      <TextField
+                        id="ss-lib-diameter"
+                        label="Diameter (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(markDiameter(rec))}
+                        onChange={(ev) => setDiameter(ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-zs"
+                        label="Height (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.zSize)}
+                        onChange={(ev) => setNum("zSize", ev.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="ss-mark-editor-triple">
+                      <TextField
+                        id="ss-lib-plan-buf"
+                        label="Plan buffer (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(Math.max(rec.xBuffer, rec.yBuffer))}
+                        onChange={(ev) => setPlanBuffer(ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-zb"
+                        label="Height buffer (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.zBuffer)}
+                        onChange={(ev) => setNum("zBuffer", ev.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="ss-mark-editor-triple">
+                      <TextField
+                        id="ss-lib-xs"
+                        label="X size (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.xSize)}
+                        onChange={(ev) => setNum("xSize", ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-ys"
+                        label="Y size (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.ySize)}
+                        onChange={(ev) => setNum("ySize", ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-zs"
+                        label="Z size (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.zSize)}
+                        onChange={(ev) => setNum("zSize", ev.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="ss-mark-editor-triple">
+                      <TextField
+                        id="ss-lib-xb"
+                        label="X buffer (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.xBuffer)}
+                        onChange={(ev) => setNum("xBuffer", ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-yb"
+                        label="Y buffer (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.yBuffer)}
+                        onChange={(ev) => setNum("yBuffer", ev.target.value)}
+                        disabled={busy}
+                      />
+                      <TextField
+                        id="ss-lib-zb"
+                        label="Z buffer (m)"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fmt(rec.zBuffer)}
+                        onChange={(ev) => setNum("zBuffer", ev.target.value)}
+                        disabled={busy}
+                      />
+                    </div>
+                  </>
+                )}
                 {footprint ? (
                   <p className="ss-mark-editor-footnote">
-                    Footprint {fmt(footprint.inner.x)}×{fmt(footprint.inner.y)} m
-                    {" → "}buffered {fmt(footprint.outer.x)}×{fmt(footprint.outer.y)} m
+                    {isCircularMarkGeometry(parseMarkGeometry(rec.markGeometry))
+                      ? `Footprint ⌀${fmt(markDiameter(rec))} m → buffered ⌀${fmt(Math.max(footprint.outer.x, footprint.outer.y))} m`
+                      : `Footprint ${fmt(footprint.inner.x)}×${fmt(footprint.inner.y)} m → buffered ${fmt(footprint.outer.x)}×${fmt(footprint.outer.y)} m`}
                   </p>
                 ) : null}
                 <TextField

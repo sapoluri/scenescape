@@ -1038,6 +1038,12 @@ def default_center_of_mass():
 def default_friction_coefficients():
   return [0.5, 0.4]
 
+MARK_GEOMETRY_CHOICES = [
+  ("box", "Box"),
+  ("capsule", "Capsule"),
+  ("cylinder", "Cylinder"),
+]
+
 class Asset3D(models.Model):
   name = models.CharField("Class Name", max_length=200, unique=True)
   x_size = models.FloatField("Object size in x-axis", default=1.0, validators=[MinValueValidator(0.0)])
@@ -1047,6 +1053,14 @@ class Asset3D(models.Model):
   y_buffer_size = models.FloatField("Object buffer size in y-axis", default=0.0)
   z_buffer_size = models.FloatField("Object buffer size in z-axis", default=0.0)
   mark_color = models.CharField("Mark Color", max_length=20, default="#888888", blank=True)
+  # Primitive drawn for live marks / the mark editor when no GLB is configured.
+  mark_geometry = models.CharField(
+    "Mark geometry",
+    max_length=16,
+    choices=MARK_GEOMETRY_CHOICES,
+    default="box",
+    help_text="Box, capsule, or cylinder used when no GLB is set",
+  )
   model_3d = models.FileField(blank=True, null=True,
                               validators=[FileExtensionValidator(["glb"]), validate_glb])
   rotation_x = models.FloatField("X Rotation (degrees)", default=0.0, null=True, blank=True)

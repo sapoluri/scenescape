@@ -212,7 +212,7 @@ function ToolHeader({
             type="button"
             className={`ss-tool-btn${activeTool === t.id ? " on" : ""}`}
             onClick={() => pickTool(t.id)}
-            title={`${t.label} (${t.shortcut}) — ${t.hint}`}
+            title={`${t.label} (${t.shortcut}) ? ${t.hint}`}
             aria-pressed={activeTool === t.id}
           >
             <i className={`bi ${t.icon}`} aria-hidden="true" />
@@ -251,14 +251,14 @@ function ToolHeader({
         onClick={() => void onSaveAll()}
         title={
           dirty
-            ? `Save all unsaved cameras, sensors, regions, and tripwires (${entityDirtyCount} item${entityDirtyCount === 1 ? "" : "s"}${geometryDirty ? " + geometry" : ""}) — Ctrl+S`
+            ? `Save all unsaved cameras, sensors, regions, and tripwires (${entityDirtyCount} item${entityDirtyCount === 1 ? "" : "s"}${geometryDirty ? " + geometry" : ""}) ? Ctrl+S`
             : "No unsaved changes"
         }
       >
         <i className="bi bi-check-lg" aria-hidden="true" />
         <span className="ss-tool-label">
           {saving
-            ? "Saving…"
+            ? "Saving?"
             : dirty
               ? `Save all${entityDirtyCount > 0 ? ` (${entityDirtyCount})` : ""}`
               : "Save all"}
@@ -319,15 +319,21 @@ export function SceneViewport({
       return;
     }
     setWorld(w);
-    const detachMarks = attachMarkRenderer(w);
+    const detachMarks = attachMarkRenderer(w, {
+      // Token is stable for a scene session; world rebuilds on sceneId change.
+      authToken: sceneId ? authToken : "",
+    });
     return () => {
       detachMarks();
       setWorld(null);
       w.dispose();
     };
+    // authToken is read at scene open; remounting the WebGL world on token
+    // churn would flash the viewport.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneId]);
 
-  // three.js Stats (FPS) � bottom-left, same placement as the legacy 3D UI.
+  // three.js Stats (FPS) ? bottom-left, same placement as the legacy 3D UI.
   useEffect(() => {
     if (!world || !statsHostRef.current) {
       return;

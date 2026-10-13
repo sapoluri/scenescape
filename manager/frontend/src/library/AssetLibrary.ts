@@ -1,7 +1,14 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { Euler, Object3D } from "three";
+import {
+  BoxGeometry,
+  BufferGeometry,
+  CapsuleGeometry,
+  CylinderGeometry,
+  Euler,
+  Object3D,
+} from "three";
 import { api, restJson } from "../lib/rest";
 
 /**
@@ -10,12 +17,79 @@ import { api, restJson } from "../lib/rest";
  * The library is the set of per-class `Asset3D` mark definitions. The 3D
  * view composes a live mark as:
  *
- *   tracker transform (scene controller) × default pose × GLB
+ *   tracker transform (scene controller) × default pose × (GLB | primitive)
  *
  * where the default pose is the Asset3D rotation/translation/scale axes.
+ * When no GLB is set, `markGeometry` selects the placeholder primitive.
  * This module owns the REST mapping and the pure geometry helpers the mark
  * editor stage uses; it adds no new window bridges.
  */
+
+/** Primitive drawn for a class when no GLB is configured. */
+export type MarkGeometry = "box" | "capsule" | "cylinder";
+
+export const MARK_GEOMETRY_VALUES: MarkGeometry[] = [
+  "box",
+  "capsule",
+  "cylinder",
+];
+
+export const MARK_GEOMETRY_LABELS: Record<MarkGeometry, string> = {
+  box: "Box",
+  capsule: "Capsule",
+  cylinder: "Cylinder",
+};
+
+export function parseMarkGeometry(v: unknown): MarkGeometry {
+  const s = String(v ?? "")
+    .trim()
+    .toLowerCase();
+  if (s === "capsule" || s === "cylinder") {
+    return s;
+  }
+  return "box";
+}
+
+/** Capsule/cylinder use a circular plan; box uses independent X/Y. */
+export function isCircularMarkGeometry(kind: MarkGeometry): boolean {
+  return kind === "capsule" || kind === "cylinder";
+}
+
+/**
+ * Plan diameter for circular mark geometries. Stored as equal `xSize`/`ySize`
+ * (legacy rows may differ — use the smaller axis so the circle still fits).
+ */
+export function markDiameter(
+  rec: Pick<Asset3DRecord, "xSize" | "ySize">,
+): number {
+  const x = Number.isFinite(rec.xSize) ? rec.xSize : 0;
+  const y = Number.isFinite(rec.ySize) ? rec.ySize : 0;
+  return Math.max(Math.min(x, y), 0);
+}
+
+/**
+ * Normalize sizes/buffers when switching mark geometry so circular shapes
+ * keep a single plan diameter (and matching plan buffer).
+ */
+export function withMarkGeometry(
+  rec: Asset3DRecord,
+  kind: MarkGeometry,
+): Asset3DRecord {
+  const markGeometry = parseMarkGeometry(kind);
+  if (!isCircularMarkGeometry(markGeometry)) {
+    return { ...rec, markGeometry };
+  }
+  const diameter = markDiameter(rec) || Math.max(rec.xSize, rec.ySize, 0.01);
+  const planBuffer = Math.max(rec.xBuffer, rec.yBuffer, 0);
+  return {
+    ...rec,
+    markGeometry,
+    xSize: diameter,
+    ySize: diameter,
+    xBuffer: planBuffer,
+    yBuffer: planBuffer,
+  };
+}
 
 export type Asset3DRecord = {
   uid: string;
@@ -27,6 +101,8 @@ export type Asset3DRecord = {
   yBuffer: number;
   zBuffer: number;
   markColor: string;
+  /** Placeholder primitive when `modelUrl` is null. */
+  markGeometry: MarkGeometry;
   modelUrl: string | null;
   rotation: [number, number, number];
   translation: [number, number, number];
@@ -80,6 +156,7 @@ export function parseAsset3D(row: Record<string, unknown>): Asset3DRecord {
     yBuffer: num(row.y_buffer_size, 0),
     zBuffer: num(row.z_buffer_size, 0),
     markColor: str(row.mark_color, "#888888") || "#888888",
+    markGeometry: parseMarkGeometry(row.mark_geometry),
     modelUrl,
     rotation: [num(row.rotation_x, 0), num(row.rotation_y, 0), num(row.rotation_z, 0)],
     translation: [
@@ -159,6 +236,7 @@ export function buildAssetFormData(
   const f = (k: string, v: string) => form.append(k, v);
   f("name", rec.name.trim());
   f("mark_color", rec.markColor);
+  f("mark_geometry", parseMarkGeometry(rec.markGeometry));
   f("scale_x", String(rec.scale[0]));
   f("scale_y", String(rec.scale[1]));
   f("scale_z", String(rec.scale[2]));
@@ -259,6 +337,35 @@ export function footprintOf(rec: Asset3DRecord): Footprint {
     },
     height: Math.max(rec.zSize, 0.01),
   };
+}
+
+/**
+ * Build a Z-up mark primitive sized to the class AABB (meters).
+ * Capsule/cylinder use a circular plan with diameter = min(x, y). Place the
+ * mesh at `z = height / 2` so the bottom sits on the floor plane.
+ */
+export function createMarkPrimitiveGeometry(
+  kind: MarkGeometry,
+  size: { x: number; y: number; z: number },
+): BufferGeometry {
+  const x = Math.max(size.x, 0.01);
+  const y = Math.max(size.y, 0.01);
+  const z = Math.max(size.z, 0.01);
+  const shape = parseMarkGeometry(kind);
+  if (shape === "cylinder") {
+    const radius = Math.min(x, y) * 0.5;
+    const geo = new CylinderGeometry(radius, radius, z, 24);
+    geo.rotateX(Math.PI / 2); // Y-up cylinder → Z-up
+    return geo;
+  }
+  if (shape === "capsule") {
+    const radius = Math.min(x, y) * 0.5;
+    const length = Math.max(z - 2 * radius, 0);
+    const geo = new CapsuleGeometry(radius, length, 6, 16);
+    geo.rotateX(Math.PI / 2); // Y-up capsule → Z-up
+    return geo;
+  }
+  return new BoxGeometry(x, y, z);
 }
 
 const DEG = Math.PI / 180;

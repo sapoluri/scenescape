@@ -6,13 +6,18 @@ import { describe, expect, it } from "vitest";
 import {
   applyDefaultPose,
   buildAssetFormData,
+  createMarkPrimitiveGeometry,
   defaultAsset3D,
   footprintOf,
   glbBasename,
+  isCircularMarkGeometry,
+  markDiameter,
   parseAsset3D,
+  parseMarkGeometry,
   readDefaultPose,
   shiftTypeLabel,
   simulateTrackerPath,
+  withMarkGeometry,
 } from "./AssetLibrary";
 
 describe("parseAsset3D", () => {
@@ -47,6 +52,7 @@ describe("parseAsset3D", () => {
     expect(rec.friction).toEqual([0.6, 0.5]);
     expect(rec.shiftType).toBe(1);
     expect(rec.projectToMap).toBe(false);
+    expect(rec.markGeometry).toBe("box");
   });
 
   it("handles nulls and blanks like the Django defaults", () => {
@@ -55,6 +61,19 @@ describe("parseAsset3D", () => {
     expect(rec.modelUrl).toBeNull();
     expect(rec.rotation).toEqual([0, 0, 0]);
     expect(rec.scale).toEqual([1, 1, 1]);
+    expect(rec.markGeometry).toBe("box");
+  });
+
+  it("parses mark_geometry choices", () => {
+    expect(parseAsset3D({ name: "a", mark_geometry: "capsule" }).markGeometry).toBe(
+      "capsule",
+    );
+    expect(parseAsset3D({ name: "a", mark_geometry: "cylinder" }).markGeometry).toBe(
+      "cylinder",
+    );
+    expect(parseAsset3D({ name: "a", mark_geometry: "nope" }).markGeometry).toBe(
+      "box",
+    );
   });
 
   it("falls back to uniform scale when per-axis fields are absent", () => {
@@ -94,6 +113,16 @@ describe("buildAssetFormData", () => {
     expect(form.get("scale_x")).toBe("1");
     expect(form.get("scale_y")).toBe("1");
     expect(form.get("scale_z")).toBe("1");
+    expect(form.get("mark_geometry")).toBe("box");
+  });
+
+  it("encodes mark_geometry", () => {
+    const form = buildAssetFormData({
+      ...defaultAsset3D(),
+      name: "person",
+      markGeometry: "capsule",
+    });
+    expect(form.get("mark_geometry")).toBe("capsule");
   });
 
   it("encodes per-axis scale and mirrors X into legacy scale", () => {
@@ -117,6 +146,46 @@ describe("buildAssetFormData", () => {
     const cleared = buildAssetFormData(rec, { clearModel: true });
     expect(cleared.get("clear_model_3d")).toBe("True");
     expect(cleared.get("model_3d")).toBeNull();
+  });
+});
+
+describe("parseMarkGeometry / createMarkPrimitiveGeometry", () => {
+  it("defaults unknown values to box", () => {
+    expect(parseMarkGeometry(undefined)).toBe("box");
+    expect(parseMarkGeometry("BOX")).toBe("box");
+    expect(parseMarkGeometry("capsule")).toBe("capsule");
+  });
+
+  it("builds distinct Z-up primitives for each kind", () => {
+    const size = { x: 1, y: 0.5, z: 2 };
+    const box = createMarkPrimitiveGeometry("box", size);
+    const capsule = createMarkPrimitiveGeometry("capsule", size);
+    const cylinder = createMarkPrimitiveGeometry("cylinder", size);
+    expect(box.type).toBe("BoxGeometry");
+    expect(capsule.type).toBe("CapsuleGeometry");
+    expect(cylinder.type).toBe("CylinderGeometry");
+    box.dispose();
+    capsule.dispose();
+    cylinder.dispose();
+  });
+
+  it("normalizes circular geometry to a shared diameter", () => {
+    expect(isCircularMarkGeometry("capsule")).toBe(true);
+    expect(isCircularMarkGeometry("box")).toBe(false);
+    const rec = {
+      ...defaultAsset3D(),
+      xSize: 2,
+      ySize: 0.5,
+      xBuffer: 0.1,
+      yBuffer: 0.4,
+    };
+    expect(markDiameter(rec)).toBe(0.5);
+    const circular = withMarkGeometry(rec, "cylinder");
+    expect(circular.markGeometry).toBe("cylinder");
+    expect(circular.xSize).toBe(0.5);
+    expect(circular.ySize).toBe(0.5);
+    expect(circular.xBuffer).toBe(0.4);
+    expect(circular.yBuffer).toBe(0.4);
   });
 });
 
