@@ -9,8 +9,9 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  background: #0e0e12;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--ss-viewport-bg, var(--ss-surface));
+  border-left: 1px solid var(--ss-border, var(--ss-card-border));
+  color: var(--ss-text);
 }
 
 .ss-cal-feed-bar {
@@ -18,7 +19,8 @@
   align-items: baseline;
   gap: 0.75rem;
   padding: 0.4rem 0.65rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
+  background: var(--ss-panel-bg, var(--ss-card-bg));
   flex: none;
 }
 
@@ -27,12 +29,12 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #e9eaee;
+  color: var(--ss-text);
 }
 
 .ss-cal-feed-hint {
   font-size: 11px;
-  color: #8a8b95;
+  color: var(--ss-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -44,6 +46,7 @@
   min-height: 0;
   overflow: hidden;
   touch-action: none;
+  background: var(--ss-viewport-bg, var(--ss-surface));
 }
 
 .ss-cal-feed-stack {
@@ -57,7 +60,7 @@
 }
 
 .ss-cal-feed-stack.is-active {
-  outline: 2px solid rgba(10, 132, 255, 0.55);
+  outline: 2px solid color-mix(in srgb, var(--ss-accent, var(--ss-brand)) 55%, transparent);
   outline-offset: 2px;
 }
 
@@ -76,7 +79,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8a8b95;
+  color: var(--ss-text-muted);
   font-size: 0.85rem;
   padding: 1rem;
   text-align: center;

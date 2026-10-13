@@ -31,8 +31,12 @@ html[data-theme="light"] {
   --ss-status-bad: #da2e56;
   --ss-input-border: #aeaeae;
   --ss-input-border-subtle: #e9e9e9;
+  --ss-input-bg: #f4f5f5;
   --ss-elevated: #ffffff;
   --ss-on-brand: #ffffff;
+  --ss-brand-dim: rgba(0, 84, 174, 0.1);
+  --ss-status-warn: #b86e00;
+  --ss-shadow: 0 12px 32px rgba(0, 30, 80, 0.14);
   --ss-font-sans:
     "Open Sans", "Montserrat", system-ui, -apple-system, sans-serif;
   --ss-font-heading:
@@ -54,6 +58,23 @@ html[data-theme="light"] {
   --ss-motion-base: 180ms;
   --ss-motion-slow: 240ms;
   --ss-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /*
+   * 3D single-pane chrome (right dock, Outliner, Properties, overlays).
+   * Must be theme-aware — CSS falls back to dark hex if these are missing.
+   */
+  --ss-panel-bg: #ffffff;
+  --ss-viewport-bg: #e8eaed;
+  --ss-border: rgba(0, 30, 80, 0.14);
+  --ss-accent: #0054ae;
+  --ss-accent-fill: rgba(0, 84, 174, 0.12);
+  --ss-fill-secondary: rgba(0, 30, 80, 0.06);
+  --ss-fill-tertiary: rgba(0, 30, 80, 0.1);
+  --ss-text-secondary: #5c5c5c;
+  --ss-text-dim: #6e6e73;
+  --ss-hover-bg: rgba(0, 30, 80, 0.08);
+  --ss-danger: #da2e56;
+  --ss-success: #008a00;
 }
 
 html[data-theme="dark"] {
@@ -76,6 +97,23 @@ html[data-theme="dark"] {
   --ss-status-bad: #f0718a;
   --ss-input-border: #4a5563;
   --ss-input-border-subtle: #2c3642;
+  --ss-input-bg: #141a22;
   --ss-elevated: #232d3a;
   --ss-on-brand: #ffffff;
+  --ss-brand-dim: rgba(10, 132, 255, 0.14);
+  --ss-status-warn: #ffb340;
+  --ss-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --ss-panel-bg: #1e1e21;
+  --ss-viewport-bg: #141417;
+  --ss-border: rgba(120, 120, 128, 0.25);
+  --ss-accent: #0a84ff;
+  --ss-accent-fill: rgba(10, 132, 255, 0.22);
+  --ss-fill-secondary: rgba(120, 120, 128, 0.12);
+  --ss-fill-tertiary: rgba(120, 120, 128, 0.16);
+  --ss-text-secondary: #aeaeb2;
+  --ss-text-dim: #a2a4ae;
+  --ss-hover-bg: rgba(127, 140, 160, 0.18);
+  --ss-danger: #ff453a;
+  --ss-success: #30d158;
 }

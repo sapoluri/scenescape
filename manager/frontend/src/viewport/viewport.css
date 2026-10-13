@@ -12,7 +12,7 @@
   width: 100%;
   height: 100%;
   min-height: 420px;
-  background: var(--ss-card-bg, #1b1f23);
+  background: var(--ss-viewport-bg, var(--ss-card-bg));
   overflow: hidden;
 }
 
@@ -22,10 +22,11 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: var(--ss-card-bg, #23262b);
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  background: var(--ss-panel-bg, var(--ss-card-bg));
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
   font-size: 12px;
   z-index: 5;
+  color: var(--ss-text);
 }
 
 .ss-viewport-bar-label {
@@ -33,19 +34,19 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }
 
 .ss-viewport-bar-sep {
   width: 1px;
   height: 18px;
-  background: var(--ss-card-border, #2d333b);
+  background: var(--ss-border, var(--ss-card-border));
 }
 
 .ss-viewport-bar .seg {
   display: flex;
-  background: var(--ss-surface, #1b1f23);
-  border: 1px solid var(--ss-card-border, #2d333b);
+  background: var(--ss-fill-secondary, var(--ss-input-bg));
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 8px;
   padding: 2px;
   gap: 2px;
@@ -54,7 +55,7 @@
 .ss-viewport-bar .seg button {
   border: 0;
   background: transparent;
-  color: var(--ss-text-muted, #a0a0a0);
+  color: var(--ss-text-muted);
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 12px;
@@ -62,20 +63,20 @@
 }
 
 .ss-viewport-bar .seg button:hover {
-  color: var(--ss-text, #fff);
-  background: rgb(128 128 128 / 0.15);
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
 }
 
 .ss-viewport-bar .seg button.on {
-  background: var(--ss-brand, #0a84ff);
-  color: #fff;
+  background: var(--ss-brand);
+  color: var(--ss-on-brand, #fff);
 }
 
 .ss-viewport-bar .vchk {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--ss-text-muted, #a0a0a0);
+  color: var(--ss-text-muted);
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
@@ -84,8 +85,8 @@
 }
 
 .ss-viewport-bar .vchk:hover {
-  background: rgb(128 128 128 / 0.15);
-  color: var(--ss-text, #fff);
+  background: var(--ss-hover-bg);
+  color: var(--ss-text);
 }
 
 .ss-viewport-bar .vchk input {
@@ -96,13 +97,13 @@
   width: 14px;
   height: 14px;
   border-radius: 4px;
-  border: 1px solid var(--ss-card-border, #4b5563);
+  border: 1px solid var(--ss-input-border, var(--ss-card-border));
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
   line-height: 1;
-  color: #fff;
+  color: var(--ss-on-brand, #fff);
   flex: 0 0 14px;
 }
 
@@ -113,12 +114,12 @@
 }
 
 .ss-viewport-bar .vchk.on {
-  color: var(--ss-text, #fff);
+  color: var(--ss-text);
 }
 
 .ss-viewport-bar .vchk.on .box {
-  background: var(--ss-brand, #0a84ff);
-  border-color: var(--ss-brand, #0a84ff);
+  background: var(--ss-brand);
+  border-color: var(--ss-brand);
 }
 
 .ss-viewport-bar .vchk.on .box::after {
@@ -129,6 +130,10 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .ss-viewport-main,
@@ -140,8 +145,12 @@
   flex-direction: column;
 }
 
+/* setSize(..., false) only sets the drawing buffer; CSS must fill the host
+   (same pattern as placement / MarkEditor canvases). */
 .ss-viewport-host canvas {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .ss-viewport-labels {
@@ -179,19 +188,20 @@
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  background: var(--ss-card-bg, #23262b);
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  background: var(--ss-panel-bg, var(--ss-card-bg));
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
   font-size: 12px;
   z-index: 5;
   overflow-x: auto;
+  color: var(--ss-text);
 }
 
 .ss-tools-group {
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--ss-surface, #1b1f23);
-  border: 1px solid var(--ss-card-border, #2d333b);
+  background: var(--ss-fill-secondary, var(--ss-input-bg));
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 8px;
   padding: 2px;
 }
@@ -202,7 +212,7 @@
   gap: 5px;
   border: 0;
   background: transparent;
-  color: var(--ss-text-muted, #a0a0a0);
+  color: var(--ss-text-muted);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 12px;
@@ -211,13 +221,13 @@
 }
 
 .ss-tool-btn:hover:not(:disabled) {
-  color: var(--ss-text, #fff);
-  background: rgb(128 128 128 / 0.15);
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
 }
 
 .ss-tool-btn.on {
-  background: var(--ss-brand, #0a84ff);
-  color: #fff;
+  background: var(--ss-brand);
+  color: var(--ss-on-brand, #fff);
 }
 
 .ss-tool-btn:disabled {
@@ -271,15 +281,15 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: none;
-  color: var(--ss-text, #f5f5f7);
+  color: var(--ss-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
 }
 .ss-viewport-bar-btn:hover {
-  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
-  border-color: var(--ss-card-border, #2d333b);
+  background: var(--ss-hover-bg);
+  border-color: var(--ss-border, var(--ss-card-border));
 }
 .ss-viewport-bar-btn .bi {
   font-size: 14px;

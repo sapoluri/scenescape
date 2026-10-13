@@ -227,16 +227,17 @@ html[data-theme="dark"] select option {
   font-weight: 600;
 }
 
-/* Light / Dark A/B theme toggle */
+/* Light / Dark A/B theme toggle — token-driven for light surfaces;
+   navbar keeps light-on-navy (nav bar is dark in both themes). */
 .ss-theme-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0;
   margin: 0;
   padding: 0.15rem;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--ss-border, rgba(120, 120, 128, 0.28));
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--ss-fill-secondary, rgba(0, 0, 0, 0.12));
 }
 
 .ss-theme-toggle__btn {
@@ -249,23 +250,50 @@ html[data-theme="dark"] select option {
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--ss-text-muted, #808080);
   background: transparent;
   cursor: pointer;
 }
 
 .ss-theme-toggle__btn:hover,
 .ss-theme-toggle__btn:focus {
-  color: #fff;
+  color: var(--ss-text, #000);
   outline: none;
 }
 
 .ss-theme-toggle__btn[aria-pressed="true"] {
   color: var(--ss-ink);
-  background: var(--ss-card-bg);
+  background: var(--ss-elevated, var(--ss-card-bg));
+  box-shadow: 0 0 0 1px var(--ss-border, rgba(120, 120, 128, 0.2));
 }
 
 html[data-theme="dark"] .ss-theme-toggle__btn[aria-pressed="true"] {
+  color: #1a2f4a;
+  background: #f2f4f7;
+  box-shadow: none;
+}
+
+.navbar .ss-theme-toggle {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.navbar .ss-theme-toggle__btn {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.navbar .ss-theme-toggle__btn:hover,
+.navbar .ss-theme-toggle__btn:focus {
+  color: #fff;
+}
+
+.navbar .ss-theme-toggle__btn[aria-pressed="true"] {
+  color: var(--ss-ink);
+  background: var(--ss-card-bg);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .navbar .ss-theme-toggle__btn[aria-pressed="true"] {
   color: #1a2f4a;
   background: #f2f4f7;
 }

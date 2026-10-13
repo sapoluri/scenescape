@@ -3,15 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/*
+ * Calibrate bar: same chrome family as the top bars, with a brand tint so
+ * it reads as a distinct mode strip in both light and dark.
+ */
 .ss-cal-wizard {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
   padding: 0.35rem 0.65rem;
-  background: color-mix(in srgb, #1e1e22 92%, #0a84ff 8%);
-  border-bottom: 1px solid rgba(10, 132, 255, 0.35);
+  background: color-mix(
+    in srgb,
+    var(--ss-panel-bg, var(--ss-card-bg)) 92%,
+    var(--ss-brand) 8%
+  );
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--ss-brand) 35%, var(--ss-border, transparent));
   min-height: 2.25rem;
+  color: var(--ss-text);
 }
 
 .ss-cal-wizard-badge {
@@ -21,9 +31,9 @@
   text-transform: uppercase;
   padding: 0.2rem 0.45rem;
   border-radius: 4px;
-  background: rgba(10, 132, 255, 0.25);
-  border: 1px solid rgba(10, 132, 255, 0.55);
-  color: #e9eaee;
+  background: var(--ss-brand-dim, var(--ss-accent-fill));
+  border: 1px solid color-mix(in srgb, var(--ss-brand) 55%, transparent);
+  color: var(--ss-brand);
   flex: none;
 }
 
@@ -37,16 +47,20 @@
   max-width: 12rem;
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #17181c;
-  color: #e9eaee;
+  border: 1px solid var(--ss-input-border);
+  background: color-mix(
+    in srgb,
+    var(--ss-input-bg, var(--ss-elevated)) 88%,
+    var(--ss-brand) 12%
+  );
+  color: var(--ss-text);
   font: inherit;
   font-size: 12px;
 }
 
 .ss-cal-wizard-step {
   font-size: 12px;
-  color: #a2a4ae;
+  color: var(--ss-text-secondary, var(--ss-text-muted));
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -59,18 +73,33 @@
   gap: 0.35rem;
   flex: none;
   font-size: 12px;
-  color: #a2a4ae;
+  color: var(--ss-text-secondary, var(--ss-text-muted));
 }
 
 .ss-cal-wizard-opacity input[type="range"] {
   width: 5.5rem;
-  accent-color: #0a84ff;
+  accent-color: var(--ss-accent, var(--ss-brand));
 }
 
 .ss-cal-wizard-opacity-val {
   min-width: 2.25rem;
   font-variant-numeric: tabular-nums;
-  color: #e9eaee;
+  color: var(--ss-text);
+}
+
+/* Same tool-button language as the edit toolbar; slightly stronger idle text. */
+.ss-cal-wizard .ss-tool-btn {
+  color: var(--ss-text-secondary, var(--ss-text));
+}
+
+.ss-cal-wizard .ss-tool-btn:hover:not(:disabled) {
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
+}
+
+.ss-cal-wizard .ss-tool-btn.ss-tool-save.is-dirty {
+  color: var(--ss-brand);
+  font-weight: 700;
 }
 
 .ss-cal-wizard-exit {
@@ -91,6 +120,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--ss-viewport-bg, var(--ss-surface));
 }
 
 .ss-viewport.is-calibrating .ss-viewport-host {

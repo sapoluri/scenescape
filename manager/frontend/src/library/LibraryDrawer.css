@@ -13,10 +13,10 @@
   z-index: 900;
   display: flex;
   flex-direction: column;
-  background: var(--ss-card-bg, #23262b);
-  border-right: 1px solid var(--ss-card-border, #2d333b);
-  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
-  color: var(--ss-text, #e6e6e6);
+  background: var(--ss-panel-bg, var(--ss-card-bg));
+  border-right: 1px solid var(--ss-border, var(--ss-card-border));
+  box-shadow: var(--ss-shadow, 8px 0 28px rgba(0, 0, 0, 0.2));
+  color: var(--ss-text);
   font-size: 13px;
 }
 
@@ -27,7 +27,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-lib-drawer-title {
@@ -42,15 +42,15 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }
 
 .ss-lib-drawer-count {
   font-size: 11px;
   font-weight: 600;
-  color: var(--ss-text-muted, #808080);
-  background: var(--ss-input-bg, #1b1f23);
-  border: 1px solid var(--ss-card-border, #2d333b);
+  color: var(--ss-text-muted);
+  background: var(--ss-fill-secondary, var(--ss-input-bg));
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 999px;
   padding: 1px 8px;
 }
@@ -59,7 +59,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -68,28 +68,28 @@
 }
 
 .ss-lib-drawer-close:hover {
-  color: var(--ss-text, #e6e6e6);
-  background: var(--ss-hover-bg, #2d333b);
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
 }
 
 .ss-lib-drawer-search {
   flex: 0 0 auto;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-lib-drawer-search input {
   width: 100%;
   padding: 6px 10px;
-  border: 1px solid var(--ss-input-border, #3a3f47);
+  border: 1px solid var(--ss-input-border);
   border-radius: 6px;
-  background: var(--ss-input-bg, #1b1f23);
-  color: var(--ss-text, #e6e6e6);
+  background: var(--ss-input-bg, var(--ss-elevated));
+  color: var(--ss-text);
   font-size: 12px;
 }
 
 .ss-lib-drawer-search input::placeholder {
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }
 
 .ss-lib-drawer-body {
@@ -103,12 +103,12 @@
 .ss-lib-drawer-error {
   margin: 12px 8px;
   font-size: 12px;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   line-height: 1.5;
 }
 
 .ss-lib-drawer-error {
-  color: var(--ss-status-bad, #ff6b6b);
+  color: var(--ss-status-bad);
 }
 
 .ss-lib-card-list {
@@ -127,16 +127,17 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--ss-card-border, #2d333b);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 8px;
-  background: var(--ss-input-bg, #1b1f23);
-  color: var(--ss-text, #e6e6e6);
+  background: var(--ss-input-bg, var(--ss-elevated));
+  color: var(--ss-text);
   cursor: pointer;
   text-align: left;
 }
 
 .ss-lib-card:hover {
-  border-color: var(--ss-brand, #0a84ff);
+  border-color: var(--ss-accent, var(--ss-brand));
+  background: var(--ss-hover-bg);
 }
 
 .ss-lib-card-swatch {
@@ -144,7 +145,7 @@
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-lib-card-main {
@@ -165,7 +166,7 @@
 
 .ss-lib-card-glb {
   font-size: 11px;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -175,7 +176,7 @@
 .ss-lib-card-meta {
   flex: 0 0 auto;
   font-size: 10px;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   font-family: var(--ss-font-mono, monospace);
 }
 
@@ -186,32 +187,38 @@
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
-  border-top: 1px solid var(--ss-card-border, #2d333b);
+  border-top: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-lib-new-btn {
   appearance: none;
-  border: 1px solid var(--ss-brand, #0a84ff);
+  border: 1px solid var(--ss-brand);
   border-radius: 6px;
-  background: var(--ss-brand, #0a84ff);
-  color: #fff;
+  background: var(--ss-brand);
+  color: var(--ss-on-brand, #fff);
   font-size: 12px;
   font-weight: 600;
   padding: 6px 12px;
   cursor: pointer;
 }
 
+.ss-lib-new-btn:hover {
+  background: var(--ss-brand-hover, var(--ss-brand));
+  border-color: var(--ss-brand-hover, var(--ss-brand));
+}
+
 .ss-lib-hint {
   font-size: 11px;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }
 
 .ss-lib-hint kbd {
   font-family: var(--ss-font-mono, monospace);
   font-size: 10px;
-  border: 1px solid var(--ss-card-border, #2d333b);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-bottom-width: 2px;
   border-radius: 4px;
   padding: 1px 5px;
-  background: var(--ss-input-bg, #1b1f23);
+  background: var(--ss-fill-secondary, var(--ss-input-bg));
+  color: var(--ss-text);
 }

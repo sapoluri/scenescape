@@ -12,8 +12,12 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 10, 14, 0.55);
+  background: color-mix(in srgb, var(--ss-surface) 45%, transparent);
   backdrop-filter: blur(2px);
+}
+
+html[data-theme="dark"] .ss-mark-editor-backdrop {
+  background: rgba(8, 10, 14, 0.55);
 }
 
 .ss-mark-editor {
@@ -23,10 +27,10 @@
   height: min(780px, 90vh);
   border-radius: 12px;
   overflow: hidden;
-  background: var(--ss-card-bg, #1b1f23);
-  color: var(--ss-text, #e6e6e6);
-  border: 1px solid var(--ss-card-border, #2d333b);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  background: var(--ss-panel-bg, var(--ss-card-bg));
+  color: var(--ss-text);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
+  box-shadow: var(--ss-shadow, 0 24px 64px rgba(0, 0, 0, 0.35));
 }
 
 .ss-mark-editor-header {
@@ -35,8 +39,8 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  background: var(--ss-card-bg, #23262b);
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  background: var(--ss-elevated, var(--ss-card-bg));
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-mark-editor-title {
@@ -57,16 +61,17 @@
 
 .ss-mark-editor-segmented {
   display: inline-flex;
-  border: 1px solid var(--ss-card-border, #2d333b);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 8px;
   overflow: hidden;
+  background: var(--ss-fill-secondary, transparent);
 }
 
 .ss-mark-editor-seg {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   font-size: 12px;
   font-weight: 600;
   padding: 6px 12px;
@@ -74,12 +79,12 @@
 }
 
 .ss-mark-editor-seg + .ss-mark-editor-seg {
-  border-left: 1px solid var(--ss-card-border, #2d333b);
+  border-left: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-mark-editor-seg.is-active {
-  background: var(--ss-brand, #0a84ff);
-  color: #fff;
+  background: var(--ss-brand);
+  color: var(--ss-on-brand, #fff);
 }
 
 .ss-mark-editor-sim {
@@ -87,7 +92,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--ss-text, #e6e6e6);
+  color: var(--ss-text);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -95,7 +100,7 @@
 .ss-mark-editor-dirty {
   font-size: 11px;
   font-weight: 700;
-  color: var(--ss-status-warn, #ffb340);
+  color: var(--ss-status-warn);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -111,7 +116,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -120,17 +125,17 @@
 }
 
 .ss-mark-editor-close:hover {
-  color: var(--ss-text, #e6e6e6);
-  background: var(--ss-hover-bg, #2d333b);
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
 }
 
 .ss-mark-editor-simbar {
   flex: 0 0 auto;
   padding: 6px 12px;
   font-size: 12px;
-  color: var(--ss-text, #e6e6e6);
-  background: var(--ss-brand-dim, rgba(10, 132, 255, 0.12));
-  border-bottom: 1px solid var(--ss-card-border, #2d333b);
+  color: var(--ss-text);
+  background: var(--ss-brand-dim);
+  border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
 }
 
 .ss-mark-editor-main {
@@ -143,7 +148,7 @@
   flex: 1 1 auto;
   min-width: 0;
   position: relative;
-  background: #14171b;
+  background: var(--ss-viewport-bg);
 }
 
 .ss-mark-editor-stage canvas {
@@ -156,21 +161,21 @@
   flex: 0 0 340px;
   min-height: 0;
   overflow-y: auto;
-  border-left: 1px solid var(--ss-card-border, #2d333b);
-  background: var(--ss-card-bg, #23262b);
+  border-left: 1px solid var(--ss-border, var(--ss-card-border));
+  background: var(--ss-elevated, var(--ss-card-bg));
   padding: 12px;
 }
 
 .ss-mark-editor-status {
   margin: 12px;
   font-size: 12px;
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }
 
 .ss-mark-editor-error {
   margin: 0 0 12px;
   font-size: 12px;
-  color: var(--ss-status-bad, #ff6b6b);
+  color: var(--ss-status-bad);
 }
 
 .ss-mark-editor-triple {
@@ -207,8 +212,13 @@
 .ss-mark-editor-footnote {
   margin: -0.25rem 0 0.85rem;
   font-size: 11px;
-  color: var(--ss-text-muted, #808080);
-  font-family: var(--ss-font-mono, monospace);
+  line-height: 1.4;
+  color: var(--ss-text-muted);
+  font-family: var(--ss-font-sans, sans-serif);
+}
+
+.ss-mark-editor-footnote--warn {
+  color: var(--ss-danger, var(--ss-status-bad));
 }
 
 .ss-lib-color-row {
@@ -221,14 +231,14 @@
   width: 44px;
   height: 30px;
   padding: 2px;
-  border: 1px solid var(--ss-input-border, #3a3f47);
+  border: 1px solid var(--ss-input-border);
   border-radius: 6px;
-  background: var(--ss-input-bg, #1b1f23);
+  background: var(--ss-input-bg, var(--ss-elevated));
   cursor: pointer;
 }
 
 .ss-lib-color-row output {
   font-size: 12px;
   font-family: var(--ss-font-mono, monospace);
-  color: var(--ss-text-muted, #808080);
+  color: var(--ss-text-muted);
 }

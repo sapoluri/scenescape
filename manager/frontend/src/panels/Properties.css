@@ -119,14 +119,14 @@
 }
 
 .ss-prop-save.is-dirty {
-  background: rgba(10, 132, 255, 0.2);
-  border-color: rgba(10, 132, 255, 0.55);
-  color: #8ec9ff;
+  background: color-mix(in srgb, var(--ss-accent, #0a84ff) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ss-accent, #0a84ff) 55%, transparent);
+  color: var(--ss-accent, #0a84ff);
 }
 
 .ss-prop-save:hover:not(:disabled).is-dirty {
-  background: rgba(10, 132, 255, 0.3);
-  color: #cce4ff;
+  background: color-mix(in srgb, var(--ss-accent, #0a84ff) 28%, transparent);
+  color: var(--ss-brand-hover, var(--ss-accent, #0a84ff));
 }
 
 .ss-prop-save:disabled {
@@ -148,9 +148,9 @@
   gap: 6px;
   padding: 7px 12px;
   border-radius: 7px;
-  background: rgba(10, 132, 255, 0.14);
-  border: 1px solid rgba(10, 132, 255, 0.45);
-  color: #5eb2ff;
+  background: color-mix(in srgb, var(--ss-accent, #0a84ff) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ss-accent, #0a84ff) 45%, transparent);
+  color: var(--ss-accent, #0a84ff);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -159,8 +159,8 @@
 }
 
 .ss-prop-calibrate:hover:not(:disabled) {
-  background: rgba(10, 132, 255, 0.24);
-  color: #8ec9ff;
+  background: color-mix(in srgb, var(--ss-accent, #0a84ff) 22%, transparent);
+  color: var(--ss-brand-hover, var(--ss-accent, #0a84ff));
 }
 
 .ss-prop-calibrate:disabled {
@@ -169,14 +169,13 @@
 }
 
 .ss-prop-danger {
-  background: rgba(255, 69, 58, 0.12);
-  border-color: rgba(255, 69, 58, 0.45);
-  color: #ff8a80;
+  background: color-mix(in srgb, var(--ss-danger, #ff453a) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ss-danger, #ff453a) 45%, transparent);
+  color: var(--ss-danger, #ff453a);
 }
 
 .ss-prop-danger:hover {
-  background: rgba(255, 69, 58, 0.22);
-  color: #ffb4ae;
+  background: color-mix(in srgb, var(--ss-danger, #ff453a) 18%, transparent);
 }
 
 .ss-prop-select {
