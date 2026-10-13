@@ -120,6 +120,9 @@ function proxyMaterial(): MeshBasicMaterial {
 /* Regions                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Visible slab height (m) for non-volumetric ROIs — avoids a near-invisible floor sheet. */
+const FLAT_REGION_HEIGHT = 0.15;
+
 function buildRegion(e: RegionEntity): EntityNodes {
   const group = new Group();
   const baseColor = new Color(e.color);
@@ -130,40 +133,56 @@ function buildRegion(e: RegionEntity): EntityNodes {
   const shape = new Shape(
     e.points.map(([x, y]) => new Vector2(x - cx, y - cy)),
   );
-  let geo: BufferGeometry;
-  if (e.volumetric && e.height > 0.01) {
-    geo = new ExtrudeGeometry(shape, { depth: e.height, bevelEnabled: false });
-  } else {
-    geo = new ShapeGeometry(shape);
-  }
+  const isVolumetric = e.volumetric && e.height > 0.01;
+  const solidHeight = isVolumetric ? e.height : FLAT_REGION_HEIGHT;
+  const idleOpacity = isVolumetric ? 0.22 : 0.45;
+  const selectedOpacity = isVolumetric ? 0.42 : 0.62;
+  // Thin extrusion (not ShapeGeometry) so flat ROIs keep side faces from oblique views.
+  const geo = new ExtrudeGeometry(shape, {
+    depth: solidHeight,
+    bevelEnabled: false,
+  });
   const fillMat = new MeshStandardMaterial({
     color: baseColor.clone(),
+    emissive: baseColor.clone(),
+    emissiveIntensity: isVolumetric ? 0.05 : 0.22,
     transparent: true,
-    opacity: 0.22,
+    opacity: idleOpacity,
     roughness: 0.85,
     side: DoubleSide,
     depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
   const fill = new Mesh(geo, fillMat);
-  const edgeMat = new LineBasicMaterial({ color: baseColor.clone() });
+  const edgeMat = new LineBasicMaterial({
+    color: baseColor.clone(),
+    transparent: true,
+    opacity: isVolumetric ? 0.9 : 1,
+  });
   const edges = new LineSegments(new EdgesGeometry(geo), edgeMat);
-  if (!e.volumetric || e.height <= 0.01) {
-    fill.position.z = 0.05;
-    edges.position.z = 0.05;
+  // Lift flat slabs slightly above the map plane to reduce z-fighting.
+  if (!isVolumetric) {
+    fill.position.z = 0.04;
+    edges.position.z = 0.04;
   }
   const { min, max } = bboxOf(e.points);
+  const proxyH = isVolumetric
+    ? Math.max(e.height, 0.5)
+    : Math.max(FLAT_REGION_HEIGHT, 0.35);
   const proxy = new Mesh(
     new BoxGeometry(
       Math.max(max[0] - min[0], 0.5),
       Math.max(max[1] - min[1], 0.5),
-      e.volumetric ? Math.max(e.height, 0.5) : 1,
+      proxyH,
     ),
     proxyMaterial(),
   );
   proxy.position.set(
     (min[0] + max[0]) / 2 - cx,
     (min[1] + max[1]) / 2 - cy,
-    (e.volumetric ? Math.max(e.height, 0.5) : 1) / 2,
+    proxyH / 2,
   );
   pivot.add(fill, edges, proxy);
   group.add(pivot);
@@ -172,10 +191,17 @@ function buildRegion(e: RegionEntity): EntityNodes {
   return {
     group,
     gizmoTarget: pivot,
-    labelPos: new Vector3(cx, cy, (e.volumetric ? e.height : 0) + 0.6),
+    labelPos: new Vector3(cx, cy, solidHeight + 0.6),
     setSelected: (on: boolean) => {
       edgeMat.color.set(on ? "#ffffff" : e.color);
-      fillMat.opacity = on ? 0.42 : 0.22;
+      fillMat.opacity = on ? selectedOpacity : idleOpacity;
+      fillMat.emissiveIntensity = on
+        ? isVolumetric
+          ? 0.12
+          : 0.35
+        : isVolumetric
+          ? 0.05
+          : 0.22;
     },
     dispose: () => disposeObject(group),
   };
