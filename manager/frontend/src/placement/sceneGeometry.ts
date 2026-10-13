@@ -30,6 +30,27 @@ function asPositiveNumber(value: unknown): number | null {
   return n;
 }
 
+/** Default pixels-per-meter when a scene has no scale set. */
+export const DEFAULT_MAP_PPM = 100;
+
+/**
+ * Convert a map image size + scene scale (pixels per meter) into floor-plane
+ * extents in meters. Same convention as the 2D map (`px / scale`).
+ */
+export function mapPlaneSizeMeters(
+  widthPx: number,
+  heightPx: number,
+  scalePpm: number | null | undefined,
+): { widthM: number; heightM: number; ppm: number } {
+  const ppm =
+    scalePpm != null && Number.isFinite(scalePpm) && scalePpm > 0
+      ? scalePpm
+      : DEFAULT_MAP_PPM;
+  const w = Math.max(widthPx, 1);
+  const h = Math.max(heightPx, 1);
+  return { widthM: w / ppm, heightM: h / ppm, ppm };
+}
+
 export function isGlbUrl(url: string | null): boolean {
   if (!url) {
     return false;

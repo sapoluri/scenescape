@@ -100,11 +100,17 @@ export function useSceneMap(
       if (!props.mapUrl) {
         return null;
       }
+      const scale =
+        props.mapScale != null &&
+        Number.isFinite(props.mapScale) &&
+        props.mapScale > 0
+          ? props.mapScale
+          : null;
       return {
         id: props.sceneId,
         name: props.sceneName,
         mapUrl: props.mapUrl,
-        scale: props.mapScale,
+        scale,
         isGlb: isGlbUrl(props.mapUrl),
         meshPose: { ...IDENTITY_POSE },
       };
@@ -113,8 +119,8 @@ export function useSceneMap(
     (async () => {
       clearMap();
       let spec = bootstrapSpec();
-      // GLB mesh pose lives on REST, not bootstrap — fetch when needed.
-      if (props.authToken && (spec?.isGlb || !spec)) {
+      // Prefer REST for authoritative pixels-per-meter scale and GLB mesh pose.
+      if (props.authToken) {
         try {
           const row = await api.getScene(props.authToken, props.sceneId);
           if (cancelled) {
@@ -122,7 +128,15 @@ export function useSceneMap(
           }
           const fromRest = sceneGeometryFromRest(row ?? {});
           if (fromRest.mapUrl) {
-            spec = fromRest;
+            spec = {
+              ...fromRest,
+              id: fromRest.id || props.sceneId,
+              name: fromRest.name || props.sceneName,
+              // Keep a bootstrap scale only if REST omitted it.
+              scale: fromRest.scale ?? spec?.scale ?? null,
+            };
+          } else if (spec && fromRest.scale) {
+            spec = { ...spec, scale: fromRest.scale };
           }
         } catch (err) {
           console.warn("Scene map REST fetch failed", err);

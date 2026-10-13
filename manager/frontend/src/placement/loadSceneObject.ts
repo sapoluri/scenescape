@@ -14,7 +14,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { applyScenePoseToObject } from "./poseThree";
-import type { SceneGeometrySpec } from "./sceneGeometry";
+import { mapPlaneSizeMeters, type SceneGeometrySpec } from "./sceneGeometry";
 
 function loadImageSize(
   url: string,
@@ -45,9 +45,12 @@ async function loadMapPlane(
     throw new Error("Scene has no map image");
   }
   const pixels = await loadImageSize(spec.mapUrl);
-  const ppm = spec.scale && spec.scale > 0 ? spec.scale : 100;
-  const widthM = pixels.width / ppm;
-  const heightM = pixels.height / ppm;
+  // Scene settings "Scale (px per meter)" → world meters on the Z-up floor.
+  const { widthM, heightM } = mapPlaneSizeMeters(
+    pixels.width,
+    pixels.height,
+    spec.scale,
+  );
   const texture = await loadTexture(spec.mapUrl);
   texture.colorSpace = SRGBColorSpace;
   const material = new MeshBasicMaterial({
