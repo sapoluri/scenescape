@@ -14,15 +14,15 @@ describe("poseMarkModel", () => {
       name: "forklift",
       translation: [1, 2, 0.5] as [number, number, number],
       rotation: [0, 0, 90] as [number, number, number],
-      scale: [2, 3, 4] as [number, number, number],
+      scale: [2, 2, 2] as [number, number, number],
     };
     poseMarkModel(g, rec);
     expect(g.position.x).toBeCloseTo(1);
     expect(g.position.y).toBeCloseTo(2);
     expect(g.position.z).toBeCloseTo(0.5);
     expect(g.scale.x).toBeCloseTo(2);
-    expect(g.scale.y).toBeCloseTo(3);
-    expect(g.scale.z).toBeCloseTo(4);
+    expect(g.scale.y).toBeCloseTo(2);
+    expect(g.scale.z).toBeCloseTo(2);
     expect(g.rotation.z).toBeCloseTo(Math.PI / 2);
   });
 
@@ -37,7 +37,7 @@ describe("poseMarkModel", () => {
       ...defaultAsset3D(),
       translation: [0.25, -0.5, 0.1] as [number, number, number],
       rotation: [10, 20, 30] as [number, number, number],
-      scale: [1.5, 1.5, 2] as [number, number, number],
+      scale: [1.5, 1.5, 1.5] as [number, number, number],
     };
     poseMarkModel(a, rec);
     applyDefaultPose(b, rec);

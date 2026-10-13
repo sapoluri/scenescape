@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { Object3D } from "three";
+import { BoxGeometry, Object3D } from "three";
 import { describe, expect, it } from "vitest";
 import {
   applyDefaultPose,
@@ -12,6 +12,8 @@ import {
   glbBasename,
   isCircularMarkGeometry,
   markDiameter,
+  MARK_GEOMETRY_HELP,
+  markSizeLabel,
   parseAsset3D,
   parseMarkGeometry,
   readDefaultPose,
@@ -45,7 +47,13 @@ describe("parseAsset3D", () => {
     expect(rec.markColor).toBe("#ff0000");
     expect(rec.rotation).toEqual([90, 0, 0]);
     expect(rec.translation).toEqual([0, 0, 0.4]);
-    expect(rec.scale).toEqual([1.5, 2, 0.5]);
+    // Non-uniform legacy axes collapse to a uniform geometric mean.
+    expect(rec.scale[0]).toBeCloseTo(rec.scale[1], 9);
+    expect(rec.scale[1]).toBeCloseTo(rec.scale[2], 9);
+    expect(rec.scale[0]).toBeCloseTo(
+      Math.exp((Math.log(1.5) + Math.log(2) + Math.log(0.5)) / 3),
+      9,
+    );
     expect(rec.rotationFromVelocity).toBe(true);
     expect(rec.modelUrl).toBe("/media/models/forklift.glb");
     expect(rec.geometricCenter).toEqual([0.1, 0, 0.2]);
@@ -125,16 +133,16 @@ describe("buildAssetFormData", () => {
     expect(form.get("mark_geometry")).toBe("capsule");
   });
 
-  it("encodes per-axis scale and mirrors X into legacy scale", () => {
+  it("encodes uniform scale on all axes and legacy scale", () => {
     const rec = {
       ...defaultAsset3D(),
       name: "crate",
-      scale: [1.25, 2, 0.75] as [number, number, number],
+      scale: [1.25, 1.25, 1.25] as [number, number, number],
     };
     const form = buildAssetFormData(rec);
     expect(form.get("scale_x")).toBe("1.25");
-    expect(form.get("scale_y")).toBe("2");
-    expect(form.get("scale_z")).toBe("0.75");
+    expect(form.get("scale_y")).toBe("1.25");
+    expect(form.get("scale_z")).toBe("1.25");
     expect(form.get("scale")).toBe("1.25");
   });
 
@@ -167,6 +175,35 @@ describe("parseMarkGeometry / createMarkPrimitiveGeometry", () => {
     box.dispose();
     capsule.dispose();
     cylinder.dispose();
+  });
+
+  it("uses x/y/z as full box extents (not half-sizes)", () => {
+    const box = createMarkPrimitiveGeometry("box", {
+      x: 1.2,
+      y: 0.8,
+      z: 2.4,
+    }) as BoxGeometry;
+    expect(box.parameters).toMatchObject({
+      width: 1.2,
+      height: 0.8,
+      depth: 2.4,
+    });
+    box.dispose();
+  });
+
+  it("documents absolute size semantics per geometry", () => {
+    expect(MARK_GEOMETRY_HELP.box).toMatch(/full extents/i);
+    expect(MARK_GEOMETRY_HELP.capsule).toMatch(/not radius/i);
+    expect(MARK_GEOMETRY_HELP.cylinder).toMatch(/not radius/i);
+    expect(
+      markSizeLabel({
+        ...defaultAsset3D(),
+        markGeometry: "capsule",
+        xSize: 0.5,
+        ySize: 0.5,
+        zSize: 1.7,
+      }),
+    ).toBe("⌀0.5×1.7 m");
   });
 
   it("normalizes circular geometry to a shared diameter", () => {
@@ -213,27 +250,42 @@ describe("footprintOf", () => {
 });
 
 describe("default pose round-trip", () => {
+  it("can skip pose scale for absolute-sized mark primitives", () => {
+    const obj = new Object3D();
+    applyDefaultPose(
+      obj,
+      {
+        ...defaultAsset3D(),
+        scale: [2, 3, 4] as [number, number, number],
+        translation: [1, 0, 0] as [number, number, number],
+      },
+      { applyScale: false },
+    );
+    expect(obj.scale.toArray()).toEqual([1, 1, 1]);
+    expect(obj.position.x).toBeCloseTo(1, 9);
+  });
+
   it("applyDefaultPose then readDefaultPose is stable", () => {
     const rec = {
       ...defaultAsset3D(),
       rotation: [10, -20, 30] as [number, number, number],
       translation: [1.5, -0.5, 0.25] as [number, number, number],
-      scale: [2, 1.5, 0.5] as [number, number, number],
+      scale: [2, 2, 2] as [number, number, number],
     };
     const obj = new Object3D();
     applyDefaultPose(obj, rec);
     expect(obj.position.x).toBeCloseTo(1.5, 9);
     expect(obj.scale.x).toBeCloseTo(2, 9);
-    expect(obj.scale.y).toBeCloseTo(1.5, 9);
-    expect(obj.scale.z).toBeCloseTo(0.5, 9);
+    expect(obj.scale.y).toBeCloseTo(2, 9);
+    expect(obj.scale.z).toBeCloseTo(2, 9);
     const back = readDefaultPose(obj);
     expect(back.rotation[0]).toBeCloseTo(10, 6);
     expect(back.rotation[1]).toBeCloseTo(-20, 6);
     expect(back.rotation[2]).toBeCloseTo(30, 6);
     expect(back.translation).toEqual([1.5, -0.5, 0.25]);
     expect(back.scale[0]).toBeCloseTo(2, 9);
-    expect(back.scale[1]).toBeCloseTo(1.5, 9);
-    expect(back.scale[2]).toBeCloseTo(0.5, 9);
+    expect(back.scale[1]).toBeCloseTo(2, 9);
+    expect(back.scale[2]).toBeCloseTo(2, 9);
   });
 });
 

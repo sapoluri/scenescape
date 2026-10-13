@@ -53,8 +53,11 @@ import {
   glbBasename,
   isCircularMarkGeometry,
   markDiameter,
+  MARK_GEOMETRY_HELP,
   MARK_GEOMETRY_LABELS,
   MARK_GEOMETRY_VALUES,
+  uniformScaleOf,
+  uniformScaleTriple,
   parseMarkGeometry,
   readDefaultPose,
   saveAssetRecord,
@@ -402,16 +405,37 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
       dragging = Boolean(ev.value);
       orbit.enabled = !dragging;
       if (!dragging) {
-        // Bake the finished drag into the record (per-axis scale).
+        // Bake the finished drag into the record.
         const r = recRef.current;
         if (r) {
           const baked = readDefaultPose(poseGroup);
-          setRec({ ...r, rotation: baked.rotation, translation: baked.translation, scale: baked.scale });
+          setRec({
+            ...r,
+            rotation: baked.rotation,
+            translation: baked.translation,
+            // Placeholder pose forces scale=1; GLB scale is uniform.
+            scale: placeholder
+              ? r.scale
+              : uniformScaleTriple(uniformScaleOf(baked.scale)),
+          });
           setDirty(true);
         }
       }
     };
     gizmo.addEventListener("dragging-changed", onDraggingChanged);
+    // Keep GLB scale uniform while the scale gizmo is dragged.
+    const onObjectChange = () => {
+      if (gizmo.mode !== "scale" || placeholder) {
+        return;
+      }
+      const s = uniformScaleOf([
+        poseGroup.scale.x,
+        poseGroup.scale.y,
+        poseGroup.scale.z,
+      ]);
+      poseGroup.scale.set(s, s, s);
+    };
+    gizmo.addEventListener("objectChange", onObjectChange);
     const setGizmoMode = (m: GizmoMode) => {
       gizmo.setMode(m);
       gizmo.showX = true;
@@ -481,6 +505,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         window.cancelAnimationFrame(frame);
         ro.disconnect();
         gizmo.removeEventListener("dragging-changed", onDraggingChanged);
+        gizmo.removeEventListener("objectChange", onObjectChange);
         gizmo.detach();
         gizmo.dispose();
         orbit.dispose();
@@ -507,17 +532,21 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
   }, []);
 
   /* Sync record -> stage (pose, model, footprints). Skipped mid-drag so the
-     gizmo never fights the fields. */
+     gizmo never fights the fields. Placeholder primitives are already sized
+     from x/y/z meters — apply pose scale only when a GLB is shown. */
+  const poseUsesScale = Boolean((rec?.modelUrl || modelFile) && !clearModel);
   const poseKey = rec
-    ? [...rec.rotation, ...rec.translation, ...rec.scale].join(",")
+    ? [...rec.rotation, ...rec.translation, ...rec.scale, poseUsesScale].join(
+        ",",
+      )
     : "";
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage || !rec || stage.dragging()) {
       return;
     }
-    applyDefaultPose(stage.poseGroup, rec);
-  }, [rec, poseKey]);
+    applyDefaultPose(stage.poseGroup, rec, { applyScale: poseUsesScale });
+  }, [rec, poseKey, poseUsesScale]);
 
   const modelKey = rec ? `${rec.modelUrl}` : "";
   useEffect(() => {
@@ -529,6 +558,12 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
   useEffect(() => {
     stageRef.current?.setGizmoMode(gizmoMode);
   }, [gizmoMode]);
+
+  useEffect(() => {
+    if (!poseUsesScale && gizmoMode === "scale") {
+      setGizmoMode("translate");
+    }
+  }, [poseUsesScale, gizmoMode]);
 
   useEffect(() => {
     stageRef.current?.setSimulate(simulate);
@@ -559,7 +594,7 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
         setGizmoMode("translate");
       } else if (k === "e") {
         setGizmoMode("rotate");
-      } else if (k === "r") {
+      } else if (k === "r" && poseUsesScale) {
         setGizmoMode("scale");
       }
     };
@@ -711,7 +746,9 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
               [
                 ["translate", "Move", "W"],
                 ["rotate", "Rotate", "E"],
-                ["scale", "Scale", "R"],
+                ...(poseUsesScale
+                  ? ([["scale", "Scale", "R"]] as [GizmoMode, string, string][])
+                  : []),
               ] as [GizmoMode, string, string][]
             ).map(([m, label, key]) => (
               <button
@@ -719,7 +756,11 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
                 type="button"
                 className={`ss-mark-editor-seg${gizmoMode === m ? " is-active" : ""}`}
                 onClick={() => setGizmoMode(m)}
-                title={`${label} (${key})`}
+                title={
+                  m === "scale"
+                    ? `${label} (${key}) — uniform`
+                    : `${label} (${key})`
+                }
               >
                 {label}
               </button>
@@ -850,7 +891,11 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
 
               <FormSection
                 title="Default pose"
-                description="Gizmo (W/E/R) or type exact values — they stay in sync."
+                description={
+                  poseUsesScale
+                    ? "Gizmo (W/E/R) or type exact values — they stay in sync. Scale is a single uniform factor for the GLB."
+                    : "Gizmo (W/E) or type exact values — they stay in sync. Uniform GLB scale appears when a model is set; mark size uses the geometry fields below."
+                }
               >
                 <div className="ss-mark-editor-triple">
                   {(["X", "Y", "Z"] as const).map((axis, i) => (
@@ -880,26 +925,32 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
                     />
                   ))}
                 </div>
-                <div className="ss-mark-editor-triple">
-                  {(["X", "Y", "Z"] as const).map((axis, i) => (
-                    <TextField
-                      key={axis}
-                      id={`ss-lib-sx-${axis}`}
-                      label={`Scale ${axis}`}
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={fmt(rec.scale[i])}
-                      onChange={(ev) => setTriple("scale", i, ev.target.value)}
-                      disabled={busy}
-                    />
-                  ))}
-                </div>
+                {poseUsesScale ? (
+                  <TextField
+                    id="ss-lib-scale"
+                    label="Scale"
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={fmt(uniformScaleOf(rec.scale))}
+                    onChange={(ev) => {
+                      const v = Number(ev.target.value);
+                      set(
+                        "scale",
+                        uniformScaleTriple(
+                          Number.isFinite(v) && v > 0 ? v : 1,
+                        ),
+                      );
+                    }}
+                    disabled={busy}
+                    title="Uniform scale for the GLB model (same factor on X, Y, and Z)"
+                  />
+                ) : null}
               </FormSection>
 
               <FormSection
                 title="Mark"
-                description="How the tracker draws this class. Geometry is used when no GLB is set."
+                description="How the tracker draws this class. Geometry sizes are absolute meters when no GLB is set."
               >
                 <div className="ss-text-field">
                   <label className="ss-text-field-label" htmlFor="ss-lib-color">
@@ -943,128 +994,179 @@ export function MarkEditor({ assetId, authToken, onClose, onSaved }: Props) {
                     </option>
                   ))}
                 </SelectField>
-                {isCircularMarkGeometry(parseMarkGeometry(rec.markGeometry)) ? (
-                  <>
-                    <div className="ss-mark-editor-triple">
-                      <TextField
-                        id="ss-lib-diameter"
-                        label="Diameter (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(markDiameter(rec))}
-                        onChange={(ev) => setDiameter(ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-zs"
-                        label="Height (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.zSize)}
-                        onChange={(ev) => setNum("zSize", ev.target.value)}
-                        disabled={busy}
-                      />
-                    </div>
-                    <div className="ss-mark-editor-triple">
-                      <TextField
-                        id="ss-lib-plan-buf"
-                        label="Plan buffer (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(Math.max(rec.xBuffer, rec.yBuffer))}
-                        onChange={(ev) => setPlanBuffer(ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-zb"
-                        label="Height buffer (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.zBuffer)}
-                        onChange={(ev) => setNum("zBuffer", ev.target.value)}
-                        disabled={busy}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="ss-mark-editor-triple">
-                      <TextField
-                        id="ss-lib-xs"
-                        label="X size (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.xSize)}
-                        onChange={(ev) => setNum("xSize", ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-ys"
-                        label="Y size (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.ySize)}
-                        onChange={(ev) => setNum("ySize", ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-zs"
-                        label="Z size (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.zSize)}
-                        onChange={(ev) => setNum("zSize", ev.target.value)}
-                        disabled={busy}
-                      />
-                    </div>
-                    <div className="ss-mark-editor-triple">
-                      <TextField
-                        id="ss-lib-xb"
-                        label="X buffer (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.xBuffer)}
-                        onChange={(ev) => setNum("xBuffer", ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-yb"
-                        label="Y buffer (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.yBuffer)}
-                        onChange={(ev) => setNum("yBuffer", ev.target.value)}
-                        disabled={busy}
-                      />
-                      <TextField
-                        id="ss-lib-zb"
-                        label="Z buffer (m)"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={fmt(rec.zBuffer)}
-                        onChange={(ev) => setNum("zBuffer", ev.target.value)}
-                        disabled={busy}
-                      />
-                    </div>
-                  </>
-                )}
-                {footprint ? (
-                  <p className="ss-mark-editor-footnote">
-                    {isCircularMarkGeometry(parseMarkGeometry(rec.markGeometry))
-                      ? `Footprint ⌀${fmt(markDiameter(rec))} m → buffered ⌀${fmt(Math.max(footprint.outer.x, footprint.outer.y))} m`
-                      : `Footprint ${fmt(footprint.inner.x)}×${fmt(footprint.inner.y)} m → buffered ${fmt(footprint.outer.x)}×${fmt(footprint.outer.y)} m`}
-                  </p>
-                ) : null}
+                {(() => {
+                  const kind = parseMarkGeometry(rec.markGeometry);
+                  const circular = isCircularMarkGeometry(kind);
+                  const diameter = markDiameter(rec);
+                  const capsuleShort =
+                    kind === "capsule" &&
+                    diameter > 0 &&
+                    rec.zSize > 0 &&
+                    rec.zSize < diameter;
+                  return (
+                    <>
+                      <p className="ss-mark-editor-footnote">
+                        {MARK_GEOMETRY_HELP[kind]}
+                      </p>
+                      {circular ? (
+                        <>
+                          <div className="ss-mark-editor-triple">
+                            <TextField
+                              id="ss-lib-diameter"
+                              label="Diameter ⌀ (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(diameter)}
+                              onChange={(ev) => setDiameter(ev.target.value)}
+                              disabled={busy}
+                              title="Full plan diameter in meters — not radius"
+                            />
+                            <TextField
+                              id="ss-lib-zs"
+                              label={
+                                kind === "capsule"
+                                  ? "Total height (m)"
+                                  : "Height (m)"
+                              }
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.zSize)}
+                              onChange={(ev) => setNum("zSize", ev.target.value)}
+                              disabled={busy}
+                              title={
+                                kind === "capsule"
+                                  ? "Full height including both rounded ends (must be ≥ diameter)"
+                                  : "Full cylinder height along Z in meters"
+                              }
+                            />
+                          </div>
+                          <div className="ss-mark-editor-triple">
+                            <TextField
+                              id="ss-lib-plan-buf"
+                              label="Plan buffer (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(Math.max(rec.xBuffer, rec.yBuffer))}
+                              onChange={(ev) => setPlanBuffer(ev.target.value)}
+                              disabled={busy}
+                              title="Extra radius around the plan circle on each side"
+                            />
+                            <TextField
+                              id="ss-lib-zb"
+                              label="Height buffer (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.zBuffer)}
+                              onChange={(ev) =>
+                                setNum("zBuffer", ev.target.value)
+                              }
+                              disabled={busy}
+                            />
+                          </div>
+                          {capsuleShort ? (
+                            <p className="ss-mark-editor-footnote ss-mark-editor-footnote--warn">
+                              Capsule height is shorter than the diameter — the
+                              shaft collapses to a sphere of that diameter.
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <div className="ss-mark-editor-triple">
+                            <TextField
+                              id="ss-lib-xs"
+                              label="X size (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.xSize)}
+                              onChange={(ev) =>
+                                setNum("xSize", ev.target.value)
+                              }
+                              disabled={busy}
+                              title="Full width along X (not half-size)"
+                            />
+                            <TextField
+                              id="ss-lib-ys"
+                              label="Y size (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.ySize)}
+                              onChange={(ev) =>
+                                setNum("ySize", ev.target.value)
+                              }
+                              disabled={busy}
+                              title="Full depth along Y (not half-size)"
+                            />
+                            <TextField
+                              id="ss-lib-zs"
+                              label="Z size (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.zSize)}
+                              onChange={(ev) =>
+                                setNum("zSize", ev.target.value)
+                              }
+                              disabled={busy}
+                              title="Full height along Z (not half-size)"
+                            />
+                          </div>
+                          <div className="ss-mark-editor-triple">
+                            <TextField
+                              id="ss-lib-xb"
+                              label="X buffer (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.xBuffer)}
+                              onChange={(ev) =>
+                                setNum("xBuffer", ev.target.value)
+                              }
+                              disabled={busy}
+                            />
+                            <TextField
+                              id="ss-lib-yb"
+                              label="Y buffer (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.yBuffer)}
+                              onChange={(ev) =>
+                                setNum("yBuffer", ev.target.value)
+                              }
+                              disabled={busy}
+                            />
+                            <TextField
+                              id="ss-lib-zb"
+                              label="Z buffer (m)"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={fmt(rec.zBuffer)}
+                              onChange={(ev) =>
+                                setNum("zBuffer", ev.target.value)
+                              }
+                              disabled={busy}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {footprint ? (
+                        <p className="ss-mark-editor-footnote">
+                          {circular
+                            ? `Footprint ⌀${fmt(diameter)} m → buffered ⌀${fmt(Math.max(footprint.outer.x, footprint.outer.y))} m · height ${fmt(rec.zSize)} m`
+                            : `Footprint ${fmt(footprint.inner.x)}×${fmt(footprint.inner.y)} m → buffered ${fmt(footprint.outer.x)}×${fmt(footprint.outer.y)} m · height ${fmt(footprint.height)} m`}
+                        </p>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 <TextField
                   id="ss-lib-trackr"
                   label="Tracking radius (m)"

@@ -45,7 +45,7 @@ export function AssetSheet({
   const [existingModelUrl, setExistingModelUrl] = useState<string | null>(null);
   const [clearModel, setClearModel] = useState(false);
   const [markColor, setMarkColor] = useState("#00ff00");
-  const [scale, setScale] = useState<[string, string, string]>(["1", "1", "1"]);
+  const [scale, setScale] = useState("1");
   const [xSize, setXSize] = useState("1");
   const [ySize, setYSize] = useState("1");
   const [zSize, setZSize] = useState("1");
@@ -95,7 +95,7 @@ export function AssetSheet({
       setName("");
       setExistingModelUrl(null);
       setMarkColor("#00ff00");
-      setScale(["1", "1", "1"]);
+      setScale("1");
       setXSize("1");
       setYSize("1");
       setZSize("1");
@@ -139,12 +139,20 @@ export function AssetSheet({
         setClearModel(false);
         setMarkColor(str(a.mark_color, "#00ff00"));
         {
-          const uniform = a.scale != null ? str(a.scale) : "1";
-          setScale([
-            a.scale_x != null ? str(a.scale_x) : uniform,
-            a.scale_y != null ? str(a.scale_y) : uniform,
-            a.scale_z != null ? str(a.scale_z) : uniform,
-          ]);
+          const sx = a.scale_x != null ? Number(a.scale_x) : NaN;
+          const sy = a.scale_y != null ? Number(a.scale_y) : NaN;
+          const sz = a.scale_z != null ? Number(a.scale_z) : NaN;
+          const legacy = a.scale != null ? Number(a.scale) : NaN;
+          const axes = [sx, sy, sz].filter((v) => Number.isFinite(v) && v > 0);
+          let s = Number.isFinite(legacy) && legacy > 0 ? legacy : 1;
+          if (axes.length === 3 && axes.every((v) => Math.abs(v - axes[0]) < 1e-9)) {
+            s = axes[0];
+          } else if (axes.length > 0) {
+            s = Math.exp(
+              axes.reduce((a, v) => a + Math.log(v), 0) / axes.length,
+            );
+          }
+          setScale(String(s));
         }
         setXSize(a.x_size != null ? str(a.x_size) : "1");
         setYSize(a.y_size != null ? str(a.y_size) : "1");
@@ -224,13 +232,11 @@ export function AssetSheet({
   const appendCommon = (form: FormData) => {
     form.append("name", name.trim());
     form.append("mark_color", markColor);
-    const sx = scale[0].trim() || "1";
-    const sy = scale[1].trim() || "1";
-    const sz = scale[2].trim() || "1";
-    form.append("scale_x", sx);
-    form.append("scale_y", sy);
-    form.append("scale_z", sz);
-    form.append("scale", sx);
+    const s = scale.trim() || "1";
+    form.append("scale_x", s);
+    form.append("scale_y", s);
+    form.append("scale_z", s);
+    form.append("scale", s);
     form.append("x_size", xSize.trim() || "1");
     form.append("y_size", ySize.trim() || "1");
     form.append("z_size", zSize.trim() || "1");
@@ -429,29 +435,16 @@ export function AssetSheet({
         </FormSection>
         <FormSection
           title="Size"
-          description="Object extents and per-axis scale."
+          description="Object extents in meters. Scale is a uniform factor for the GLB."
           className="ss-form-section--columns"
         >
           <TextField
-            id="ss-asset-sx"
-            label="Scale X"
-            value={scale[0]}
-            onChange={(ev) => setScale([ev.target.value, scale[1], scale[2]])}
+            id="ss-asset-scale"
+            label="Scale"
+            value={scale}
+            onChange={(ev) => setScale(ev.target.value)}
             disabled={busy}
-          />
-          <TextField
-            id="ss-asset-sy"
-            label="Scale Y"
-            value={scale[1]}
-            onChange={(ev) => setScale([scale[0], ev.target.value, scale[2]])}
-            disabled={busy}
-          />
-          <TextField
-            id="ss-asset-sz"
-            label="Scale Z"
-            value={scale[2]}
-            onChange={(ev) => setScale([scale[0], scale[1], ev.target.value])}
-            disabled={busy}
+            title="Uniform scale for the GLB model"
           />
           <TextField
             id="ss-asset-x"

@@ -40,6 +40,15 @@ export const MARK_GEOMETRY_LABELS: Record<MarkGeometry, string> = {
   cylinder: "Cylinder",
 };
 
+/** Short UI copy: sizes are full extents (meters), never radii / half-sizes. */
+export const MARK_GEOMETRY_HELP: Record<MarkGeometry, string> = {
+  box: "X, Y, and Z are full extents in meters (width × depth × height), not half-sizes.",
+  capsule:
+    "Diameter is the full plan width (not radius). Height is the total length including both rounded ends (must be ≥ diameter).",
+  cylinder:
+    "Diameter is the full plan width (not radius). Height is the full cylinder length along Z.",
+};
+
 export function parseMarkGeometry(v: unknown): MarkGeometry {
   const s = String(v ?? "")
     .trim()
@@ -91,6 +100,24 @@ export function withMarkGeometry(
   };
 }
 
+function fmtSize(n: number): string {
+  if (!Number.isFinite(n)) {
+    return "0";
+  }
+  const t = Math.round(n * 1000) / 1000;
+  return String(t);
+}
+
+/** Compact size label for library cards (⌀×H for circular, W×D×H for box). */
+export function markSizeLabel(rec: Asset3DRecord): string {
+  const kind = parseMarkGeometry(rec.markGeometry);
+  if (isCircularMarkGeometry(kind)) {
+    const d = markDiameter(rec);
+    return `⌀${fmtSize(d)}×${fmtSize(rec.zSize)} m`;
+  }
+  return `${fmtSize(rec.xSize)}×${fmtSize(rec.ySize)}×${fmtSize(rec.zSize)} m`;
+}
+
 export type Asset3DRecord = {
   uid: string;
   name: string;
@@ -106,7 +133,10 @@ export type Asset3DRecord = {
   modelUrl: string | null;
   rotation: [number, number, number];
   translation: [number, number, number];
-  /** Per-axis default pose scale (X/Y/Z). */
+  /**
+   * Default pose scale for the GLB. Stored as XYZ triple for the API, but the
+   * Mark editor treats it as uniform (all axes equal). Unused for primitives.
+   */
   scale: [number, number, number];
   rotationFromVelocity: boolean;
   trackingRadius: number;
@@ -165,15 +195,19 @@ export function parseAsset3D(row: Record<string, unknown>): Asset3DRecord {
       num(row.translation_z, 0),
     ],
     scale: (() => {
-      const uniform = num(row.scale, 1) || 1;
+      const legacy = num(row.scale, NaN);
       const sx = num(row.scale_x, NaN);
       const sy = num(row.scale_y, NaN);
       const sz = num(row.scale_z, NaN);
-      return [
-        Number.isFinite(sx) && sx > 0 ? sx : uniform,
-        Number.isFinite(sy) && sy > 0 ? sy : uniform,
-        Number.isFinite(sz) && sz > 0 ? sz : uniform,
-      ] as [number, number, number];
+      const axes = [sx, sy, sz].map((v) =>
+        Number.isFinite(v) && v > 0
+          ? v
+          : Number.isFinite(legacy) && legacy > 0
+            ? legacy
+            : 1,
+      ) as [number, number, number];
+      // GLB scale is uniform — collapse legacy per-axis rows to one factor.
+      return uniformScaleTriple(uniformScaleOf(axes));
     })(),
     rotationFromVelocity: bool(row.rotation_from_velocity),
     trackingRadius: num(row.tracking_radius, 2),
@@ -237,11 +271,13 @@ export function buildAssetFormData(
   f("name", rec.name.trim());
   f("mark_color", rec.markColor);
   f("mark_geometry", parseMarkGeometry(rec.markGeometry));
-  f("scale_x", String(rec.scale[0]));
-  f("scale_y", String(rec.scale[1]));
-  f("scale_z", String(rec.scale[2]));
-  // Legacy uniform field — keep aligned with X for older consumers.
-  f("scale", String(rec.scale[0]));
+  {
+    const s = uniformScaleOf(rec.scale);
+    f("scale_x", String(s));
+    f("scale_y", String(s));
+    f("scale_z", String(s));
+    f("scale", String(s));
+  }
   f("x_size", String(rec.xSize));
   f("y_size", String(rec.ySize));
   f("z_size", String(rec.zSize));
@@ -341,8 +377,10 @@ export function footprintOf(rec: Asset3DRecord): Footprint {
 
 /**
  * Build a Z-up mark primitive sized to the class AABB (meters).
- * Capsule/cylinder use a circular plan with diameter = min(x, y). Place the
- * mesh at `z = height / 2` so the bottom sits on the floor plane.
+ * `size.x/y/z` are full extents (not half-sizes / radii). Capsule/cylinder
+ * use plan diameter = min(x, y). Place the mesh at `z = height / 2` so the
+ * bottom sits on the floor. Do not also apply Asset3D pose scale to these
+ * meshes — scale is for GLBs only.
  */
 export function createMarkPrimitiveGeometry(
   kind: MarkGeometry,
@@ -365,17 +403,31 @@ export function createMarkPrimitiveGeometry(
     geo.rotateX(Math.PI / 2); // Y-up capsule → Z-up
     return geo;
   }
+  // BoxGeometry args are full width/height/depth in meters.
   return new BoxGeometry(x, y, z);
 }
 
 const DEG = Math.PI / 180;
+
+export type ApplyDefaultPoseOpts = {
+  /**
+   * When false, leave scale at (1,1,1). Mark primitives are already sized in
+   * meters via x_size/y_size/z_size — applying GLB pose scale would re-scale
+   * those absolute extents (often ~2×). Default true for GLB pose frames.
+   */
+  applyScale?: boolean;
+};
 
 /**
  * Apply an Asset3D default pose to a three.js object (Z-up, XYZ euler in
  * degrees, per-axis scale) — the same convention the placement canvas uses
  * for SceneEulerPose.
  */
-export function applyDefaultPose(obj: Object3D, rec: Asset3DRecord): void {
+export function applyDefaultPose(
+  obj: Object3D,
+  rec: Asset3DRecord,
+  opts: ApplyDefaultPoseOpts = {},
+): void {
   obj.position.set(rec.translation[0], rec.translation[1], rec.translation[2]);
   obj.rotation.order = "XYZ";
   obj.rotation.set(
@@ -383,11 +435,31 @@ export function applyDefaultPose(obj: Object3D, rec: Asset3DRecord): void {
     rec.rotation[1] * DEG,
     rec.rotation[2] * DEG,
   );
-  const sx = Number.isFinite(rec.scale[0]) && rec.scale[0] > 0 ? rec.scale[0] : 1;
-  const sy = Number.isFinite(rec.scale[1]) && rec.scale[1] > 0 ? rec.scale[1] : 1;
-  const sz = Number.isFinite(rec.scale[2]) && rec.scale[2] > 0 ? rec.scale[2] : 1;
-  obj.scale.set(sx, sy, sz);
+  if (opts.applyScale === false) {
+    obj.scale.set(1, 1, 1);
+  } else {
+    const s = uniformScaleOf(rec.scale);
+    obj.scale.set(s, s, s);
+  }
   obj.updateMatrix();
+}
+
+/** Single positive scale factor from a stored XYZ triple (GLB is uniform). */
+export function uniformScaleOf(scale: [number, number, number]): number {
+  const axes = scale.filter((v) => Number.isFinite(v) && v > 0);
+  if (axes.length === 0) {
+    return 1;
+  }
+  if (axes.every((v) => Math.abs(v - axes[0]) < 1e-9)) {
+    return axes[0];
+  }
+  // Legacy non-uniform rows: geometric mean so volume is preserved-ish.
+  return Math.exp(axes.reduce((a, v) => a + Math.log(v), 0) / axes.length);
+}
+
+export function uniformScaleTriple(s: number): [number, number, number] {
+  const v = Number.isFinite(s) && s > 0 ? s : 1;
+  return [v, v, v];
 }
 
 /** Read an Asset3D default pose back off a three.js object. */

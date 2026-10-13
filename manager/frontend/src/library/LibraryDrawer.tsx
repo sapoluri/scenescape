@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   glbBasename,
   listAssets,
+  markSizeLabel,
   type Asset3DRecord,
 } from "./AssetLibrary";
 import type { RestError } from "../lib/rest";
@@ -212,8 +213,8 @@ export function LibraryDrawer({
                       {glbBasename(a.modelUrl)}
                     </span>
                   </span>
-                  <span className="ss-lib-card-meta">
-                    {a.xSize}×{a.ySize}×{a.zSize} m
+                  <span className="ss-lib-card-meta" title={markSizeLabel(a)}>
+                    {markSizeLabel(a)}
                   </span>
                 </button>
               </li>
