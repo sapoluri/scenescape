@@ -20,11 +20,11 @@ export interface ViewportUiState {
   showFrustums: boolean;
   activeTool: ToolId;
   /**
-   * Camera entity id whose live JPEG is projected onto the scene map
-   * (legacy "project frame"). Null = off. Only one projector at a time.
+   * Camera entity ids whose live JPEGs are projected onto the scene map
+   * (legacy "project frame" / "project all frames"). Empty = off.
    */
-  projectCameraId: string | null;
-  /** Map-projection overlay opacity 0–1 (legacy opacity slider). */
+  projectCameraIds: string[];
+  /** Map-projection overlay opacity 0–1 (legacy all-cameras opacity). */
   projectOpacity: number;
 }
 
@@ -92,7 +92,15 @@ interface ViewportStore extends ViewportUiState {
   setTool: (tool: ToolId) => void;
   setViewPreset: (preset: ViewPreset) => void;
   setOrtho: (ortho: boolean) => void;
+  /**
+   * Enable projection for one camera (add) or clear every projector (`null`).
+   * Does not turn other cameras off when enabling — use setProjectCameraEnabled
+   * to toggle a single id.
+   */
   setProjectCamera: (id: string | null) => void;
+  setProjectCameraEnabled: (id: string, on: boolean) => void;
+  /** Toggle every posed camera's map projection (legacy "project all frames"). */
+  setProjectAllCameras: (on: boolean) => void;
   setProjectOpacity: (opacity: number) => void;
   toggleOverlay: (key: "showGrid" | "showLabels" | "showTrails" | "showFrustums") => void;
   /**
@@ -113,8 +121,8 @@ const initialUi: ViewportUiState = {
   showTrails: true,
   showFrustums: true,
   activeTool: "live",
-  projectCameraId: null,
-  projectOpacity: 0.55,
+  projectCameraIds: [],
+  projectOpacity: 0.8,
 };
 
 const HISTORY_LIMIT = 50;
@@ -182,6 +190,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       return {
         entities: next,
         selectedId: s.selectedId === id ? null : s.selectedId,
+        projectCameraIds: s.projectCameraIds.filter((x) => x !== id),
         structVersion: s.structVersion + 1,
       };
     }),
@@ -189,11 +198,13 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
     set((s) => {
       const next: Record<string, ViewportEntity> = {};
       let removedSelected = false;
+      const removedIds = new Set<string>();
       for (const [id, e] of Object.entries(s.entities)) {
         if (e.type === type) {
           if (s.selectedId === id) {
             removedSelected = true;
           }
+          removedIds.add(id);
           getPersistState().dropBaseline(id);
           continue;
         }
@@ -202,6 +213,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       return {
         entities: next,
         selectedId: removedSelected ? null : s.selectedId,
+        projectCameraIds: s.projectCameraIds.filter((x) => !removedIds.has(x)),
         structVersion: s.structVersion + 1,
       };
     }),
@@ -210,6 +222,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
     return set((s) => ({
       entities: {},
       selectedId: null,
+      projectCameraIds: [],
       structVersion: s.structVersion + 1,
       past: [],
       future: [],
@@ -228,7 +241,40 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       ortho,
       viewPreset: ortho ? "top" : "persp",
     }),
-  setProjectCamera: (id) => set({ projectCameraId: id }),
+  setProjectCamera: (id) =>
+    set((s) => {
+      if (id == null) {
+        return { projectCameraIds: [] };
+      }
+      if (s.projectCameraIds.includes(id)) {
+        return s;
+      }
+      return { projectCameraIds: [...s.projectCameraIds, id] };
+    }),
+  setProjectCameraEnabled: (id, on) =>
+    set((s) => {
+      const has = s.projectCameraIds.includes(id);
+      if (on && !has) {
+        return { projectCameraIds: [...s.projectCameraIds, id] };
+      }
+      if (!on && has) {
+        return { projectCameraIds: s.projectCameraIds.filter((x) => x !== id) };
+      }
+      return s;
+    }),
+  setProjectAllCameras: (on) =>
+    set((s) => {
+      if (!on) {
+        return { projectCameraIds: [] };
+      }
+      const ids = Object.values(s.entities)
+        .filter(
+          (e): e is Extract<ViewportEntity, { type: "camera" }> =>
+            e.type === "camera" && e.posed,
+        )
+        .map((e) => e.id);
+      return { projectCameraIds: ids };
+    }),
   setProjectOpacity: (opacity) =>
     set({
       projectOpacity: Math.min(1, Math.max(0, opacity)),

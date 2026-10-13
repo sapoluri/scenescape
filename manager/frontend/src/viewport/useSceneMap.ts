@@ -11,10 +11,8 @@ import {
   type SceneGeometrySpec,
 } from "../placement/sceneGeometry";
 import { IDENTITY_POSE } from "../placement/placementTypes";
-import {
-  createCameraProjection,
-  type CameraProjectionHandle,
-} from "./projection/projectOntoMap";
+import { createProjectionPool } from "./projection/projectionPool";
+import type { ProjectionPool } from "./projection/projectionPool";
 import { getViewportState } from "./store";
 import type { ViewportWorld } from "./world";
 
@@ -28,13 +26,13 @@ export type SceneMapProps = {
 
 /**
  * Load the scene floor map (PNG plane or posed GLB) into `world.mapRoot` and
- * expose a camera-projection handle for coverage overlays (calibrate / live).
+ * expose a camera-projection pool for coverage overlays (calibrate / live).
  */
 export function useSceneMap(
   world: ViewportWorld | null,
   props: SceneMapProps,
 ): { projectionReady: boolean } {
-  const projectionRef = useRef<CameraProjectionHandle | null>(null);
+  const poolRef = useRef<ProjectionPool | null>(null);
   const readyRef = useRef(false);
 
   useEffect(() => {
@@ -44,8 +42,9 @@ export function useSceneMap(
     let cancelled = false;
 
     const clearMap = () => {
-      projectionRef.current?.dispose();
-      projectionRef.current = null;
+      poolRef.current?.dispose();
+      poolRef.current = null;
+      world.projectionPool = null;
       world.cameraProjection = null;
       while (world.mapRoot.children.length) {
         const child = world.mapRoot.children[0];
@@ -153,11 +152,8 @@ export function useSceneMap(
         world.mapRoot.add(object);
         world.sceneMesh = object;
         try {
-          projectionRef.current = createCameraProjection(
-            object,
-            world.mapRoot,
-          );
-          world.cameraProjection = projectionRef.current;
+          poolRef.current = createProjectionPool(object, world.mapRoot);
+          world.projectionPool = poolRef.current;
         } catch (err) {
           console.warn("Camera projection layer unavailable", err);
         }

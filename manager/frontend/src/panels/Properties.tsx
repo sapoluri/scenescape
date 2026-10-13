@@ -405,9 +405,10 @@ function CameraProps({
   onCalibrate?: () => void;
 }) {
   const toast = useAppToast();
-  const projectCameraId = useViewportStore((s) => s.projectCameraId);
+  const projecting = useViewportStore((s) =>
+    s.projectCameraIds.includes(e.id),
+  );
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
-  const projecting = projectCameraId === e.id;
   // Wizard toolbar owns Auto Calibrate + Save while this camera is calibrating.
   const calibrating = useCalibrateStore(
     (s) => s.active && s.cameraId === e.id,
@@ -622,7 +623,6 @@ function CameraProps({
         uid: decodeURIComponent(m[1]),
       });
       getViewportState().removeEntity(e.id);
-      getViewportState().setProjectCamera(null);
       toast.show(`Deleted ${e.name}`, "ok");
       setConfirmDelete(false);
       if (sceneHomeHref) {
@@ -778,9 +778,7 @@ function CameraProps({
           checked={calibrating || projecting}
           disabled={calibrating || !e.posed}
           onChange={(ev) =>
-            getViewportState().setProjectCamera(
-              ev.target.checked ? e.id : null,
-            )
+            getViewportState().setProjectCameraEnabled(e.id, ev.target.checked)
           }
         />
         <span>Project frame</span>

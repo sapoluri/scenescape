@@ -77,6 +77,41 @@ describe("useViewportStore", () => {
     expect(useViewportStore.getState().showGrid).toBe(false);
   });
 
+  it("projects individual and all posed cameras", () => {
+    const s = useViewportStore.getState();
+    const cam = (
+      id: string,
+      posed: boolean,
+    ): import("./types").CameraEntity => ({
+      id,
+      type: "camera",
+      name: id,
+      visible: true,
+      position: [0, 0, 2],
+      rotation: [0, 0, 0],
+      restRotation: [0, 0, 0],
+      posed,
+      fov: 60,
+      target: [0, 0, 0],
+      color: "#0a84ff",
+    });
+    s.upsertEntities([cam("cam-a", true), cam("cam-b", true), cam("cam-c", false)]);
+    s.setProjectCameraEnabled("cam-a", true);
+    expect(useViewportStore.getState().projectCameraIds).toEqual(["cam-a"]);
+    s.setProjectCameraEnabled("cam-b", true);
+    expect(useViewportStore.getState().projectCameraIds).toEqual([
+      "cam-a",
+      "cam-b",
+    ]);
+    s.setProjectAllCameras(true);
+    expect(useViewportStore.getState().projectCameraIds).toEqual([
+      "cam-a",
+      "cam-b",
+    ]);
+    s.setProjectAllCameras(false);
+    expect(useViewportStore.getState().projectCameraIds).toEqual([]);
+  });
+
   it("sets the active tool", () => {
     const s = useViewportStore.getState();
     expect(s.activeTool).toBe("live");

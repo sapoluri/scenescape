@@ -24,6 +24,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { applyBlenderBindings, applyViewPreset } from "./controls";
 import type { EntityNodes } from "./entities";
 import type { CameraProjectionHandle } from "./projection/projectOntoMap";
+import type { ProjectionPool } from "./projection/projectionPool";
 import { getViewportState } from "./store";
 
 export type ViewportTheme = "light" | "dark";
@@ -50,7 +51,15 @@ export interface ViewportWorld {
   mapRoot: Group;
   /** Loaded map object (for projection / raycasts); null until loaded. */
   sceneMesh: Object3D | null;
-  /** Optional camera→map coverage projector (calibrate / live). */
+  /**
+   * Per-camera map projectors (live "project frame" / "project all frames").
+   * Null until the scene map mesh is loaded.
+   */
+  projectionPool: ProjectionPool | null;
+  /**
+   * Alias for the calibrate session's projector (pool handle for that camera).
+   * Prefer projectionPool.acquire(id) for live multi-camera coverage.
+   */
   cameraProjection: CameraProjectionHandle | null;
   /** Entity id → three nodes, owned by the entity reconciler. */
   entityNodes: Map<string, EntityNodes>;
@@ -321,6 +330,7 @@ export function createViewportWorld(
     entityRoot,
     mapRoot,
     sceneMesh: null,
+    projectionPool: null,
     cameraProjection: null,
     entityNodes: new Map(),
     onFrame,

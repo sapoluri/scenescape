@@ -57,7 +57,8 @@ export type CameraProjectionHandle = {
   dispose: () => void;
 };
 
-function extractGeometry(root: Object3D): BufferGeometry {
+/** Merge map meshes into one BufferGeometry (world space) for projection. */
+export function extractMapProjectionGeometry(root: Object3D): BufferGeometry {
   const geos: BufferGeometry[] = [];
   root.traverse((child) => {
     const mesh = child as Mesh;
@@ -79,6 +80,16 @@ function extractGeometry(root: Object3D): BufferGeometry {
   merged.computeVertexNormals();
   return merged;
 }
+
+export type CreateCameraProjectionOpts = {
+  /**
+   * Shared template geometry (cloned per handle). When omitted, geometry is
+   * extracted from mapRoot.
+   */
+  geometry?: BufferGeometry;
+  /** Lift the overlay above the map to reduce z-fighting between projectors. */
+  zLift?: number;
+};
 
 const textureLoader = new TextureLoader();
 textureLoader.setCrossOrigin("anonymous");
@@ -168,6 +179,7 @@ async function loadProjectionTexture(imageUrl: string): Promise<Texture> {
 export function createCameraProjection(
   mapRoot: Object3D,
   parent: Object3D,
+  opts: CreateCameraProjectionOpts = {},
 ): CameraProjectionHandle {
   const projCam = new PerspectiveCamera(60, 4 / 3, 0.1, 100);
   projCam.up.set(0, 0, 1);
@@ -186,7 +198,10 @@ export function createCameraProjection(
     transparent: true,
     depthWrite: false,
   });
-  const geometry = extractGeometry(mapRoot);
+  // Clone when sharing a pool template so each handle can dispose safely.
+  const geometry = opts.geometry
+    ? opts.geometry.clone()
+    : extractMapProjectionGeometry(mapRoot);
   // Three.js skips draws when group.count === Infinity; use real index/vertex
   // count (legacy draw.js used Infinity against older three builds).
   geometry.clearGroups();
@@ -195,7 +210,7 @@ export function createCameraProjection(
   for (let i = 0; i < 2; i++) {
     geometry.addGroup(0, groupCount, i);
   }
-  mesh.position.z += 0.002;
+  mesh.position.z += opts.zLift ?? 0.002;
   mesh.renderOrder = 2;
   mesh.visible = false;
   projectedMaterial.project(mesh);

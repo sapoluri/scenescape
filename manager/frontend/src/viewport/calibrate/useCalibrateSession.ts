@@ -547,11 +547,12 @@ export function useCalibrateSession(
 
   // Pose on rAF; JPEG debounced — avoid stacking project() + decode on enter.
   useEffect(() => {
-    if (!active || !world?.cameraProjection || !previewPose) {
+    if (!active || !world?.projectionPool || !previewPose || !cameraId) {
       return;
     }
     let cancelled = false;
-    const handle = world.cameraProjection;
+    const handle = world.projectionPool.acquire(cameraId);
+    world.cameraProjection = handle;
     const pose = {
       fov: previewPose.fov,
       position: previewPose.position,
@@ -589,24 +590,34 @@ export function useCalibrateSession(
         window.clearTimeout(feedTimer);
       }
     };
-  }, [active, world, previewPose, feedImageUrl]);
+  }, [active, world, previewPose, feedImageUrl, cameraId]);
 
   // Keep opacity slider live while calibrate owns the projector.
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
   useEffect(() => {
-    if (!active || !world?.cameraProjection) {
+    if (!active || !world?.projectionPool || !cameraId) {
       return;
     }
-    world.cameraProjection.setOpacity(projectOpacity);
-  }, [active, world, projectOpacity]);
+    const handle = world.projectionPool.get(cameraId) ?? world.cameraProjection;
+    handle?.setOpacity(projectOpacity);
+  }, [active, world, projectOpacity, cameraId]);
 
   useEffect(() => {
     if (!active) {
       useCalibrateStore.getState().setPreviewPose(null);
-      // Leave coverage up when Project frame is still enabled.
-      if (!getViewportState().projectCameraId) {
-        world?.cameraProjection?.setVisible(false);
+      // Leave coverage up when Project frame is still enabled for this camera.
+      const stillOn =
+        cameraId != null &&
+        getViewportState().projectCameraIds.includes(cameraId);
+      if (!stillOn && cameraId) {
+        world?.projectionPool?.get(cameraId)?.setVisible(false);
+      }
+      if (world) {
+        world.cameraProjection =
+          stillOn && cameraId
+            ? (world.projectionPool?.get(cameraId) ?? null)
+            : null;
       }
     }
-  }, [active, world]);
+  }, [active, world, cameraId]);
 }

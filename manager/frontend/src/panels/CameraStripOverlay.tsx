@@ -79,9 +79,20 @@ export function CameraStripOverlay({
   );
   const [deleteBusy, setDeleteBusy] = useState(false);
   const selectedId = useViewportStore((s) => s.selectedId);
-  const projectCameraId = useViewportStore((s) => s.projectCameraId);
+  const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
+  const projectOpacity = useViewportStore((s) => s.projectOpacity);
   const entities = useViewportStore((s) => s.entities);
   const stripRef = useRef<HTMLDivElement>(null);
+
+  const posedCameraIds = cameras
+    .map((c) => c.id)
+    .filter((id) => {
+      const e = entities[id];
+      return e?.type === "camera" && e.posed;
+    });
+  const projectAllFrames =
+    posedCameraIds.length > 0 &&
+    posedCameraIds.every((id) => projectCameraIds.includes(id));
 
   const onLiveViewChange = (checked: boolean) => {
     setLiveView(checked);
@@ -98,16 +109,22 @@ export function CameraStripOverlay({
     }
   }, [cameras, previewId]);
 
-  // Project needs JPEG frames — turn Live View on and open the preview.
+  // Project needs JPEG frames — turn Live View on when any projector is active.
   useEffect(() => {
-    if (!projectCameraId) {
+    if (projectCameraIds.length === 0) {
       return;
     }
     setCollapsed(false);
-    setPreviewId(projectCameraId);
     setLiveView(true);
     refreshCameraStrip();
-  }, [projectCameraId]);
+    // Prefer the first projecting camera for the preview viewer.
+    const first = projectCameraIds.find((id) =>
+      cameras.some((c) => c.id === id),
+    );
+    if (first) {
+      setPreviewId(first);
+    }
+  }, [projectCameraIds, cameras]);
 
   // Request MQTT frames for the strip anchors (mirrors CamerasPanelContent).
   useEffect(() => {
@@ -189,7 +206,7 @@ export function CameraStripOverlay({
   const previewPosed =
     previewEntity?.type === "camera" && previewEntity.posed;
   const previewProjecting = Boolean(
-    preview && projectCameraId === preview.id,
+    preview && projectCameraIds.includes(preview.id),
   );
 
   const onConfirmDelete = async () => {
@@ -210,7 +227,6 @@ export function CameraStripOverlay({
         uid: decodeURIComponent(m[1]),
       });
       getViewportState().removeEntity(deleteTarget.id);
-      getViewportState().setProjectCamera(null);
       setPreviewId((id) => (id === deleteTarget.id ? null : id));
       setDeleteTarget(null);
       toast.show(`Deleted ${deleteTarget.name}`, "ok");
@@ -246,26 +262,82 @@ export function CameraStripOverlay({
             {cameras.length}
           </span>
         </button>
-        <label
-          className={`ss-camera-live-toggle${liveView ? " is-on" : ""}`}
-          title="Continuously refresh camera JPEG previews over MQTT"
-        >
-          <input
-            type="checkbox"
-            id="live-view"
-            className="ss-camera-live-input"
-            checked={liveView}
-            onChange={(ev) => onLiveViewChange(ev.target.checked)}
-            aria-labelledby="live-view-label"
-          />
-          <span id="live-view-label" className="ss-camera-live-label">
-            Live View
-          </span>
-        </label>
+        <div className="ss-camera-panel-head-actions">
+          <label
+            className={`ss-camera-live-toggle${projectAllFrames ? " is-on" : ""}`}
+            title={
+              posedCameraIds.length > 0
+                ? "Project live frames from every calibrated camera onto the scene map"
+                : "Calibrate cameras first — projection needs a pose"
+            }
+          >
+            <input
+              type="checkbox"
+              id="project-all-frames"
+              className="ss-camera-live-input"
+              checked={projectAllFrames}
+              disabled={posedCameraIds.length === 0}
+              onChange={(ev) => {
+                getViewportState().setProjectAllCameras(ev.target.checked);
+                if (ev.target.checked) {
+                  onLiveViewChange(true);
+                }
+              }}
+              aria-labelledby="project-all-frames-label"
+            />
+            <span
+              id="project-all-frames-label"
+              className="ss-camera-live-label"
+            >
+              Project all
+            </span>
+          </label>
+          <label
+            className={`ss-camera-live-toggle${liveView ? " is-on" : ""}`}
+            title="Continuously refresh camera JPEG previews over MQTT"
+          >
+            <input
+              type="checkbox"
+              id="live-view"
+              className="ss-camera-live-input"
+              checked={liveView}
+              onChange={(ev) => onLiveViewChange(ev.target.checked)}
+              aria-labelledby="live-view-label"
+            />
+            <span id="live-view-label" className="ss-camera-live-label">
+              Live View
+            </span>
+          </label>
+        </div>
       </div>
 
       {!collapsed && (
         <div id="ss-camera-panel-body" className="ss-camera-panel-body">
+          {projectCameraIds.length > 0 ? (
+            <label
+              className="ss-camera-all-opacity"
+              title="Projection opacity for every camera"
+            >
+              <span className="ss-camera-all-opacity-label">Opacity</span>
+              <input
+                type="range"
+                id="all-cameras-opacity"
+                className="ss-camera-all-opacity-range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(projectOpacity * 100)}
+                onChange={(ev) =>
+                  getViewportState().setProjectOpacity(
+                    Number(ev.target.value) / 100,
+                  )
+                }
+              />
+              <span className="ss-camera-all-opacity-value">
+                {Math.round(projectOpacity * 100)}%
+              </span>
+            </label>
+          ) : null}
           {preview && (
             <section
               className="ss-camera-viewer"
@@ -301,8 +373,9 @@ export function CameraStripOverlay({
                     aria-pressed={previewProjecting}
                     onClick={(ev) => {
                       ev.stopPropagation();
-                      getViewportState().setProjectCamera(
-                        previewProjecting ? null : preview.id,
+                      getViewportState().setProjectCameraEnabled(
+                        preview.id,
+                        !previewProjecting,
                       );
                     }}
                   >

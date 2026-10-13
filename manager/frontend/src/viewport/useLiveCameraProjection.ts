@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { refreshCameraStrip } from "../mqtt";
 import type { SceneCameraBootstrap } from "../scene/types";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
@@ -26,92 +26,126 @@ function frameSrcForSensor(sensorId: string): string | null {
   return null;
 }
 
+type LiveCam = {
+  id: string;
+  sensorId: string;
+  entity: CameraEntity;
+  poseKey: string;
+};
+
 /**
- * Live map coverage when a posed camera has "Project frame" enabled
- * (legacy scenecamera.js projectFrame). Calibrate mode owns the projector
- * while active; this hook resumes when calibrate exits.
+ * Live map coverage when posed cameras have "Project frame" / "project all
+ * frames" enabled (legacy scenecamera.js projectFrame). Calibrate owns the
+ * projector for its camera while active; this hook drives every other id.
  */
 export function useLiveCameraProjection(
   world: ViewportWorld | null,
   cameras: SceneCameraBootstrap[],
 ): void {
-  const projectCameraId = useViewportStore((s) => s.projectCameraId);
+  const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
   const calibrating = useCalibrateStore((s) => s.active);
-  const camEntity = useViewportStore((s) => {
-    const id = s.projectCameraId;
-    if (!id) {
-      return null;
+  const calibrateCameraId = useCalibrateStore((s) => s.cameraId);
+  const entities = useViewportStore((s) => s.entities);
+
+  const liveCams = useMemo((): LiveCam[] => {
+    const out: LiveCam[] = [];
+    for (const id of projectCameraIds) {
+      // Calibrate session drives this camera's projector directly.
+      if (calibrating && id === calibrateCameraId) {
+        continue;
+      }
+      const e = entities[id];
+      if (!e || e.type !== "camera" || !e.posed) {
+        continue;
+      }
+      const boot = cameras.find((c) => c.id === id);
+      if (!boot) {
+        continue;
+      }
+      out.push({
+        id,
+        sensorId: boot.sensorId,
+        entity: e,
+        poseKey: `${e.position.join(",")}|${e.rotation.join(",")}|${e.fov}`,
+      });
     }
-    const e = s.entities[id];
-    return e?.type === "camera" ? (e as CameraEntity) : null;
-  });
-  const poseKey = camEntity?.posed
-    ? `${camEntity.position.join(",")}|${camEntity.rotation.join(",")}|${camEntity.fov}`
-    : "";
+    return out;
+  }, [
+    projectCameraIds,
+    entities,
+    cameras,
+    calibrating,
+    calibrateCameraId,
+  ]);
+
+  const liveKey = liveCams.map((c) => `${c.id}:${c.poseKey}`).join(";");
   const waitToken = useRef(0);
 
-  // Drop projection only when the camera is known and unposed (not while seed
-  // is still loading — that would make Project appear to do nothing).
-  // Calibrate owns projection for its camera even before the first solve.
+  // Drop unposed cameras from the project set (not while seed is loading).
   useEffect(() => {
-    if (!projectCameraId || !camEntity || calibrating) {
+    if (calibrating) {
       return;
     }
-    if (!camEntity.posed) {
-      getViewportState().setProjectCamera(null);
-    }
-  }, [projectCameraId, camEntity, calibrating]);
-
-  // Wait until the map projector exists (async map load), then keep applying
-  // the latest strip JPEG for the selected posed camera.
-  useEffect(() => {
-    if (calibrating || !world || !projectCameraId || !camEntity?.posed) {
-      if (!calibrating && !projectCameraId) {
-        world?.cameraProjection?.setVisible(false);
+    for (const id of projectCameraIds) {
+      const e = entities[id];
+      if (e?.type === "camera" && !e.posed) {
+        getViewportState().setProjectCameraEnabled(id, false);
       }
+    }
+  }, [projectCameraIds, entities, calibrating]);
+
+  // Keep pool handles matched to the live project set; poll strip JPEGs.
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    const pool = world.projectionPool;
+    if (!pool) {
       return;
     }
 
-    const boot = cameras.find((c) => c.id === projectCameraId);
-    if (!boot) {
+    if (liveCams.length === 0) {
+      if (!calibrating && projectCameraIds.length === 0) {
+        pool.sync([]);
+        world.cameraProjection = null;
+      } else if (!calibrating) {
+        // Project ids exist but none are live-driven (all unposed / missing).
+        pool.sync(projectCameraIds);
+      }
       return;
     }
 
     let cancelled = false;
-    let lastSrc = "";
     let poll = 0;
     let observer: MutationObserver | null = null;
     const myWait = ++waitToken.current;
+    const lastSrc = new Map<string, string>();
+    const lastPose = new Map<string, string>();
 
-    let lastPoseKey = "";
-    const apply = (src: string) => {
-      const handle = world.cameraProjection;
-      if (cancelled || !handle || !src) {
+    const apply = (cam: LiveCam, src: string) => {
+      if (cancelled || !src) {
         return;
       }
-      const poseChanged = poseKey !== lastPoseKey;
-      if (!poseChanged && src === lastSrc) {
+      const handle = pool.acquire(cam.id);
+      const poseChanged = lastPose.get(cam.id) !== cam.poseKey;
+      if (!poseChanged && lastSrc.get(cam.id) === src) {
         return;
       }
-      const firstFrame = !lastSrc;
-      lastSrc = src;
-      lastPoseKey = poseKey;
+      const firstFrame = !lastSrc.has(cam.id);
+      lastSrc.set(cam.id, src);
+      lastPose.set(cam.id, cam.poseKey);
       handle
         .updateFrame(src, {
-          fov: camEntity.fov,
-          position: camEntity.position,
-          // Rig euler matches the frustum PerspectiveCamera (REST × Rx(π)).
-          rotationDeg: camEntity.rotation,
-          // Pose changes reproject once; JPEG ticks only swap the texture.
+          fov: cam.entity.fov,
+          position: cam.entity.position,
+          rotationDeg: cam.entity.rotation,
           reproject: poseChanged || firstFrame,
         })
         .then(() => {
-          if (!cancelled && world.cameraProjection) {
-            world.cameraProjection.setOpacity(
-              getViewportState().projectOpacity,
-            );
-            world.cameraProjection.setVisible(true);
+          if (!cancelled && world.projectionPool) {
+            handle.setOpacity(getViewportState().projectOpacity);
+            handle.setVisible(true);
           }
         })
         .catch((err) => console.warn("Live map projection failed", err));
@@ -121,9 +155,11 @@ export function useLiveCameraProjection(
       if (cancelled) {
         return;
       }
-      const src = frameSrcForSensor(boot.sensorId);
-      if (src) {
-        apply(src);
+      for (const cam of liveCams) {
+        const src = frameSrcForSensor(cam.sensorId);
+        if (src) {
+          apply(cam, src);
+        }
       }
     };
 
@@ -131,12 +167,16 @@ export function useLiveCameraProjection(
       if (cancelled || myWait !== waitToken.current) {
         return;
       }
-      if (!world.cameraProjection) {
-        // Map / projector still loading — retry briefly.
+      if (!world.projectionPool) {
         window.setTimeout(arm, 200);
         return;
       }
-      world.cameraProjection.setOpacity(getViewportState().projectOpacity);
+      const keep = new Set(projectCameraIds);
+      if (calibrating && calibrateCameraId) {
+        keep.add(calibrateCameraId);
+      }
+      pool.sync(keep);
+      pool.setOpacityAll(getViewportState().projectOpacity);
       refreshCameraStrip();
       tick();
 
@@ -160,21 +200,24 @@ export function useLiveCameraProjection(
         window.clearInterval(poll);
       }
     };
+    // liveKey stands in for liveCams pose/membership; projectCameraIds for sync.
   }, [
     world,
-    cameras,
+    liveKey,
+    liveCams,
+    projectCameraIds,
     calibrating,
-    projectCameraId,
-    camEntity?.posed,
-    poseKey,
+    calibrateCameraId,
   ]);
 
-  // Opacity-only updates without reloading the texture.
-  // Calibrate session also listens; either path is fine while active.
+  // Opacity-only updates without reloading textures.
   useEffect(() => {
-    if (!world?.cameraProjection || !projectCameraId) {
+    if (!world?.projectionPool) {
       return;
     }
-    world.cameraProjection.setOpacity(projectOpacity);
-  }, [world, projectCameraId, projectOpacity]);
+    world.projectionPool.setOpacityAll(projectOpacity);
+    if (world.cameraProjection) {
+      world.cameraProjection.setOpacity(projectOpacity);
+    }
+  }, [world, projectOpacity]);
 }
