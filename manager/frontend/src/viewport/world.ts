@@ -4,15 +4,18 @@
 import {
   AmbientLight,
   AxesHelper,
+  Box3,
   Color,
   DirectionalLight,
   GridHelper,
   Group,
   LineBasicMaterial,
+  MOUSE,
   Object3D,
   OrthographicCamera,
   PerspectiveCamera,
   Scene,
+  TOUCH,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -160,24 +163,40 @@ export function createViewportWorld(
     orbit.enabled = !(ev as { value?: boolean }).value;
   });
 
-  const target = new Vector3(0, 0, 0);
-  const setActiveCamera = (useOrtho: boolean) => {
-    const cam = useOrtho ? orthoCam : perspCam;
-    activeCamera = cam;
-    (orbit as unknown as { object: unknown }).object = cam;
-    try {
-      (gizmo as unknown as { camera: unknown }).camera = cam;
-    } catch {
-      /* older TransformControls keep the constructor camera */
-    }
-    applyViewPreset(cam, orbit, getViewportState().viewPreset, target, 28);
+  /** Half of the orthographic vertical frustum in world meters. */
+  let orthoHalfExtent = 24;
+
+  /** Perspective pose captured when entering Ortho; restored on return to Persp. */
+  let savedPerspPose: {
+    position: Vector3;
+    up: Vector3;
+    target: Vector3;
+  } | null = null;
+
+  const snapshotPerspPose = () => {
+    savedPerspPose = {
+      position: perspCam.position.clone(),
+      up: perspCam.up.clone(),
+      target: orbit.target.clone(),
+    };
   };
-  setActiveCamera(getViewportState().ortho);
+
+  const restorePerspPose = (): boolean => {
+    if (!savedPerspPose) {
+      return false;
+    }
+    perspCam.position.copy(savedPerspPose.position);
+    perspCam.up.copy(savedPerspPose.up);
+    orbit.target.copy(savedPerspPose.target);
+    perspCam.lookAt(orbit.target);
+    orbit.update();
+    return true;
+  };
 
   const updateFrustums = () => {
     const w = Math.max(host.clientWidth, 1);
     const h = Math.max(host.clientHeight, 1);
-    const halfH = 24;
+    const halfH = orthoHalfExtent;
     orthoCam.left = (-halfH * w) / h;
     orthoCam.right = (halfH * w) / h;
     orthoCam.top = halfH;
@@ -187,7 +206,86 @@ export function createViewportWorld(
     perspCam.updateProjectionMatrix();
     renderer?.setSize(w, h, false);
   };
-  updateFrustums();
+
+  const applyOrthoNavigation = () => {
+    // Map-style: left-drag pans; no orbit (keeps the view top-down).
+    orbit.enableRotate = false;
+    orbit.mouseButtons = {
+      LEFT: MOUSE.PAN,
+      MIDDLE: MOUSE.DOLLY,
+      RIGHT: MOUSE.PAN,
+    };
+    orbit.touches = {
+      ONE: TOUCH.PAN,
+      TWO: TOUCH.DOLLY_PAN,
+    };
+  };
+
+  const applyPerspNavigation = () => {
+    orbit.enableRotate = true;
+    applyBlenderBindings(orbit);
+  };
+
+  /**
+   * Size the ortho frustum so the scene map (or a default span) fills the
+   * view — the point of Ortho is a usable top-down plan for ROI/tripwire.
+   */
+  const frameOrthoTopDown = (target: Vector3): number => {
+    const box = new Box3().setFromObject(mapRoot);
+    let span = 48;
+    if (!box.isEmpty()) {
+      const size = new Vector3();
+      const center = new Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      target.copy(center);
+      span = Math.max(size.x, size.y, 8);
+    } else if (target.lengthSq() === 0) {
+      target.set(0, 0, 0);
+    }
+    orthoHalfExtent = span * 0.55;
+    orthoCam.zoom = 1;
+    orthoCam.near = 0.1;
+    orthoCam.far = Math.max(5000, span * 20);
+    updateFrustums();
+    return Math.max(span, 8);
+  };
+
+  const setActiveCamera = (useOrtho: boolean) => {
+    const wasOrtho = activeCamera === orthoCam;
+    // Capture the live perspective pose before we swap cameras / reframe.
+    if (useOrtho && !wasOrtho) {
+      snapshotPerspPose();
+    }
+    const cam = useOrtho ? orthoCam : perspCam;
+    activeCamera = cam;
+    (orbit as unknown as { object: unknown }).object = cam;
+    try {
+      (gizmo as unknown as { camera: unknown }).camera = cam;
+    } catch {
+      /* older TransformControls keep the constructor camera */
+    }
+    if (useOrtho) {
+      const target = orbit.target.clone();
+      applyOrthoNavigation();
+      const distance = frameOrthoTopDown(target);
+      applyViewPreset(cam, orbit, "top", target, distance);
+    } else {
+      applyPerspNavigation();
+      if (!restorePerspPose()) {
+        const target = orbit.target.clone();
+        const preset = getViewportState().viewPreset;
+        applyViewPreset(
+          cam,
+          orbit,
+          preset === "top" ? "persp" : preset,
+          target,
+          28,
+        );
+      }
+    }
+  };
+  setActiveCamera(getViewportState().ortho);
   const ro = new ResizeObserver(updateFrustums);
   ro.observe(host);
 

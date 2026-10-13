@@ -83,6 +83,20 @@ describe("useViewportStore", () => {
     s.setTool("move");
     expect(useViewportStore.getState().activeTool).toBe("move");
   });
+
+  it("pairs Ortho with the top preset and Persp with persp", () => {
+    const s = useViewportStore.getState();
+    s.setOrtho(true);
+    expect(useViewportStore.getState()).toMatchObject({
+      ortho: true,
+      viewPreset: "top",
+    });
+    s.setOrtho(false);
+    expect(useViewportStore.getState()).toMatchObject({
+      ortho: false,
+      viewPreset: "persp",
+    });
+  });
 });
 
 describe("history (undo/redo)", () => {

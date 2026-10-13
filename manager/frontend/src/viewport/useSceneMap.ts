@@ -15,6 +15,7 @@ import {
   createCameraProjection,
   type CameraProjectionHandle,
 } from "./projection/projectOntoMap";
+import { getViewportState } from "./store";
 import type { ViewportWorld } from "./world";
 
 export type SceneMapProps = {
@@ -78,6 +79,12 @@ export function useSceneMap(
       box.getCenter(center);
       const span = Math.max(size.x, size.y, 8);
       world.orbit.target.copy(center);
+      // Ortho reframes as top-down plan sized to the map; persp keeps the
+      // angled overview used for the default 3D experience.
+      if (getViewportState().ortho) {
+        world.setActiveCamera(true);
+        return;
+      }
       world.perspCam.position.set(
         center.x,
         center.y - span * 0.85,

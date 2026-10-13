@@ -6,10 +6,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { ViewPreset } from "./types";
 
 /**
- * Blender-style navigation for the 3D viewport (Z-up world):
+ * Blender-style navigation for the perspective 3D viewport (Z-up world):
  * - Left-drag: orbit, Middle-drag: zoom (dolly), Right-drag: pan
  * - Wheel: zoom, Shift+wheel: pan
  * - Numpad 1/3/7: front/side/top, 5: persp/ortho toggle
+ *
+ * Ortho mode (see world.setActiveCamera) overrides this with map-style
+ * pan/zoom-only controls locked to a top-down plan view.
  */
 export function applyBlenderBindings(controls: OrbitControls): void {
   controls.mouseButtons = {

@@ -140,7 +140,7 @@ export function ViewportOptionsBar({
           type="button"
           className={!ortho ? "on" : ""}
           onClick={() => setOrtho(false)}
-          title="Perspective (5)"
+          title="Perspective view (5)"
         >
           Persp
         </button>
@@ -148,7 +148,7 @@ export function ViewportOptionsBar({
           type="button"
           className={ortho ? "on" : ""}
           onClick={() => setOrtho(true)}
-          title="Orthographic (5)"
+          title="Top-down orthographic map view for ROIs and tripwires (5)"
         >
           Ortho
         </button>

@@ -218,7 +218,16 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   select: (id) => set({ selectedId: id }),
   setTool: (activeTool) => set({ activeTool }),
   setViewPreset: (viewPreset) => set({ viewPreset }),
-  setOrtho: (ortho) => set({ ortho }),
+  /**
+   * Ortho is the map-style / 2D editing view: always pairs with the top
+   * preset so ROIs and tripwires are drawn on a flat plan. Persp restores
+   * the angled perspective preset.
+   */
+  setOrtho: (ortho) =>
+    set({
+      ortho,
+      viewPreset: ortho ? "top" : "persp",
+    }),
   setProjectCamera: (id) => set({ projectCameraId: id }),
   setProjectOpacity: (opacity) =>
     set({
