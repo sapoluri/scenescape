@@ -57,6 +57,8 @@ const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
 const CLICK_TOLERANCE_PX = 6;
 const DOUBLE_POINT_MS = 450;
 const POINT_EPS = 1e-3;
+/** World-meters snap distance to close a sensor polygon on the first vertex. */
+const SENSOR_POLY_CLOSE_M = 0.45;
 
 const r2d = (r: number) => (r * 180) / Math.PI;
 
@@ -153,11 +155,26 @@ function pointsEqual(
 }
 
 interface Draft {
-  tool: "region" | "tripwire";
+  tool: "region" | "tripwire" | "sensor-poly";
+  /** Sensor entity id when `tool` is sensor-poly. */
+  sensorId?: string;
   points: [number, number][];
   preview: Group;
   cursor: [number, number] | null;
   lastPointAt: number;
+}
+
+/** Selected poly sensor waiting for (or mid-draw) floor vertices. */
+function sensorNeedsPolyDraw(): SensorEntity | null {
+  const s = getViewportState();
+  const e = s.selectedId ? s.entities[s.selectedId] : undefined;
+  if (!e || e.type !== "sensor" || e.areaMode !== "poly") {
+    return null;
+  }
+  if (e.points.length >= 3) {
+    return null;
+  }
+  return e;
 }
 
 export function useViewportTools(world: ViewportWorld | null): void {
@@ -208,7 +225,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
       world.scene.remove(draft.preview);
       disposeGroup(draft.preview);
       const g = new Group();
-      const color = draft.tool === "region" ? 0x30d158 : 0xff9f0a;
+      const color =
+        draft.tool === "region"
+          ? 0x30d158
+          : draft.tool === "sensor-poly"
+            ? 0xbf5af2
+            : 0xff9f0a;
       const mat = new MeshBasicMaterial({ color });
       for (const [x, y] of draft.points) {
         const s = new Mesh(new SphereGeometry(0.14, 10, 8), mat);
@@ -232,10 +254,14 @@ export function useViewportTools(world: ViewportWorld | null): void {
       world.scene.add(g);
     };
 
-    const startDraft = (tool: "region" | "tripwire") => {
+    const startDraft = (
+      tool: "region" | "tripwire" | "sensor-poly",
+      sensorId?: string,
+    ) => {
       clearDraft();
       draftRef.current = {
         tool,
+        sensorId,
         points: [],
         preview: new Group(),
         cursor: null,
@@ -252,12 +278,31 @@ export function useViewportTools(world: ViewportWorld | null): void {
       const pts = draft.points;
       const valid =
         (draft.tool === "region" && pts.length >= 3) ||
-        (draft.tool === "tripwire" && pts.length >= 2);
+        (draft.tool === "tripwire" && pts.length >= 2) ||
+        (draft.tool === "sensor-poly" && pts.length >= 3);
+      const sensorId = draft.sensorId;
       clearDraft();
       if (!valid) {
         return;
       }
       const s = getViewportState();
+      if (draft.tool === "sensor-poly") {
+        if (!sensorId) {
+          return;
+        }
+        const cur = s.entities[sensorId];
+        if (!cur || cur.type !== "sensor") {
+          return;
+        }
+        const [cx, cy] = centroidOf(pts);
+        s.commitHistory();
+        s.updateEntity(sensorId, {
+          points: pts.map(([x, y]) => [x, y] as [number, number]),
+          position: [cx, cy, cur.position[2]],
+        });
+        s.select(sensorId);
+        return;
+      }
       const id = `draft-${crypto.randomUUID()}`;
       s.commitHistory();
       if (draft.tool === "region") {
@@ -301,6 +346,43 @@ export function useViewportTools(world: ViewportWorld | null): void {
       }
     };
 
+    const addSensorPolyPoint = (pt: [number, number]) => {
+      const sensor = sensorNeedsPolyDraw();
+      if (!sensor) {
+        return;
+      }
+      let draft = draftRef.current;
+      if (!draft || draft.tool !== "sensor-poly" || draft.sensorId !== sensor.id) {
+        startDraft("sensor-poly", sensor.id);
+        draft = draftRef.current;
+      }
+      if (!draft) {
+        return;
+      }
+      // Close by clicking near the first vertex (same as 2D SensorAreaMap).
+      if (draft.points.length >= 3) {
+        const first = draft.points[0];
+        if (
+          Math.hypot(first[0] - pt[0], first[1] - pt[1]) < SENSOR_POLY_CLOSE_M
+        ) {
+          finishDraft();
+          return;
+        }
+      }
+      const now = performance.now();
+      const last = draft.points[draft.points.length - 1];
+      if (
+        last &&
+        now - draft.lastPointAt < DOUBLE_POINT_MS &&
+        Math.hypot(last[0] - pt[0], last[1] - pt[1]) < 0.25
+      ) {
+        return;
+      }
+      draft.lastPointAt = now;
+      draft.points.push(pt);
+      refreshPreview();
+    };
+
     const placeCamera = (pt: [number, number]) => {
       const s = getViewportState();
       const id = `draft-${crypto.randomUUID()}`;
@@ -340,6 +422,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         position: [pt[0], pt[1], 0],
         areaMode: "circle",
         radius: 5,
+        points: [],
         color: "#bf5af2",
       };
       s.commitHistory();
@@ -398,6 +481,11 @@ export function useViewportTools(world: ViewportWorld | null): void {
       }
       downRef.current = { x: ev.clientX, y: ev.clientY, at: performance.now() };
       const tool = getViewportState().activeTool;
+      // Sensor polygon drawing uses click (pointerup) so Ortho pan still works.
+      if (sensorNeedsPolyDraw() && !CREATION_TOOLS.includes(tool)) {
+        downPickRef.current = pickTarget(world, ev);
+        return;
+      }
       if (!CREATION_TOOLS.includes(tool)) {
         // Record the press target so a click that starts/ends on the gizmo
         // never deselects the entity being transformed.
@@ -467,6 +555,14 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (CREATION_TOOLS.includes(tool)) {
         return; // creation tools act on pointerdown
       }
+      // Incomplete poly sensor: floor clicks add / close vertices.
+      if (sensorNeedsPolyDraw()) {
+        const pt = floorPoint(world, ev);
+        if (pt) {
+          addSensorPolyPoint(pt);
+        }
+        return;
+      }
       const id = pickEntity(world, ev);
       if (id) {
         getViewportState().select(id);
@@ -478,7 +574,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
 
     const onDblClick = (ev: MouseEvent) => {
       const tool = getViewportState().activeTool;
-      if (tool === "region" || tool === "tripwire") {
+      const draft = draftRef.current;
+      if (
+        tool === "region" ||
+        tool === "tripwire" ||
+        draft?.tool === "sensor-poly"
+      ) {
         ev.preventDefault();
         finishDraft();
       }
@@ -504,6 +605,15 @@ export function useViewportTools(world: ViewportWorld | null): void {
   const activeTool = useViewportStore((s) => s.activeTool);
   const selectedId = useViewportStore((s) => s.selectedId);
   const structVersion = useViewportStore((s) => s.structVersion);
+  const selectedSensorPolyPending = useViewportStore((s) => {
+    const e = s.selectedId ? s.entities[s.selectedId] : undefined;
+    return (
+      !!e &&
+      e.type === "sensor" &&
+      e.areaMode === "poly" &&
+      e.points.length < 3
+    );
+  });
   // Calibrate uses double-click to add points; left-drag must still orbit.
   const calActive = useCalibrateStore((s) => s.active);
 
@@ -516,10 +626,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
     const id = getViewportState().selectedId;
     const entity = id ? getViewportState().entities[id] : undefined;
     const nodes = id ? world.entityNodes.get(id) : undefined;
+    const drawingSensorPoly = selectedSensorPolyPending;
 
     const canTransform =
       nodes &&
       entity &&
+      !drawingSensorPoly &&
       (tool === "move" ||
         (tool === "rotate" &&
           (entity.type === "region" ||
@@ -530,13 +642,20 @@ export function useViewportTools(world: ViewportWorld | null): void {
 
     // Left-drag orbits for navigation/transform tools. During calibrate,
     // empty left-drag orbits too (marker drag temporarily disables orbit).
+    // While drawing a sensor polygon, leave LEFT free so Ortho can pan and
+    // Persp click-to-place is not stolen by orbit start.
     const orbitLeftDrag =
-      calActive ||
-      tool === "live" ||
-      tool === "move" ||
-      tool === "rotate" ||
-      tool === "scale";
-    world.orbit.mouseButtons.LEFT = orbitLeftDrag ? MOUSE.ROTATE : null;
+      !drawingSensorPoly &&
+      (calActive ||
+        tool === "live" ||
+        tool === "move" ||
+        tool === "rotate" ||
+        tool === "scale");
+    // Ortho mode already overrides mouseButtons in world.ts; only set when
+    // rotate is enabled so we do not fight map-style pan.
+    if (world.orbit.enableRotate) {
+      world.orbit.mouseButtons.LEFT = orbitLeftDrag ? MOUSE.ROTATE : null;
+    }
 
     if (!canTransform || !nodes || !entity) {
       gizmo.detach();
@@ -568,7 +687,33 @@ export function useViewportTools(world: ViewportWorld | null): void {
       gizmo.showY = true;
       gizmo.showZ = true;
     };
-  }, [world, activeTool, selectedId, structVersion, calActive]);
+  }, [
+    world,
+    activeTool,
+    selectedId,
+    structVersion,
+    calActive,
+    selectedSensorPolyPending,
+  ]);
+
+  // Drop an in-progress sensor polygon draft when selection / mode changes.
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    const draft = draftRef.current;
+    if (!draft || draft.tool !== "sensor-poly") {
+      return;
+    }
+    if (
+      !selectedSensorPolyPending ||
+      draft.sensorId !== selectedId
+    ) {
+      world.scene.remove(draft.preview);
+      disposeGroup(draft.preview);
+      draftRef.current = null;
+    }
+  }, [world, selectedId, selectedSensorPolyPending]);
 
   /* ---------------- keyboard ------------------------------------------- */
   useEffect(() => {

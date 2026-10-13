@@ -80,6 +80,8 @@ export interface SensorEntity extends ViewportEntityBase {
   areaMode: SensorAreaMode;
   /** Coverage radius in meters (circle mode). */
   radius: number;
+  /** Floor polygon vertices in meters (poly mode). Empty while drawing. */
+  points: [number, number][];
   color: string;
 }
 

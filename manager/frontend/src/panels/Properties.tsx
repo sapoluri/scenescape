@@ -887,13 +887,11 @@ function SensorProps({
   e,
   sensorId,
   sceneId,
-  calibrateHref,
   authToken,
 }: {
   e: SensorEntity;
   sensorId?: string;
   sceneId?: string;
-  calibrateHref?: string;
   authToken?: string;
 }) {
   const toast = useAppToast();
@@ -960,9 +958,18 @@ function SensorProps({
           className="ss-prop-input ss-prop-select"
           value={e.areaMode}
           disabled={busy}
-          onChange={(ev) =>
-            patch({ areaMode: ev.target.value as SensorAreaMode })
-          }
+          onChange={(ev) => {
+            const areaMode = ev.target.value as SensorAreaMode;
+            // Switching into polygon clears vertices so floor-click drawing
+            // starts immediately in the 3D viewport.
+            if (areaMode === "poly" && e.areaMode !== "poly") {
+              patch({ areaMode, points: [] });
+            } else if (areaMode !== "poly") {
+              patch({ areaMode, points: [] });
+            } else {
+              patch({ areaMode });
+            }
+          }}
           aria-label="Sensor coverage area"
         >
           <option value="scene">Full scene</option>
@@ -977,11 +984,30 @@ function SensorProps({
           onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
         />
       ) : null}
-      {e.areaMode === "poly" && calibrateHref ? (
-        <a href={calibrateHref} className="ss-prop-calibrate">
-          <i className="bi bi-pencil" aria-hidden="true" />
-          <span>Edit polygon on map</span>
-        </a>
+      {e.areaMode === "poly" ? (
+        <div className="ss-prop-actions">
+          <ReadField
+            label="Vertices"
+            value={
+              e.points.length >= 3
+                ? String(e.points.length)
+                : e.points.length === 0
+                  ? "Click floor to draw"
+                  : `${e.points.length} (need 3+)`
+            }
+          />
+          {e.points.length >= 3 ? (
+            <button
+              type="button"
+              className="ss-prop-calibrate"
+              disabled={busy}
+              onClick={() => patch({ points: [] })}
+            >
+              <i className="bi bi-pencil" aria-hidden="true" />
+              <span>Redraw polygon</span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <SaveBar
         dirty={dirty}
@@ -996,7 +1022,9 @@ function SensorProps({
           ? "Full scene coverage. Save writes name and area to the database."
           : e.areaMode === "circle"
             ? "Circle uses X/Y as center. Save writes area and radius to the database."
-            : "Draw polygon vertices on the map first, then Save name/area here."}
+            : e.points.length >= 3
+              ? "Polygon is ready. Save writes vertices and center to the database."
+              : "Click the floor to place vertices. Click the first point (or Enter / double-click) to close."}
       </p>
     </>
   );
@@ -1262,7 +1290,6 @@ export function Properties({
           e={e}
           sensorId={senBoot?.sensorId}
           sceneId={sceneId}
-          calibrateHref={senBoot?.calibrateHref}
           authToken={authToken}
         />
       )}

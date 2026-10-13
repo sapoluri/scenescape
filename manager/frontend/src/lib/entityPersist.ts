@@ -58,6 +58,7 @@ export function entityPersistKey(e: ViewportEntity): string {
         position: e.position,
         areaMode: e.areaMode,
         radius: e.radius,
+        points: e.points,
         color: e.color,
       });
     case "region":
@@ -146,15 +147,12 @@ export async function persistSensorEntity(
     payload.radius = e.radius;
   }
   if (e.areaMode === "poly") {
-    const row = (await api.getSensor(authToken, sensorId)) ?? {};
-    const points = row.points;
-    if (!Array.isArray(points) || points.length < 3) {
+    if (!Array.isArray(e.points) || e.points.length < 3) {
       throw new Error(
-        "Polygon coverage needs vertices — use Edit polygon on map first",
+        "Polygon coverage needs at least 3 vertices — click the floor to draw",
       );
     }
-    payload.points = points;
-    // Keep map position aligned with the polygon centroid when possible.
+    payload.points = e.points;
     payload.center = [e.position[0], e.position[1]];
   }
   if (e.areaMode === "scene") {

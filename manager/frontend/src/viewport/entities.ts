@@ -389,7 +389,8 @@ function buildSensor(e: SensorEntity): EntityNodes {
   const group = new Group();
   const base = new Color(e.color);
   const [x, y, z] = e.position;
-  // Circle coverage uses radius; scene/poly still show a small footprint cue.
+  const polyPoints = e.areaMode === "poly" ? e.points : [];
+  const showPoly = polyPoints.length >= 3;
   const radius =
     e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
 
@@ -408,33 +409,75 @@ function buildSensor(e: SensorEntity): EntityNodes {
   });
   const head = new Mesh(new SphereGeometry(0.22, 14, 10), headMat);
   head.position.z = 2.3;
-  // RingGeometry/CircleGeometry already lie in the XY plane = Z-up floor.
-  const ring = new Mesh(
-    new RingGeometry(Math.max(radius - 0.25, 0.1), radius, 48),
-    new MeshBasicMaterial({
-      color: base.clone(),
-      transparent: true,
-      opacity: e.areaMode === "circle" ? 0.35 : 0.18,
-      side: DoubleSide,
-    }),
-  );
-  ring.position.z = 0.06;
-  ring.visible = e.areaMode !== "scene";
-  const disc = new Mesh(
-    new CircleGeometry(radius, 48),
-    new MeshBasicMaterial({
-      color: base.clone(),
-      transparent: true,
-      opacity: e.areaMode === "circle" ? 0.06 : 0.03,
-      side: DoubleSide,
-      depthWrite: false,
-    }),
-  );
-  disc.position.z = 0.05;
-  disc.visible = e.areaMode !== "scene";
+
+  const coverage = new Group();
+  coverage.name = "sensor-coverage";
+  if (showPoly) {
+    const [cx, cy] = centroidOf(polyPoints);
+    const shape = new Shape(
+      polyPoints.map(([px, py]) => new Vector2(px - cx, py - cy)),
+    );
+    const geo = new ShapeGeometry(shape);
+    const fill = new Mesh(
+      geo,
+      new MeshBasicMaterial({
+        color: base.clone(),
+        transparent: true,
+        opacity: 0.14,
+        side: DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    fill.position.z = 0.05;
+    const edges = new LineSegments(
+      new EdgesGeometry(geo),
+      new LineBasicMaterial({ color: base.clone() }),
+    );
+    edges.position.z = 0.06;
+    coverage.position.set(cx - x, cy - y, 0);
+    coverage.add(fill, edges);
+  } else if (e.areaMode === "circle") {
+    // RingGeometry/CircleGeometry already lie in the XY plane = Z-up floor.
+    const ring = new Mesh(
+      new RingGeometry(Math.max(radius - 0.25, 0.1), radius, 48),
+      new MeshBasicMaterial({
+        color: base.clone(),
+        transparent: true,
+        opacity: 0.35,
+        side: DoubleSide,
+      }),
+    );
+    ring.position.z = 0.06;
+    const disc = new Mesh(
+      new CircleGeometry(radius, 48),
+      new MeshBasicMaterial({
+        color: base.clone(),
+        transparent: true,
+        opacity: 0.06,
+        side: DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    disc.position.z = 0.05;
+    coverage.add(ring, disc);
+  } else if (e.areaMode === "poly") {
+    // Waiting for vertices — faint ring so the sensor stays findable.
+    const ring = new Mesh(
+      new RingGeometry(0.95, 1.2, 32),
+      new MeshBasicMaterial({
+        color: base.clone(),
+        transparent: true,
+        opacity: 0.22,
+        side: DoubleSide,
+      }),
+    );
+    ring.position.z = 0.06;
+    coverage.add(ring);
+  }
+
   const proxy = new Mesh(new BoxGeometry(1.5, 1.5, 2.6), proxyMaterial());
   proxy.position.z = 1.3;
-  group.add(pole, head, ring, disc, proxy);
+  group.add(pole, head, coverage, proxy);
   group.position.set(x, y, z);
   group.userData.entityId = e.id;
 
@@ -688,7 +731,26 @@ type SensorArea = {
   x?: unknown;
   y?: unknown;
   radius?: unknown;
+  points?: unknown;
 };
+
+function parseSensorPolyPoints(area: SensorArea | null): [number, number][] {
+  if (!area || !Array.isArray(area.points)) {
+    return [];
+  }
+  const out: [number, number][] = [];
+  for (const p of area.points) {
+    if (
+      Array.isArray(p) &&
+      p.length >= 2 &&
+      Number.isFinite(Number(p[0])) &&
+      Number.isFinite(Number(p[1]))
+    ) {
+      out.push([Number(p[0]), Number(p[1])]);
+    }
+  }
+  return out;
+}
 
 async function seedSensors(
   sensors: SceneSensorBootstrap[],
@@ -721,20 +783,24 @@ async function seedSensors(
           position = null;
         }
       }
+      const areaMode =
+        area?.area === "circle" || area?.area === "poly" ? area.area : "scene";
+      const points =
+        areaMode === "poly" ? parseSensorPolyPoints(area) : [];
       if (!position) {
         if (
-          area?.area === "circle" &&
-          Number.isFinite(Number(area.x)) &&
-          Number.isFinite(Number(area.y))
+          Number.isFinite(Number(area?.x)) &&
+          Number.isFinite(Number(area?.y))
         ) {
-          position = [Number(area.x), Number(area.y), 0];
+          position = [Number(area?.x), Number(area?.y), 0];
+        } else if (points.length >= 3) {
+          const [cx, cy] = centroidOf(points);
+          position = [cx, cy, 0];
         } else {
           const angle = (i / Math.max(sensors.length, 1)) * Math.PI * 2;
           position = [Math.cos(angle) * 10, Math.sin(angle) * 10, 0];
         }
       }
-      const areaMode =
-        area?.area === "circle" || area?.area === "poly" ? area.area : "scene";
       return {
         id: s.id,
         type: "sensor",
@@ -743,6 +809,7 @@ async function seedSensors(
         position,
         areaMode,
         radius: areaRadius,
+        points,
         color: "#bf5af2",
       } satisfies SensorEntity;
     }),
