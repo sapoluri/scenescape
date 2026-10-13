@@ -20,6 +20,37 @@
   margin-bottom: 1rem;
 }
 
+/* Match Open Scene gallery search chrome. */
+.ss-admin-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+}
+
+.ss-admin-search {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ss-text);
+  background: var(--ss-surface);
+  border: 1px solid var(--ss-input-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  box-sizing: border-box;
+}
+
+.ss-admin-search:focus {
+  outline: 2px solid var(--ss-brand-soft);
+  outline-offset: 1px;
+  border-color: var(--ss-brand);
+}
+
+.ss-admin-search::placeholder {
+  color: var(--ss-text-muted);
+}
+
 /* Match scene-detail / models workspace title density. */
 .ss-admin-list .ss-page-title {
   font-size: var(--ss-type-workspace-title, 1.2rem);

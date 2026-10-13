@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { ACTION_ICONS, iconForActionLabel } from "../components/actionIcons";
 import "./AdminListApp.css";
@@ -58,11 +59,33 @@ function CellContent({ cell }: { cell: AdminListCell }) {
   );
 }
 
+/** Case-insensitive match across row cell text. Pure — unit tested. */
+export function filterAdminRows(
+  rows: AdminListRow[],
+  query: string,
+): AdminListRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return rows;
+  }
+  return rows.filter((row) =>
+    row.cells.some((cell) => (cell.text || "").toLowerCase().includes(q)),
+  );
+}
+
 /** Full list page: header + data table (Django supplies bootstrap JSON only). */
 export function AdminListApp({ bootstrap }: Props) {
+  const [query, setQuery] = useState("");
+  const visible = useMemo(
+    () => filterAdminRows(bootstrap.rows, query),
+    [bootstrap.rows, query],
+  );
   const showActions =
     Boolean(bootstrap.isSuperuser) &&
     bootstrap.rows.some((r) => (r.actions || []).length > 0);
+  const titleLower = bootstrap.title.toLowerCase();
+  const hasRows = bootstrap.rows.length > 0;
+  const noMatch = hasRows && visible.length === 0;
 
   const actions = bootstrap.primaryAction ? (
     <a
@@ -81,10 +104,26 @@ export function AdminListApp({ bootstrap }: Props) {
         breadcrumbs={bootstrap.breadcrumbs || []}
         actions={actions}
       />
+      {hasRows ? (
+        <div className="ss-admin-search-row">
+          <input
+            type="search"
+            className="ss-admin-search"
+            placeholder={`Search ${titleLower}…`}
+            value={query}
+            onChange={(ev) => setQuery(ev.target.value)}
+            aria-label={`Search ${titleLower}`}
+          />
+        </div>
+      ) : null}
       <div className="ss-table-card ss-admin-table-card">
-        {bootstrap.rows.length === 0 ? (
+        {!hasRows ? (
           <p className="ss-table-empty">
             {bootstrap.emptyMessage || "Nothing to show."}
+          </p>
+        ) : noMatch ? (
+          <p className="ss-table-empty">
+            No {titleLower} match “{query.trim()}”.
           </p>
         ) : (
           <table className="table ss-admin-table">
@@ -97,7 +136,7 @@ export function AdminListApp({ bootstrap }: Props) {
               </tr>
             </thead>
             <tbody>
-              {bootstrap.rows.map((row) => (
+              {visible.map((row) => (
                 <tr key={row.id}>
                   {row.cells.map((cell, i) => (
                     <td key={`${row.id}-${i}`}>
