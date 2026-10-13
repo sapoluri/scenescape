@@ -8,7 +8,7 @@
   height: 100%;
   min-height: 0;
   position: relative;
-  background: var(--ss-viewport-bg, #141417);
+  background: var(--ss-viewport-bg, var(--ss-surface));
 }
 
 /* Full-bleed app + options bars; Outliner dock starts below these. */
@@ -32,6 +32,14 @@
   min-width: 0;
   min-height: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-sp-viewport > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* Right dock — thin handle when open; slim vertical-tab rail when collapsed. */
