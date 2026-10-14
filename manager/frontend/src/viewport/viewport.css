@@ -175,6 +175,37 @@
   will-change: transform;
 }
 
+/* Tracked-object labels — match main `.asset-label` (scenescape.css). */
+.ss-vlabel--mark {
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ss-vlabel--mark-id {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.ss-vlabel--mark-row {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.ss-vlabel--mark-row span {
+  color: #fff;
+  font-weight: 500;
+}
+
 .ss-viewport-error {
   padding: 24px;
   color: var(--ss-text, #fff);

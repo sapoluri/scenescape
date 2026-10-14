@@ -62,14 +62,21 @@ const SENSOR_POLY_CLOSE_M = 0.45;
 
 const r2d = (r: number) => (r * 180) / Math.PI;
 
+/**
+ * Floor hit under the cursor (z=0). Same NDC math as calibrate
+ * `pickScenePoint` — keep them identical so tool clicks match wizard clicks.
+ */
 function floorPoint(
   world: ViewportWorld,
   ev: PointerEvent,
 ): [number, number] | null {
   const rect = world.host.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
   const ndc = new Vector2(
     ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-    -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+    -(((ev.clientY - rect.top) / rect.height) * 2 - 1),
   );
   const raycaster = new Raycaster();
   raycaster.setFromCamera(ndc, world.getActiveCamera());
@@ -85,9 +92,12 @@ function pickEntity(
   ev: PointerEvent,
 ): string | null {
   const rect = world.host.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
   const ndc = new Vector2(
     ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-    -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+    -(((ev.clientY - rect.top) / rect.height) * 2 - 1),
   );
   const raycaster = new Raycaster();
   raycaster.setFromCamera(ndc, world.getActiveCamera());
@@ -114,9 +124,12 @@ function pickTarget(world: ViewportWorld, ev: PointerEvent): string | null {
   }
   // Gizmo handles live outside entityRoot — raycast the helper too.
   const rect = world.host.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
   const ndc = new Vector2(
     ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-    -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+    -(((ev.clientY - rect.top) / rect.height) * 2 - 1),
   );
   const raycaster = new Raycaster();
   raycaster.setFromCamera(ndc, world.getActiveCamera());
@@ -585,16 +598,19 @@ export function useViewportTools(world: ViewportWorld | null): void {
       }
     };
 
-    host.addEventListener("pointerdown", onPointerDown);
-    host.addEventListener("pointermove", onPointerMove);
-    host.addEventListener("pointerup", onPointerUp);
-    host.addEventListener("dblclick", onDblClick);
+    // Capture phase (same as calibrate): OrbitControls listens on the canvas
+    // and would otherwise pan/orbit on bubble before we sample the camera,
+    // shifting floor picks away from the click. Capture runs first.
+    host.addEventListener("pointerdown", onPointerDown, true);
+    host.addEventListener("pointermove", onPointerMove, true);
+    host.addEventListener("pointerup", onPointerUp, true);
+    host.addEventListener("dblclick", onDblClick, true);
     finishDraftRef.current = finishDraft;
     return () => {
-      host.removeEventListener("pointerdown", onPointerDown);
-      host.removeEventListener("pointermove", onPointerMove);
-      host.removeEventListener("pointerup", onPointerUp);
-      host.removeEventListener("dblclick", onDblClick);
+      host.removeEventListener("pointerdown", onPointerDown, true);
+      host.removeEventListener("pointermove", onPointerMove, true);
+      host.removeEventListener("pointerup", onPointerUp, true);
+      host.removeEventListener("dblclick", onDblClick, true);
       finishDraftRef.current = null;
       clearDraft();
       clearMeasure();
@@ -640,21 +656,26 @@ export function useViewportTools(world: ViewportWorld | null): void {
         (tool === "scale" &&
           (entity.type === "region" || entity.type === "tripwire")));
 
-    // Left-drag orbits for navigation/transform tools. During calibrate,
-    // empty left-drag orbits too (marker drag temporarily disables orbit).
-    // While drawing a sensor polygon, leave LEFT free so Ortho can pan and
-    // Persp click-to-place is not stolen by orbit start.
+    // Left-drag orbits/pans for navigation tools. During floor drawing
+    // (region / tripwire / measure / sensor poly), disable LEFT so Ortho pan
+    // or Persp orbit cannot move the camera before the floor pick — that was
+    // shifting ROI/tripwire/measure points off the click (calibrate avoids
+    // this via capture + no left-drag on markers). Middle/right still navigate.
+    const drawingFloor =
+      drawingSensorPoly || CREATION_TOOLS.includes(tool);
     const orbitLeftDrag =
-      !drawingSensorPoly &&
+      !drawingFloor &&
       (calActive ||
         tool === "live" ||
         tool === "move" ||
         tool === "rotate" ||
         tool === "scale");
-    // Ortho mode already overrides mouseButtons in world.ts; only set when
-    // rotate is enabled so we do not fight map-style pan.
-    if (world.orbit.enableRotate) {
-      world.orbit.mouseButtons.LEFT = orbitLeftDrag ? MOUSE.ROTATE : null;
+    if (orbitLeftDrag) {
+      world.orbit.mouseButtons.LEFT = world.orbit.enableRotate
+        ? MOUSE.ROTATE
+        : MOUSE.PAN;
+    } else {
+      world.orbit.mouseButtons.LEFT = null;
     }
 
     if (!canTransform || !nodes || !entity) {

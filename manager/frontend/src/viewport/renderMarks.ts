@@ -8,9 +8,8 @@ import {
   CanvasTexture,
   Color,
   Group,
-  Line,
-  LineBasicMaterial,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   Sprite,
@@ -50,6 +49,8 @@ import type { ViewportWorld } from "./world";
  */
 
 const TRAIL_POINTS = 40;
+/** Half-width of the trail ribbon in meters (thicker than a 1px GL line). */
+const TRAIL_HALF_WIDTH_M = 0.04;
 const LABEL_Z_FALLBACK = 1.6;
 const INDICATOR_GAP = 0.5;
 const LABEL_GAP = 1.2;
@@ -75,11 +76,17 @@ function assetBodySig(asset: Asset3DRecord | null, className: string): string {
 
 interface MarkNodes {
   group: Group;
+  /**
+   * Yaw group for body + indicator. Trail stays outside so heading does not
+   * warp the path ribbon.
+   */
+  posed: Group;
   /** Pose / model holder; replaced when the library asset resolves. */
   bodyRoot: Group;
   /** Downward triangle sprite above the body (UUID track color). */
   indicator: Sprite;
-  trail: Line;
+  /** Thick floor ribbon (mesh) — WebGL Line linewidth is not portable. */
+  trail: Mesh;
   className: string;
   /** True when bodyRoot holds a cloned library GLB (not a primitive). */
   hasGlb: boolean;
@@ -113,7 +120,8 @@ function disposeObjectTree(root: Object3D): void {
 
 /**
  * Downward triangle hover marker — port of legacy `createIndicator` in
- * draw.js, colored with the 2D track id rule.
+ * draw.js (main). Local scale stays 1; `layoutChrome` sizes it to the body
+ * footprint because legacy applied `thisMark.scale` to the whole mark.
  */
 function createTrackIndicator(trackColor: string): Sprite {
   const canvas = document.createElement("canvas");
@@ -140,6 +148,28 @@ function createTrackIndicator(trackColor: string): Sprite {
   sprite.name = "indicator";
   sprite.scale.set(1, 1, 1);
   return sprite;
+}
+
+/** Build the legacy CSS2D-style label card (`category #id` + Dwell row). */
+function createMarkLabelElement(title: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className = "ss-vlabel ss-vlabel--mark";
+
+  const header = document.createElement("div");
+  header.className = "ss-vlabel--mark-id";
+  header.textContent = title;
+
+  const row = document.createElement("div");
+  row.className = "ss-vlabel--mark-row";
+  row.append("Dwell: ");
+  const dwell = document.createElement("span");
+  dwell.dataset.field = "dwell";
+  dwell.textContent = "—";
+  row.appendChild(dwell);
+
+  el.appendChild(header);
+  el.appendChild(row);
+  return el;
 }
 
 /**
@@ -194,18 +224,23 @@ function buildMarkBody(
   return { bodyRoot: pose, hasGlb: false };
 }
 
-function bodyTopZ(root: Object3D): number {
-  root.updateMatrixWorld(true);
-  const box = new Box3().setFromObject(root);
-  if (box.isEmpty()) {
-    return LABEL_Z_FALLBACK - LABEL_GAP;
-  }
-  return box.max.z;
-}
 
-/** Place indicator + label height from the current body bounds (legacy gaps). */
+/**
+ * Place indicator + label from body bounds (legacy gaps from assetmanager.js).
+ * Triangle world size follows the body’s XY footprint so it matches marks that
+ * were uniformly scaled on main (`sprite.scale = 1` under `thisMark.scale`).
+ */
 function layoutChrome(nodes: MarkNodes): void {
-  const top = bodyTopZ(nodes.bodyRoot);
+  nodes.bodyRoot.updateMatrixWorld(true);
+  const box = new Box3().setFromObject(nodes.bodyRoot);
+  const size = new Vector3();
+  if (!box.isEmpty()) {
+    box.getSize(size);
+  }
+  const top = box.isEmpty() ? LABEL_Z_FALLBACK - LABEL_GAP : box.max.z;
+  const footprint = Math.max(size.x, size.y, 0.35);
+  const indicatorScale = Math.min(Math.max(footprint, 0.35), 1);
+  nodes.indicator.scale.set(indicatorScale, indicatorScale, indicatorScale);
   nodes.indicator.position.set(0, 0, top + INDICATOR_GAP);
   nodes.labelZ = Math.max(top + LABEL_GAP, LABEL_Z_FALLBACK);
 }
@@ -214,30 +249,106 @@ function trackColorFor(entity: MarkEntity): string {
   return colorFromTrackId(trackIdFromMarkKey(entity.id));
 }
 
+function createTrailRibbon(trackColor: string): Mesh {
+  const geometry = new BufferGeometry();
+  // Placeholder attributes so the mesh is valid before the first sample.
+  geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
+  geometry.setIndex([0, 1, 2]);
+  const material = new MeshBasicMaterial({
+    color: trackColor,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    side: 2, // DoubleSide
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  mesh.name = "trail";
+  return mesh;
+}
+
+/**
+ * Rebuild the trail ribbon mesh from world-space samples (newest first).
+ * Written in local coords relative to the mark origin.
+ */
+function writeTrailRibbon(
+  mesh: Mesh,
+  pts: Vector3[],
+  originX: number,
+  originY: number,
+): void {
+  const n = pts.length;
+  if (n < 2) {
+    mesh.visible = false;
+    return;
+  }
+  const verts = new Float32Array(n * 2 * 3);
+  const indices = new Uint16Array((n - 1) * 6);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const lx = p.x - originX;
+    const ly = p.y - originY;
+    const lz = p.z;
+    let dx: number;
+    let dy: number;
+    if (i < n - 1) {
+      dx = pts[i + 1].x - p.x;
+      dy = pts[i + 1].y - p.y;
+    } else {
+      dx = p.x - pts[i - 1].x;
+      dy = p.y - pts[i - 1].y;
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / len) * TRAIL_HALF_WIDTH_M;
+    const ny = (dx / len) * TRAIL_HALF_WIDTH_M;
+    const left = i * 2;
+    const right = left + 1;
+    verts[left * 3] = lx + nx;
+    verts[left * 3 + 1] = ly + ny;
+    verts[left * 3 + 2] = lz;
+    verts[right * 3] = lx - nx;
+    verts[right * 3 + 1] = ly - ny;
+    verts[right * 3 + 2] = lz;
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      const b = a + 1;
+      const c = left;
+      const d = right;
+      const base = (i - 1) * 6;
+      indices[base] = a;
+      indices[base + 1] = b;
+      indices[base + 2] = c;
+      indices[base + 3] = b;
+      indices[base + 4] = d;
+      indices[base + 5] = c;
+    }
+  }
+  const geometry = mesh.geometry;
+  geometry.setAttribute("position", new BufferAttribute(verts, 3));
+  geometry.setIndex(new BufferAttribute(indices, 1));
+  geometry.computeBoundingSphere();
+  mesh.visible = true;
+}
+
 function buildMarkNodes(
   entity: MarkEntity,
   catalog: MarkAssetCatalog,
 ): MarkNodes {
   const group = new Group();
+  const posed = new Group();
+  posed.name = "posed";
   const asset = catalog.assetOf(entity.className);
   const { bodyRoot, hasGlb } = buildMarkBody(entity, catalog);
   const trackColor = trackColorFor(entity);
-  const track = new Color(trackColor);
 
   const indicator = createTrackIndicator(trackColor);
-  const trailGeo = new BufferGeometry();
-  trailGeo.setAttribute(
-    "position",
-    new BufferAttribute(new Float32Array(TRAIL_POINTS * 3), 3),
-  );
-  const trail = new Line(
-    trailGeo,
-    new LineBasicMaterial({ color: track, transparent: true, opacity: 0.5 }),
-  );
-  trail.frustumCulled = false;
-  group.add(bodyRoot, indicator, trail);
+  const trail = createTrailRibbon(trackColor);
+  posed.add(bodyRoot, indicator);
+  group.add(posed, trail);
   const nodes: MarkNodes = {
     group,
+    posed,
     bodyRoot,
     indicator,
     trail,
@@ -256,7 +367,7 @@ function rebuildBody(
   entity: MarkEntity,
   catalog: MarkAssetCatalog,
 ): void {
-  nodes.group.remove(nodes.bodyRoot);
+  nodes.posed.remove(nodes.bodyRoot);
   disposeObjectTree(nodes.bodyRoot);
   const asset = catalog.assetOf(entity.className);
   const built = buildMarkBody(entity, catalog);
@@ -264,7 +375,7 @@ function rebuildBody(
   nodes.hasGlb = built.hasGlb;
   nodes.className = entity.className;
   nodes.assetSig = assetBodySig(asset, entity.className);
-  nodes.group.add(nodes.bodyRoot, nodes.indicator, nodes.trail);
+  nodes.posed.add(nodes.bodyRoot, nodes.indicator);
   layoutChrome(nodes);
 }
 
@@ -290,11 +401,14 @@ export function attachMarkRenderer(
   const ensureLabel = (id: string, name: string) => {
     let el = labelEls.get(id);
     if (!el) {
-      el = document.createElement("div");
-      el.className = "ss-vlabel ss-vlabel--mark";
-      el.textContent = name;
+      el = createMarkLabelElement(name);
       labelLayer.appendChild(el);
       labelEls.set(id, el);
+      return el;
+    }
+    const header = el.querySelector(".ss-vlabel--mark-id");
+    if (header && header.textContent !== name) {
+      header.textContent = name;
     }
     return el;
   };
@@ -309,9 +423,8 @@ export function attachMarkRenderer(
       pts = [];
       trailPts.set(id, pts);
     }
-    // Trail samples are stored in world XY; the Line is parented under the
-    // mark group, so write local coords (world − current mark position) or
-    // the trail becomes random squiggles as the object moves.
+    // Trail samples are stored in world XY; the ribbon is parented under the
+    // mark group (outside yaw), so write local coords (world − mark origin).
     const last = pts[0];
     if (!last || Math.hypot(last.x - x, last.y - y) > 0.05) {
       pts.unshift(new Vector3(x, y, 0.08));
@@ -319,20 +432,11 @@ export function attachMarkRenderer(
         pts.pop();
       }
     }
-    const attr = nodes.trail.geometry.getAttribute(
-      "position",
-    ) as BufferAttribute;
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      attr.setXYZ(i, p.x - x, p.y - y, p.z);
+    if (show && pts.length >= 2) {
+      writeTrailRibbon(nodes.trail, pts, x, y);
+    } else {
+      nodes.trail.visible = false;
     }
-    // Clear unused slots so a shorter trail doesn't leave a stale segment.
-    for (let i = pts.length; i < TRAIL_POINTS; i++) {
-      attr.setXYZ(i, 0, 0, 0.08);
-    }
-    attr.needsUpdate = true;
-    nodes.trail.geometry.setDrawRange(0, Math.max(pts.length, 1));
-    nodes.trail.visible = show && pts.length >= 2;
   };
 
   const reconcileMarks = () => {
@@ -363,12 +467,13 @@ export function attachMarkRenderer(
       nodes.group.position.set(e.position[0], e.position[1], 0);
       // When the asset disables velocity heading, keep yaw at 0 (pose holds
       // the class orientation). Unknown classes keep the derived heading.
+      // Apply yaw only to posed (body+indicator) so the trail ribbon stays put.
       const applyHeading =
         (!asset || asset.rotationFromVelocity) && Number.isFinite(e.heading);
-      nodes.group.rotation.z = applyHeading ? e.heading : 0;
+      nodes.posed.rotation.z = applyHeading ? e.heading : 0;
       // Trail stays on the UUID track color (same as the hover triangle).
       const track = new Color(nodes.trackColor);
-      (nodes.trail.material as LineBasicMaterial).color.copy(track);
+      (nodes.trail.material as MeshBasicMaterial).color.copy(track);
       if (!nodes.hasGlb) {
         const bodyColor = new Color(asset?.markColor || e.color);
         nodes.bodyRoot.traverse((o) => {
@@ -380,10 +485,7 @@ export function attachMarkRenderer(
         });
       }
       layoutChrome(nodes);
-      const label = labelEls.get(e.id);
-      if (label && label.textContent !== e.name) {
-        label.textContent = e.name;
-      }
+      ensureLabel(e.id, e.name);
       updateTrail(e.id, e.position[0], e.position[1], showTrails);
     }
     for (const [id, nodes] of markNodes) {
