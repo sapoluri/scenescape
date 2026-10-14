@@ -3,15 +3,20 @@
 
 """Unit tests for Manager ui-bootstrap payloads (chrome off-k8s regression)."""
 
+import uuid
+
 from django.contrib.auth.models import AnonymousUser, User
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from manager.models import Cam, ChildScene, Scene, SingletonSensor
 from manager.services.ui_bootstrap import (
   build_chrome_bootstrap,
   build_models_directory_bootstrap,
+  build_scene_detail_bootstrap,
+  build_scenes_home_bootstrap,
   user_auth_token,
 )
 
@@ -81,3 +86,77 @@ class ModelsDirectoryBootstrapTests(TestCase):
     self.assertTrue(payload["isSuperuser"])
     self.assertTrue(payload["authToken"])
     self.assertEqual(payload["authToken"], user_auth_token(self.user))
+
+
+@override_settings(KUBERNETES_SERVICE_HOST=False)
+class SceneBootstrapIdentityTests(TestCase):
+  """Child viewport ids are scene UUIDs, and gallery counts split cameras."""
+
+  def setUp(self):
+    self.factory = RequestFactory()
+    self.user = User.objects.create_superuser(
+      "scene_boot", "scene_boot@example.com", "testpassword",
+    )
+    self.parent = Scene.objects.create(name="Retail Floor")
+    self.local_child = Scene.objects.create(name="Parking Lot")
+    self.link = ChildScene.objects.create(
+      parent=self.parent, child=self.local_child, child_type="local",
+    )
+    self.remote_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    self.remote = ChildScene.objects.create(
+      parent=self.parent,
+      child=None,
+      child_name="Remote annex",
+      child_type="remote",
+      remote_child_id=self.remote_id,
+    )
+    self.camera = Cam.objects.create(
+      sensor_id="cam-1",
+      name="Entrance Cam",
+      scene=self.parent,
+      type="camera",
+    )
+    SingletonSensor.objects.create(
+      sensor_id="sen-1",
+      name="Lobby temperature",
+      scene=self.parent,
+      type="generic",
+    )
+
+  def test_child_id_is_scene_uuid_not_link_pk(self):
+    request = self.factory.get("/")
+    request.user = self.user
+    payload = build_scene_detail_bootstrap(request, self.parent.id)
+    by_name = {row["name"]: row for row in payload["children"]}
+    local = by_name["Parking Lot"]
+    remote = by_name["Remote annex"]
+    self.assertEqual(local["id"], str(self.local_child.id))
+    self.assertEqual(local["restUid"], str(self.local_child.id))
+    self.assertNotEqual(local["id"], str(self.link.id))
+    self.assertNotEqual(local["id"], str(self.camera.id))
+    self.assertIn(f"/child/delete/{self.link.id}/", local["deleteUrl"])
+    self.assertEqual(remote["id"], str(self.remote_id))
+    self.assertNotEqual(remote["id"], str(self.remote.id))
+
+  def test_home_counts_do_not_treat_cameras_as_sensors(self):
+    request = self.factory.get("/")
+    request.user = self.user
+    payload = build_scenes_home_bootstrap(request)
+    card = next(s for s in payload["scenes"] if s["name"] == "Retail Floor")
+    self.assertEqual(card["counts"]["cameras"], 1)
+    self.assertEqual(card["counts"]["sensors"], 1)
+
+  def test_child_without_uuid_falls_back_to_link_pk(self):
+    bare = ChildScene.objects.create(
+      parent=self.parent,
+      child=None,
+      child_name="Unassigned",
+      child_type="remote",
+      remote_child_id=None,
+    )
+    request = self.factory.get("/")
+    request.user = self.user
+    payload = build_scene_detail_bootstrap(request, self.parent.id)
+    row = next(c for c in payload["children"] if c["name"] == "Unassigned")
+    self.assertEqual(row["id"], str(bare.id))
+    self.assertEqual(row["restUid"], str(bare.id))

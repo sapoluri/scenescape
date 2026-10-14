@@ -271,7 +271,7 @@
 
 .ss-live-preview .ss-camera-card-foot {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   padding: 5px 6px;
 }
@@ -280,8 +280,12 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
   font-size: 11px;
   font-weight: 600;
 }

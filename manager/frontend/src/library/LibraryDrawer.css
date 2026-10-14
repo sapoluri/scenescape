@@ -20,6 +20,12 @@
   font-size: 13px;
 }
 
+/* Over the 3D stage only, so the tool strip above the canvas stays visible. */
+.ss-lib-drawer.is-stage {
+  position: absolute;
+  z-index: 20;
+}
+
 .ss-lib-drawer-header {
   flex: 0 0 auto;
   display: flex;

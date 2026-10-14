@@ -85,7 +85,7 @@
 
 .ss-outliner-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   padding: 4px 8px;
   border-radius: 6px;
@@ -128,9 +128,14 @@
 
 .ss-outliner-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .ss-outliner-dot {

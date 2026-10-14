@@ -226,8 +226,12 @@ export function SceneWorkspaceSheets({
       onChildrenChange((prev) => {
         const existing = prev.find(
           (c) =>
-            c.id === String(payload.uid || payload.id || "") ||
-            c.restUid === prevRestUid,
+            c.restUid === prevRestUid ||
+            c.id === prevRestUid ||
+            (payload.child != null && c.restUid === String(payload.child)) ||
+            (payload.remote_child_id != null &&
+              c.restUid === String(payload.remote_child_id)) ||
+            c.id === String(payload.uid || payload.id || ""),
         );
         const card = childCardFromRest(payload, scenes, existing);
         if (!card) {
@@ -271,8 +275,7 @@ export function SceneWorkspaceSheets({
       return;
     }
     const cam =
-      camByPk.get(String(sheet.id)) ||
-      camBySensorId.get(String(sheet.id));
+      camByPk.get(String(sheet.id)) || camBySensorId.get(String(sheet.id));
     if (cam) {
       enterCameraCalibrate({
         cameraId: cam.id,
@@ -281,14 +284,7 @@ export function SceneWorkspaceSheets({
       });
     }
     close();
-  }, [
-    isSuperuser,
-    sheet.action,
-    sheet.id,
-    camByPk,
-    camBySensorId,
-    close,
-  ]);
+  }, [isSuperuser, sheet.action, sheet.id, camByPk, camBySensorId, close]);
 
   if (!isSuperuser) {
     return null;

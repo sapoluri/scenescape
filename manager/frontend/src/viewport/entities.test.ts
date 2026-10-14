@@ -7,6 +7,7 @@ import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
   buildChild,
+  childViewportId,
   lookAtOriginEuler,
   restPoseToRigEuler,
 } from "./entities";
@@ -15,7 +16,9 @@ import type { CameraEntity, ChildSceneEntity } from "./types";
 const D2R = Math.PI / 180;
 
 function quatFromDeg([x, y, z]: [number, number, number]): Quaternion {
-  return new Quaternion().setFromEuler(new Euler(x * D2R, y * D2R, z * D2R, "XYZ"));
+  return new Quaternion().setFromEuler(
+    new Euler(x * D2R, y * D2R, z * D2R, "XYZ"),
+  );
 }
 
 /** Replicates the legacy scenecamera.js orientation exactly:
@@ -60,7 +63,8 @@ describe("restPoseToRigEuler", () => {
   });
 });
 
-describe("lookAtOriginEuler", () => {  it("aims the -Z lens axis from the position toward the origin", () => {
+describe("lookAtOriginEuler", () => {
+  it("aims the -Z lens axis from the position toward the origin", () => {
     const positions: [number, number, number][] = [
       [15, 0, 3],
       [0, -12, 5],
@@ -99,7 +103,10 @@ describe("buildCamera frustum alignment", () => {
     try {
       nodes.group.updateMatrixWorld(true);
       const helper = nodes.group.getObjectByProperty("type", "CameraHelper");
-      const persp = nodes.group.getObjectByProperty("type", "PerspectiveCamera");
+      const persp = nodes.group.getObjectByProperty(
+        "type",
+        "PerspectiveCamera",
+      );
       expect(helper).toBeTruthy();
       expect(persp).toBeTruthy();
       // CameraHelper bakes the camera's matrixWorld into its own matrix; its
@@ -118,7 +125,10 @@ describe("buildCamera frustum alignment", () => {
     const nodes = buildCamera(makeCamEntity());
     try {
       nodes.group.updateMatrixWorld(true);
-      const persp = nodes.group.getObjectByProperty("type", "PerspectiveCamera")!;
+      const persp = nodes.group.getObjectByProperty(
+        "type",
+        "PerspectiveCamera",
+      )!;
       // A point down the camera's local -Z must land along the rig's -Z axis.
       const rig = nodes.gizmoTarget;
       const rigDir = new Vector3(0, 0, -1).applyQuaternion(rig.quaternion);
@@ -129,6 +139,23 @@ describe("buildCamera frustum alignment", () => {
     } finally {
       nodes.dispose();
     }
+  });
+});
+
+describe("childViewportId", () => {
+  it("uses the child scene uuid so a camera pk cannot replace it", () => {
+    const cameraId = "1";
+    const id = childViewportId({
+      id: cameraId,
+      restUid: "17efd356-8858-4bf7-80fa-5bc58b2175f8",
+    });
+    expect(id).toBe("17efd356-8858-4bf7-80fa-5bc58b2175f8");
+    expect(id).not.toBe(cameraId);
+  });
+
+  it("falls back to the link id when no uuid is assigned", () => {
+    expect(childViewportId({ id: "9", restUid: "  " })).toBe("9");
+    expect(childViewportId({ id: "9", restUid: null })).toBe("9");
   });
 });
 

@@ -362,8 +362,8 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
         onSave={() => void onSave()}
       />
       <p className="ss-prop-hint">
-        Crossings are counted A → B. Save writes this tripwire; use toolbar
-        Save all for bulk edits.
+        Crossings are counted A → B. Save writes this tripwire; use toolbar Save
+        all for bulk edits.
       </p>
     </>
   );
@@ -405,14 +405,10 @@ function CameraProps({
   onCalibrate?: () => void;
 }) {
   const toast = useAppToast();
-  const projecting = useViewportStore((s) =>
-    s.projectCameraIds.includes(e.id),
-  );
+  const projecting = useViewportStore((s) => s.projectCameraIds.includes(e.id));
   const projectOpacity = useViewportStore((s) => s.projectOpacity);
   // Wizard toolbar owns Auto Calibrate + Save while this camera is calibrating.
-  const calibrating = useCalibrateStore(
-    (s) => s.active && s.cameraId === e.id,
-  );
+  const calibrating = useCalibrateStore((s) => s.active && s.cameraId === e.id);
   const calOptics = useCalibrateStore((s) =>
     s.active && s.cameraId === e.id ? s.optics : null,
   );
@@ -640,47 +636,58 @@ function CameraProps({
     <>
       <NameRow entity={e} />
       <span className="ss-prop-section">Position</span>
-      <div className="ss-prop-grid3">
-        <NumField
-          label="X"
-          value={e.position[0]}
-          digits={3}
-          onCommit={(v) => setPos(0, v)}
-        />
-        <NumField
-          label="Y"
-          value={e.position[1]}
-          digits={3}
-          onCommit={(v) => setPos(1, v)}
-        />
-        <NumField
-          label="Z"
-          value={e.position[2]}
-          digits={3}
-          onCommit={(v) => setPos(2, v)}
-        />
-      </div>
+      {e.posed ? (
+        <div className="ss-prop-grid3">
+          <NumField
+            label="X"
+            value={e.position[0]}
+            digits={3}
+            onCommit={(v) => setPos(0, v)}
+          />
+          <NumField
+            label="Y"
+            value={e.position[1]}
+            digits={3}
+            onCommit={(v) => setPos(1, v)}
+          />
+          <NumField
+            label="Z"
+            value={e.position[2]}
+            digits={3}
+            onCommit={(v) => setPos(2, v)}
+          />
+        </div>
+      ) : (
+        <p className="ss-prop-hint">
+          Unset. The preview ring is not a saved pose. Calibrate to set X, Y,
+          and Z.
+        </p>
+      )}
       <span className="ss-prop-section">Rotation (°)</span>
-      <div className="ss-prop-grid3">
-        <NumField
-          label="X"
-          value={e.rotation[0]}
-          digits={2}
-          onCommit={(v) => setRot(0, v)}
-        />
-        <NumField
-          label="Y"
-          value={e.rotation[1]}
-          digits={2}
-          onCommit={(v) => setRot(1, v)}
-        />
-        <NumField
-          label="Z"
-          value={e.rotation[2]}
-          digits={2}
-          onCommit={(v) => setRot(2, v)}
-        />
-      </div>
+      {e.posed ? (
+        <div className="ss-prop-grid3">
+          <NumField
+            label="X"
+            value={e.rotation[0]}
+            digits={2}
+            onCommit={(v) => setRot(0, v)}
+          />
+          <NumField
+            label="Y"
+            value={e.rotation[1]}
+            digits={2}
+            onCommit={(v) => setRot(1, v)}
+          />
+          <NumField
+            label="Z"
+            value={e.rotation[2]}
+            digits={2}
+            onCommit={(v) => setRot(2, v)}
+          />
+        </div>
+      ) : (
+        <p className="ss-prop-hint">Unset until the camera is calibrated.</p>
+      )}
       <NumField
         label="FOV (°)"
         value={e.fov}
@@ -690,7 +697,7 @@ function CameraProps({
       {optics ? (
         <>
           <span className="ss-prop-section">Intrinsics (px)</span>
-          <div className="ss-prop-grid3">
+          <div className="ss-prop-grid2">
             <NumField
               label="fx"
               value={optics.fx}
@@ -718,13 +725,13 @@ function CameraProps({
               digits={2}
               onCommit={(v) => patchOptics({ cx: v })}
             />
+            <NumField
+              label="cy"
+              value={optics.cy}
+              digits={2}
+              onCommit={(v) => patchOptics({ cy: v })}
+            />
           </div>
-          <NumField
-            label="cy"
-            value={optics.cy}
-            digits={2}
-            onCommit={(v) => patchOptics({ cy: v })}
-          />
           <span className="ss-prop-section">Distortion</span>
           <div className="ss-prop-grid3">
             <NumField
@@ -800,7 +807,9 @@ function CameraProps({
               )
             }
           />
-          <span className="ss-prop-value">{Math.round(projectOpacity * 100)}%</span>
+          <span className="ss-prop-value">
+            {Math.round(projectOpacity * 100)}%
+          </span>
         </label>
       ) : null}
       {!calibrating ? (
@@ -814,23 +823,23 @@ function CameraProps({
         />
       ) : null}
       <div className="ss-prop-actions">
-        {!calibrating && (onCalibrate || calibrateHref)
-          ? onCalibrate ? (
-              <button
-                type="button"
-                className="ss-prop-calibrate"
-                onClick={onCalibrate}
-              >
-                <i className="bi bi-bullseye" aria-hidden="true" />
-                <span>Calibrate</span>
-              </button>
-            ) : (
-              <a href={calibrateHref} className="ss-prop-calibrate">
-                <i className="bi bi-bullseye" aria-hidden="true" />
-                <span>Calibrate</span>
-              </a>
-            )
-          : null}
+        {!calibrating && (onCalibrate || calibrateHref) ? (
+          onCalibrate ? (
+            <button
+              type="button"
+              className="ss-prop-calibrate"
+              onClick={onCalibrate}
+            >
+              <i className="bi bi-bullseye" aria-hidden="true" />
+              <span>Calibrate</span>
+            </button>
+          ) : (
+            <a href={calibrateHref} className="ss-prop-calibrate">
+              <i className="bi bi-bullseye" aria-hidden="true" />
+              <span>Calibrate</span>
+            </a>
+          )
+        ) : null}
         {!calibrating && sensorId && authToken ? (
           <button
             type="button"
@@ -1115,7 +1124,10 @@ function ChildProps({
   return (
     <>
       <NameRow entity={e} />
-      <ReadField label="Type" value={childType === "remote" ? "Remote" : "Local"} />
+      <ReadField
+        label="Type"
+        value={childType === "remote" ? "Remote" : "Local"}
+      />
       <ReadField label="Status" value={statusLabel} />
       <ReadField
         label="Transform"
@@ -1255,7 +1267,11 @@ export function Properties({
   const senBoot =
     e?.type === "sensor" ? sensors.find((s) => s.id === e.id) : undefined;
   const childBoot =
-    e?.type === "child" ? children.find((c) => c.id === e.id) : undefined;
+    e?.type === "child"
+      ? children.find(
+          (c) => c.id === e.id || c.restUid === e.id || c.restUid === e.restUid,
+        )
+      : undefined;
 
   return (
     <div className="ss-props">

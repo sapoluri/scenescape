@@ -71,7 +71,14 @@
   gap: 8px;
 }
 
-.ss-prop-grid3 .ss-prop-input {
+.ss-prop-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ss-prop-grid3 .ss-prop-input,
+.ss-prop-grid2 .ss-prop-input {
   width: 100%;
 }
 

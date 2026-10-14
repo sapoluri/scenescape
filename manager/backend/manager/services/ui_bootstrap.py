@@ -105,7 +105,8 @@ def build_scenes_home_bootstrap(request) -> dict:
         if request.user.is_superuser else None
       ),
       "counts": {
-        "sensors": scene.sensor_set.count(),
+        "cameras": scene.sensor_set.filter(type="camera").count(),
+        "sensors": scene.sensor_set.filter(type="generic").count(),
         "regions": scene.regions.count(),
         "tripwires": scene.tripwires.count(),
       },
@@ -163,8 +164,12 @@ def build_scene_detail_bootstrap(request, scene_id) -> dict:
       rest_uid = str(link.remote_child_id)
     else:
       rest_uid = str(link.id)
+    # Viewport identity is the child scene UUID (or remote_child_id).
+    # The ChildScene integer pk matches camera/sensor pks, so a camera
+    # upsert would replace the child in the flat entity store. The pk
+    # stays on deleteUrl only.
     children.append({
-      "id": str(link.id),
+      "id": rest_uid,
       "name": child_name,
       "childType": link.child_type,
       "remoteChildId": (
