@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useCallback, useEffect, useState } from "react";
 import { useViewportStore } from "./store";
 
 export type SceneChromeActions = {
@@ -25,18 +26,54 @@ function OverlayCheck({
   checked,
   onChange,
   label,
+  title,
 }: {
   checked: boolean;
   onChange: () => void;
   label: string;
+  title?: string;
 }) {
   return (
-    <label className={`vchk${checked ? " on" : ""}`}>
+    <label className={`vchk${checked ? " on" : ""}`} title={title}>
       <input type="checkbox" checked={checked} onChange={onChange} />
       <span className="box" aria-hidden="true" />
       {label}
     </label>
   );
+}
+
+/**
+ * Drive the parked hard-contract `#show-telemetry` (sscape.js) without a
+ * second id — camera FPS + scene rate only update while it is checked.
+ */
+function useShowTelemetry(): [boolean, () => void] {
+  const [on, setOn] = useState(false);
+
+  useEffect(() => {
+    const el = document.getElementById(
+      "show-telemetry",
+    ) as HTMLInputElement | null;
+    if (!el) {
+      return;
+    }
+    const sync = () => setOn(el.checked);
+    sync();
+    el.addEventListener("change", sync);
+    return () => el.removeEventListener("change", sync);
+  }, []);
+
+  const toggle = useCallback(() => {
+    const el = document.getElementById(
+      "show-telemetry",
+    ) as HTMLInputElement | null;
+    if (!el) {
+      return;
+    }
+    el.checked = !el.checked;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }, []);
+
+  return [on, toggle];
 }
 
 /**
@@ -57,6 +94,7 @@ export function ViewportOptionsBar({
   const showTrails = useViewportStore((s) => s.showTrails);
   const setOrtho = useViewportStore((s) => s.setOrtho);
   const toggleOverlay = useViewportStore((s) => s.toggleOverlay);
+  const [showTelemetry, toggleTelemetry] = useShowTelemetry();
   const showScene = !emptyScene && sceneChrome;
 
   return (
@@ -171,6 +209,12 @@ export function ViewportOptionsBar({
             checked={showLabels}
             onChange={() => toggleOverlay("showLabels")}
             label="Labels"
+          />
+          <OverlayCheck
+            checked={showTelemetry}
+            onChange={toggleTelemetry}
+            label="Telemetry"
+            title="Show scene controller rate and camera preview FPS"
           />
         </>
       ) : null}

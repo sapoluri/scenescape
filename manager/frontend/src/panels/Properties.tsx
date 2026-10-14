@@ -821,12 +821,12 @@ function CameraProps({
                 className="ss-prop-calibrate"
                 onClick={onCalibrate}
               >
-                <i className="bi bi-crosshair" aria-hidden="true" />
+                <i className="bi bi-bullseye" aria-hidden="true" />
                 <span>Calibrate</span>
               </button>
             ) : (
               <a href={calibrateHref} className="ss-prop-calibrate">
-                <i className="bi bi-crosshair" aria-hidden="true" />
+                <i className="bi bi-bullseye" aria-hidden="true" />
                 <span>Calibrate</span>
               </a>
             )

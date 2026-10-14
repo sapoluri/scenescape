@@ -205,6 +205,35 @@
   overflow: hidden;
 }
 
+/* Outliner Preview: tabs on top, Live glance on the bottom half. */
+.ss-sp-dock-tabs-pane {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-sp-dock-main:not(.is-preview-split) .ss-sp-dock-tabs-pane {
+  flex: 1 1 auto;
+}
+
+.ss-sp-dock-glance {
+  flex: 1.15 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+}
+
+.ss-sp-dock-main.is-preview-maximized .ss-sp-dock-tabs-pane {
+  display: none;
+}
+
+.ss-sp-dock-main.is-preview-maximized .ss-sp-dock-glance {
+  flex: 1 1 auto;
+  border-top: 0;
+}
+
 .ss-sp-dock-tabs {
   display: flex;
   flex: none;

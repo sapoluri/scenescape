@@ -212,7 +212,6 @@ function ScenesHomeInner({ bootstrap }: Props) {
         <div className="ss-sp-viewport">
           <SceneViewport
             authToken={bootstrap.authToken}
-            isSuperuser={bootstrap.isSuperuser}
             onOpenScene={() => {
               setAdminListKind(null);
               setSceneDialogOpen(true);

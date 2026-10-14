@@ -1,7 +1,14 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
 import { useChildStatusMqtt } from "../mqtt/useChildStatusMqtt";
@@ -11,6 +18,7 @@ import type {
   SceneSensorBootstrap,
 } from "../scene/types";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
+import { useViewportStore } from "../viewport/store";
 import { SceneViewport } from "../viewport/SceneViewport";
 import { ViewportMenuBar } from "../viewport/ViewportMenuBar";
 import {
@@ -22,6 +30,7 @@ import {
   type OpenAdminListKind,
 } from "./OpenAdminListDialog";
 import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
+import { LivePreviewPane } from "./LivePreviewPane";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
 import { Telemetry } from "./Telemetry";
@@ -78,8 +87,8 @@ export interface SinglePaneViewProps {
  * a docked right panel (Outliner / Properties / Telemetry tabs), a left
  * Object Library drawer (B), and the ⌘O Open Scene gallery dialog.
  *
- * Phase 1.4 makes this the scene-detail view; the 2D/3D toggle above it is
- * temporary.
+ * Outliner Cameras → Preview splits the dock: active tab on top, Live glance
+ * on the bottom half. Maximize fills the dock; close via Outliner Preview.
  */
 export function SinglePaneView({
   sceneId,
@@ -99,6 +108,8 @@ export function SinglePaneView({
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMaximized, setPreviewMaximized] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   const remoteChildIds = useMemo(
@@ -120,6 +131,7 @@ export function SinglePaneView({
   const [adminListRefresh, setAdminListRefresh] = useState(0);
   const [replayMode, setReplayMode] = useState(false);
   const calibrating = useCalibrateStore((s) => s.active);
+  const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
 
   useOpenSceneHotkey(() => {
     setAdminListKind(null);
@@ -130,6 +142,39 @@ export function SinglePaneView({
     setDockCollapsed(collapsed);
     writeDockCollapsed(collapsed);
   }, []);
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPreviewMaximized(false);
+  }, []);
+
+  const setPreview = useCallback(
+    (open: boolean) => {
+      setPreviewOpen(open);
+      if (open) {
+        setCollapsed(false);
+      } else {
+        setPreviewMaximized(false);
+      }
+    },
+    [setCollapsed],
+  );
+
+  // Projection needs JPEG frames — open Preview (and Live View) with it.
+  useEffect(() => {
+    if (projectCameraIds.length === 0 || cameras.length === 0) {
+      return;
+    }
+    setPreviewOpen(true);
+    setCollapsed(false);
+  }, [projectCameraIds, cameras.length, setCollapsed]);
+
+  // Drop Preview if the scene loses all cameras.
+  useEffect(() => {
+    if (cameras.length === 0 && previewOpen) {
+      closePreview();
+    }
+  }, [cameras.length, previewOpen, closePreview]);
 
   const pickTab = useCallback(
     (id: DockTab) => {
@@ -189,9 +234,7 @@ export function SinglePaneView({
               cameras={cameras}
               sensors={sensors}
               children={children}
-              cameraRates={cameraRates}
               authToken={authToken}
-              isSuperuser={isSuperuser}
               showTopChrome={false}
               onOpenLibrary={() => setLibraryOpen(true)}
               onOpenScene={openSceneDialog}
@@ -249,41 +292,71 @@ export function SinglePaneView({
               ) : null}
             </div>
           </div>
-          <div id="ss-sp-dock-main" className="ss-sp-dock-main">
-            <div
-              className="ss-sp-dock-tabs"
-              role="tablist"
-              aria-label="Outliner, Properties, Telemetry"
-            >
-              {DOCK_TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={dockTab === t.id}
-                  className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
-                  onClick={() => pickTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
+          <div
+            id="ss-sp-dock-main"
+            className={[
+              "ss-sp-dock-main",
+              previewOpen ? "is-preview-split" : "",
+              previewOpen && previewMaximized ? "is-preview-maximized" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <div className="ss-sp-dock-tabs-pane">
+              <div
+                className="ss-sp-dock-tabs"
+                role="tablist"
+                aria-label="Outliner, Properties, Telemetry"
+              >
+                {DOCK_TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={dockTab === t.id}
+                    className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
+                    onClick={() => pickTab(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="ss-sp-dock-body">
+                {dockTab === "outliner" && (
+                  <Outliner
+                    isSuperuser={isSuperuser}
+                    showPreviewToggle={cameras.length > 0}
+                    previewOpen={previewOpen}
+                    onPreviewOpenChange={setPreview}
+                  />
+                )}
+                {dockTab === "properties" && (
+                  <Properties
+                    sceneName={sceneName}
+                    sceneId={sceneId}
+                    cameras={cameras}
+                    sensors={sensors}
+                    children={children}
+                    onChildrenChange={onChildrenChange}
+                    authToken={authToken}
+                    isSuperuser={isSuperuser}
+                  />
+                )}
+                {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+              </div>
             </div>
-            <div className="ss-sp-dock-body">
-              {dockTab === "outliner" && <Outliner isSuperuser={isSuperuser} />}
-              {dockTab === "properties" && (
-                <Properties
-                  sceneName={sceneName}
-                  sceneId={sceneId}
+            {previewOpen && cameras.length > 0 ? (
+              <div className="ss-sp-dock-glance">
+                <LivePreviewPane
                   cameras={cameras}
-                  sensors={sensors}
-                  children={children}
-                  onChildrenChange={onChildrenChange}
+                  cameraRates={cameraRates}
                   authToken={authToken}
                   isSuperuser={isSuperuser}
+                  maximized={previewMaximized}
+                  onMaximizedChange={setPreviewMaximized}
                 />
-              )}
-              {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
-            </div>
+              </div>
+            ) : null}
           </div>
         </aside>
       </div>

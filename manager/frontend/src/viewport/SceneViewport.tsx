@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Stats from "three/addons/libs/stats.module.js";
 import { useAppToast } from "../components/ToastProvider";
 import { saveAllDirtyEntities } from "../lib/entityPersist";
-import { CameraStripOverlay } from "../panels/CameraStripOverlay";
 import type {
   SceneCameraBootstrap,
   SceneChildBootstrap,
@@ -60,9 +59,7 @@ interface SceneViewportProps {
   cameras?: SceneCameraBootstrap[];
   sensors?: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
-  cameraRates?: Record<string, string>;
   authToken: string;
-  isSuperuser?: boolean;
   onOpenLibrary?: () => void;
   onOpenScene?: () => void;
   onOpenCameras?: () => void;
@@ -284,9 +281,7 @@ export function SceneViewport({
   cameras = [],
   sensors = [],
   children = [],
-  cameraRates = {},
   authToken,
-  isSuperuser = false,
   onOpenLibrary,
   onOpenScene,
   onOpenCameras,
@@ -469,14 +464,6 @@ export function SceneViewport({
         </div>
         {calibrating ? <CalibrateFeedPane /> : null}
       </div>
-      {!emptyScene && !calibrating && cameras.length > 0 && (
-        <CameraStripOverlay
-          cameras={cameras}
-          cameraRates={cameraRates}
-          authToken={authToken}
-          isSuperuser={isSuperuser}
-        />
-      )}
     </div>
   );
 }

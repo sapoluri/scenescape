@@ -156,13 +156,29 @@ function OutlinerRow({ entity }: { entity: ViewportEntity }) {
   );
 }
 
+export type OutlinerProps = {
+  isSuperuser?: boolean;
+  /** Show Preview control on the Cameras section (scene has cameras). */
+  showPreviewToggle?: boolean;
+  previewOpen?: boolean;
+  onPreviewOpenChange?: (open: boolean) => void;
+};
+
 /**
  * Outliner: Blender-style entity tree. Groups mirror the spec entity list
  * (Regions → Tripwires → Cameras → Sensors → Tracked objects → Child scenes)
  * with badge counts and visibility eye toggles. Selection syncs both ways
  * through the viewport store (viewport click, strip click, outliner click).
+ *
+ * Cameras section can host a Preview toggle that opens the dock Live glance
+ * split (see SinglePaneView).
  */
-export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
+export function Outliner({
+  isSuperuser = false,
+  showPreviewToggle = false,
+  previewOpen = false,
+  onPreviewOpenChange,
+}: OutlinerProps) {
   const entities = useViewportStore((s) => s.entities);
   const [collapsed, setCollapsed] = useState<Set<ViewportEntityType>>(readCollapsed);
 
@@ -209,6 +225,29 @@ export function Outliner({ isSuperuser = false }: { isSuperuser?: boolean }) {
                 <span className="ss-outliner-group-label">{label}</span>
                 <span className="ss-outliner-badge">{items.length}</span>
               </button>
+              {type === "camera" && showPreviewToggle && onPreviewOpenChange ? (
+                <label
+                  className={`ss-outliner-preview${previewOpen ? " is-on" : ""}`}
+                  title={
+                    previewOpen
+                      ? "Hide live camera preview"
+                      : "Show live camera preview in the dock"
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    className="ss-outliner-preview-input"
+                    checked={previewOpen}
+                    onChange={(ev) => onPreviewOpenChange(ev.target.checked)}
+                    aria-label="Camera preview"
+                  />
+                  <i
+                    className={`bi ${previewOpen ? "bi-camera-video-fill" : "bi-camera-video"}`}
+                    aria-hidden="true"
+                  />
+                  <span className="ss-outliner-preview-label">Preview</span>
+                </label>
+              ) : null}
               {isSuperuser && addHref ? (
                 <a
                   className="ss-outliner-add"
