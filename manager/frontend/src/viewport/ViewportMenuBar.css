@@ -30,7 +30,9 @@
 
 .ss-viewport-scene-name {
   margin: 0;
+  flex: 1 1 6rem;
   max-width: 18rem;
+  min-width: 4.5rem;
   font-size: 15px;
   font-weight: 700;
   line-height: 1.35;

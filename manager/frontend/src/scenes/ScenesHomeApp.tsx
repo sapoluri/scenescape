@@ -38,6 +38,7 @@ export type SceneHomeCard = {
   manageUrl: string;
   deleteUrl: string | null;
   counts: {
+    cameras: number;
     sensors: number;
     regions: number;
     tripwires: number;
@@ -317,15 +318,11 @@ function ScenesHomeInner({ bootstrap }: Props) {
             onSaved={reload}
           />
           <CameraSheet
-            open={
-              sheet.action === "cam-create" || sheet.action === "cam-edit"
-            }
+            open={sheet.action === "cam-create" || sheet.action === "cam-edit"}
             mode={sheet.action === "cam-edit" ? "edit" : "create"}
             sceneId=""
             scenes={sceneOptions}
-            sensorUid={
-              sheet.action === "cam-edit" ? sheet.id || null : null
-            }
+            sensorUid={sheet.action === "cam-edit" ? sheet.id || null : null}
             authToken={bootstrap.authToken}
             onClose={close}
             onSaved={() => {
@@ -336,15 +333,12 @@ function ScenesHomeInner({ bootstrap }: Props) {
           />
           <SensorSheet
             open={
-              sheet.action === "sensor-create" ||
-              sheet.action === "sensor-edit"
+              sheet.action === "sensor-create" || sheet.action === "sensor-edit"
             }
             mode={sheet.action === "sensor-edit" ? "edit" : "create"}
             sceneId=""
             scenes={sceneOptions}
-            sensorUid={
-              sheet.action === "sensor-edit" ? sheet.id || null : null
-            }
+            sensorUid={sheet.action === "sensor-edit" ? sheet.id || null : null}
             authToken={bootstrap.authToken}
             onClose={close}
             onSaved={() => {

@@ -48,17 +48,17 @@ def test_persistence_on_page_navigate(params, result_recorder):
 
     _cleanup_test_artifacts()
 
-    sensor_count_loc = "[name='" + SCENE_NAME + "'] .sensor-count"
+    camera_count_loc = "[name='" + SCENE_NAME + "'] .camera-count"
     log.info("Creating Scene " + SCENE_NAME)
     map_image = os.path.join(common.TEST_MEDIA_PATH, "HazardZoneScene.png")
     assert common.create_scene(browser, SCENE_NAME, SCALE, map_image)
     assert SCENE_NAME in browser.page_source
 
-    camera_count = browser.find_element(By.CSS_SELECTOR, sensor_count_loc).text
+    camera_count = browser.find_element(By.CSS_SELECTOR, camera_count_loc).text
     log.info("Editing scene by adding camera " + SCENE_NAME)
     assert common.add_camera_to_scene(browser, SCENE_NAME, CAMERA_ID, CAMERA_NAME)
     common.click_nav_link(browser, "nav-scenes")
-    changed_camera_count = browser.find_element(By.CSS_SELECTOR, sensor_count_loc).text
+    changed_camera_count = browser.find_element(By.CSS_SELECTOR, camera_count_loc).text
 
     assert int(changed_camera_count) == int(camera_count) + 1
     log.info("Edited info (camera addition to scene) persists on page navigation, camera count: " + str(changed_camera_count))
@@ -97,9 +97,9 @@ def test_persistence_on_restart(params, result_recorder):
     common.click_nav_link(browser, "nav-scenes")
     time.sleep(1)
 
-    sensor_count_loc = "[name='" + SCENE_NAME + "'] .sensor-count"
+    camera_count_loc = "[name='" + SCENE_NAME + "'] .camera-count"
     assert SCENE_NAME in browser.page_source
-    changed_camera_count = browser.find_element(By.CSS_SELECTOR, sensor_count_loc).text
+    changed_camera_count = browser.find_element(By.CSS_SELECTOR, camera_count_loc).text
     assert int(changed_camera_count) == 1
     log.info("Edited info (camera addition to scene) persists on docker restart, camera count: " + str(changed_camera_count))
     assert common.validate_scene_data(browser, SCENE_NAME, SCALE, map_image)

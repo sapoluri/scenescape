@@ -123,8 +123,11 @@ export function childCardFromRest(
   );
   const restUid =
     childType === "local" && childSceneId ? childSceneId : remoteChildId || pk;
+  // Keep the integer pk on deleteUrl. The card id is the scene UUID so a
+  // later reseed cannot land on a camera's integer id.
+  const linkPk = /^\d+$/.test(pk) ? pk : null;
   return {
-    id: pk,
+    id: restUid,
     name,
     childType,
     remoteChildId,
@@ -135,8 +138,8 @@ export function childCardFromRest(
     mapUrl: existing?.mapUrl ?? null,
     restUid,
     editHref: `?ss=child-edit&id=${restUid}`,
-    deleteUrl: /^\d+$/.test(pk)
-      ? `/child/delete/${pk}/`
+    deleteUrl: linkPk
+      ? `/child/delete/${linkPk}/`
       : (existing?.deleteUrl ?? null),
   };
 }

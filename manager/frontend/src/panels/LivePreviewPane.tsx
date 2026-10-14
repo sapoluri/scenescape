@@ -23,17 +23,13 @@ type Props = {
 };
 
 /** Case-insensitive match on camera name or sensor id. */
-function cameraMatchesQuery(
-  cam: SceneCameraBootstrap,
-  query: string,
-): boolean {
+function cameraMatchesQuery(cam: SceneCameraBootstrap, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) {
     return true;
   }
   return (
-    cam.name.toLowerCase().includes(q) ||
-    cam.sensorId.toLowerCase().includes(q)
+    cam.name.toLowerCase().includes(q) || cam.sensorId.toLowerCase().includes(q)
   );
 }
 
@@ -76,6 +72,7 @@ export function LivePreviewPane({
   const entities = useViewportStore((s) => s.entities);
   const rootRef = useRef<HTMLDivElement>(null);
 
+  const onlineCount = cameras.filter((c) => onlineBySensor[c.sensorId]).length;
   const posedCameraIds = cameras
     .map((c) => c.id)
     .filter((id) => {
@@ -208,18 +205,18 @@ export function LivePreviewPane({
         aria-hidden="true"
       />
       <div className="ss-live-preview-head">
-        <span className="ss-live-preview-title">Live</span>
+        <span className="ss-live-preview-title">
+          {onlineCount > 0 ? "Live" : "Offline"}
+        </span>
         <span
           className="ss-live-preview-count"
           aria-label={
             filtering
-              ? `${visibleCameras.length} of ${cameras.length} cameras`
-              : `${cameras.length} cameras`
+              ? `${onlineCount} live of ${cameras.length} cameras, ${visibleCameras.length} shown`
+              : `${onlineCount} live of ${cameras.length} cameras`
           }
         >
-          {filtering
-            ? `${visibleCameras.length}/${cameras.length}`
-            : cameras.length}
+          {onlineCount}
         </span>
         <div className="ss-live-preview-head-actions">
           <button
@@ -283,7 +280,9 @@ export function LivePreviewPane({
           <p className="ss-live-preview-empty">No cameras in this scene yet.</p>
         )}
         {cameras.length > 0 && filtering && visibleCameras.length === 0 ? (
-          <p className="ss-live-preview-empty">No cameras match “{query.trim()}”.</p>
+          <p className="ss-live-preview-empty">
+            No cameras match “{query.trim()}”.
+          </p>
         ) : null}
         {cameras.map((cam) => {
           const online = Boolean(onlineBySensor[cam.sensorId]);
@@ -414,8 +413,7 @@ export function LivePreviewPane({
         }}
       >
         <p>
-          Are you sure you want to delete{" "}
-          <strong>{deleteTarget?.name}</strong>?
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
         </p>
         <p>This action cannot be undone.</p>
       </ConfirmDialog>

@@ -22,6 +22,7 @@ export type SceneSensorBootstrap = {
 };
 
 export type SceneChildBootstrap = {
+  /** Viewport key: child scene UUID, remote_child_id, or link pk if neither exists. */
   id: string;
   name: string;
   childType: string;
@@ -111,13 +112,17 @@ declare global {
       end?: (force?: boolean) => void;
       connected?: boolean;
     };
-    ssAttachSceneMqttClient?: (client: NonNullable<Window["ssMqttClient"]>) => void;
+    ssAttachSceneMqttClient?: (
+      client: NonNullable<Window["ssMqttClient"]>,
+    ) => void;
     ssRefreshSceneId?: () => string;
     ssReactOwnsMqtt?: boolean;
     ssReactOwnsCameraStrip?: boolean;
     ssPersistGeometry?: (
       options?: { preferHidden?: boolean } | string[],
-    ) => void | Promise<import("../lib/roiPersist").PersistGeometryResult | void>;
+    ) => void | Promise<
+      import("../lib/roiPersist").PersistGeometryResult | void
+    >;
     ssRoiEditors?: {
       addRoi: (payload: {
         svgId: string;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   glbBasename,
   listAssets,
@@ -102,7 +103,7 @@ export function LibraryDrawer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open ]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -152,9 +153,16 @@ export function LibraryDrawer({
     return null;
   }
 
-  return (
+  const stage =
+    typeof document !== "undefined"
+      ? document.querySelector<HTMLElement>(
+          ".ss-viewport-main-3d, .ss-viewport-split-3d",
+        )
+      : null;
+
+  const drawer = (
     <aside
-      className="ss-lib-drawer"
+      className={`ss-lib-drawer${stage ? " is-stage" : ""}`}
       aria-label="Object library"
       data-testid="library-drawer"
     >
@@ -236,4 +244,6 @@ export function LibraryDrawer({
       </div>
     </aside>
   );
+
+  return stage ? createPortal(drawer, stage) : drawer;
 }

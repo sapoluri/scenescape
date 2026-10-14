@@ -34,6 +34,7 @@ export type GalleryScene = {
   thumbnailUrl?: string | null;
   mapUrl?: string | null;
   counts: {
+    cameras: number;
     sensors: number;
     regions: number;
     tripwires: number;
@@ -95,6 +96,20 @@ export function sceneStats(scene: SceneSummary): {
   };
 }
 
+/** Singular when the count is 1. Pure — unit tested. */
+export function countNoun(count: number, singular: string): string {
+  return count === 1 ? singular : `${singular}s`;
+}
+
+/**
+ * "Modified …" when map_processed is a real date. Null hides the line so
+ * the card does not read "Modified —".
+ */
+export function modifiedCaption(iso: string | null | undefined): string | null {
+  const label = formatModified(iso);
+  return label === "—" ? null : `Modified ${label}`;
+}
+
 /** Human "modified" label from map_processed. Pure — unit tested. */
 export function formatModified(iso: string | null | undefined): string {
   if (!iso) {
@@ -122,7 +137,8 @@ export function gallerySceneFromSummary(row: SceneSummary): GalleryScene {
     thumbnailUrl: row.thumbnail ?? null,
     mapUrl: row.map ?? null,
     counts: {
-      sensors: stats.cameras + stats.sensors,
+      cameras: stats.cameras,
+      sensors: stats.sensors,
       regions: Array.isArray(row.regions) ? row.regions.length : 0,
       tripwires: Array.isArray(row.tripwires) ? row.tripwires.length : 0,
     },
@@ -167,8 +183,7 @@ function normalizeScenes(payload: unknown): GalleryScene[] {
   }
   return list
     .filter(
-      (row): row is Record<string, unknown> =>
-        !!row && typeof row === "object",
+      (row): row is Record<string, unknown> => !!row && typeof row === "object",
     )
     .map((row) =>
       gallerySceneFromSummary({
@@ -179,8 +194,7 @@ function normalizeScenes(payload: unknown): GalleryScene[] {
         regions: row.regions as unknown[] | undefined,
         tripwires: row.tripwires as unknown[] | undefined,
         map_processed: (row.map_processed as string | null) ?? null,
-        thumbnail:
-          typeof row.thumbnail === "string" ? row.thumbnail : null,
+        thumbnail: typeof row.thumbnail === "string" ? row.thumbnail : null,
         map: typeof row.map === "string" ? row.map : null,
       }),
     )
@@ -210,6 +224,7 @@ function SceneCard({
     ev.preventDefault();
     onOpen(scene.uid);
   };
+  const modified = modifiedCaption(scene.mapProcessed);
 
   return (
     <div
@@ -282,16 +297,21 @@ function SceneCard({
       >
         <h5 className="card-header ss-open-scene-name">{scene.name}</h5>
         <span className="ss-open-scene-stats">
-          <span className="sensor-count">{scene.counts.sensors}</span> sensors
+          <span className="camera-count">{scene.counts.cameras}</span>{" "}
+          {countNoun(scene.counts.cameras, "camera")}
           {" · "}
-          <span className="region-count">{scene.counts.regions}</span> regions
+          <span className="sensor-count">{scene.counts.sensors}</span>{" "}
+          {countNoun(scene.counts.sensors, "sensor")}
+          {" · "}
+          <span className="region-count">{scene.counts.regions}</span>{" "}
+          {countNoun(scene.counts.regions, "region")}
           {" · "}
           <span className="tripwire-count">{scene.counts.tripwires}</span>{" "}
-          tripwires
+          {countNoun(scene.counts.tripwires, "tripwire")}
         </span>
-        <span className="ss-open-scene-modified">
-          Modified {formatModified(scene.mapProcessed)}
-        </span>
+        {modified ? (
+          <span className="ss-open-scene-modified">{modified}</span>
+        ) : null}
       </a>
     </div>
   );
@@ -343,9 +363,7 @@ export function OpenSceneDialog({
                 return {
                   ...s,
                   manageUrl: `/?ss=scene-manage&id=${encodeURIComponent(s.uid)}`,
-                  deleteUrl: isSuperuser
-                    ? `/scene/delete/${s.uid}/`
-                    : null,
+                  deleteUrl: isSuperuser ? `/scene/delete/${s.uid}/` : null,
                 };
               }
               return {
@@ -354,6 +372,7 @@ export function OpenSceneDialog({
                 manageUrl: boot.manageUrl || s.manageUrl,
                 deleteUrl: boot.deleteUrl,
                 counts:
+                  boot.counts.cameras ||
                   boot.counts.sensors ||
                   boot.counts.regions ||
                   boot.counts.tripwires

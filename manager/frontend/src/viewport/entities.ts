@@ -45,11 +45,7 @@ import {
   CHILD_FOOTPRINT_SIZE,
   parseChildPose,
 } from "./childPose";
-import {
-  bboxOf,
-  centroidOf,
-  seedEntitiesFromGeometry,
-} from "./geometrySync";
+import { bboxOf, centroidOf, seedEntitiesFromGeometry } from "./geometrySync";
 import { getPersistState } from "./persistStore";
 import { getViewportState, useViewportStore } from "./store";
 import type {
@@ -96,9 +92,7 @@ function disposeObject(root: Object3D): void {
     const geo = (mesh as { geometry?: { dispose?: () => void } }).geometry;
     geo?.dispose?.();
     const mat = mesh.material as
-      | { dispose?: () => void }
-      | { dispose?: () => void }[]
-      | undefined;
+      { dispose?: () => void } | { dispose?: () => void }[] | undefined;
     if (Array.isArray(mat)) {
       mat.forEach((m) => m.dispose?.());
     } else {
@@ -264,10 +258,7 @@ function buildTripwire(e: TripwireEntity): EntityNodes {
   group.add(pivot);
   group.userData.entityId = e.id;
 
-  const mid: [number, number] = [
-    (e.a[0] + e.b[0]) / 2,
-    (e.a[1] + e.b[1]) / 2,
-  ];
+  const mid: [number, number] = [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
   return {
     group,
     gizmoTarget: pivot,
@@ -293,11 +284,14 @@ export function restPoseToRigEuler(
   rotationDeg: [number, number, number],
 ): [number, number, number] {
   const q = new Quaternion().setFromEuler(
-    new Euler(d2r(rotationDeg[0]), d2r(rotationDeg[1]), d2r(rotationDeg[2]), "XYZ"),
+    new Euler(
+      d2r(rotationDeg[0]),
+      d2r(rotationDeg[1]),
+      d2r(rotationDeg[2]),
+      "XYZ",
+    ),
   );
-  q.multiply(
-    new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI),
-  );
+  q.multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI));
   const e = new Euler().setFromQuaternion(q, "XYZ");
   return [r2d(e.x), r2d(e.y), r2d(e.z)];
 }
@@ -320,7 +314,12 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   const rig = new Group();
   rig.position.set(e.position[0], e.position[1], e.position[2]);
   rig.quaternion.setFromEuler(
-    new Euler(d2r(e.rotation[0]), d2r(e.rotation[1]), d2r(e.rotation[2]), "XYZ"),
+    new Euler(
+      d2r(e.rotation[0]),
+      d2r(e.rotation[1]),
+      d2r(e.rotation[2]),
+      "XYZ",
+    ),
   );
 
   // Frustum rig: a real PerspectiveCamera (never rendered) + CameraHelper,
@@ -394,11 +393,7 @@ export function buildCamera(e: CameraEntity): EntityNodes {
         persp.updateProjectionMatrix();
         helper.update();
       }
-      labelPos.set(
-        ent.position[0],
-        ent.position[1],
-        ent.position[2] + 1.2,
-      );
+      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 1.2);
     },
     dispose: () => {
       helper.dispose();
@@ -417,8 +412,7 @@ function buildSensor(e: SensorEntity): EntityNodes {
   const [x, y, z] = e.position;
   const polyPoints = e.areaMode === "poly" ? e.points : [];
   const showPoly = polyPoints.length >= 3;
-  const radius =
-    e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
+  const radius = e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
 
   const poleGeo = new CylinderGeometry(0.09, 0.12, 2.2, 10);
   poleGeo.rotateX(Math.PI / 2); // axis Y -> Z (Z-up)
@@ -650,7 +644,11 @@ function parseCameraPose(row: Record<string, unknown>): {
     return null;
   }
   const restRot: [number, number, number] = isFiniteTriple(row.rotation)
-    ? [Number(row.rotation[0]), Number(row.rotation[1]), Number(row.rotation[2])]
+    ? [
+        Number(row.rotation[0]),
+        Number(row.rotation[1]),
+        Number(row.rotation[2]),
+      ]
     : [0, 0, 0];
   const intr = row.intrinsics as
     | {
@@ -811,8 +809,7 @@ async function seedSensors(
       }
       const areaMode =
         area?.area === "circle" || area?.area === "poly" ? area.area : "scene";
-      const points =
-        areaMode === "poly" ? parseSensorPolyPoints(area) : [];
+      const points = areaMode === "poly" ? parseSensorPolyPoints(area) : [];
       if (!position) {
         if (
           Number.isFinite(Number(area?.x)) &&
@@ -862,6 +859,22 @@ export interface EntitySeed {
   authToken: string;
 }
 
+/**
+ * Viewport key for a child link.
+ *
+ * Local children use the child scene UUID and remote children use
+ * `remote_child_id`. The ChildScene integer pk is not safe here: camera
+ * and sensor bootstrap ids are those rows' integer pks, and the viewport
+ * store is a single map keyed only by `id`.
+ */
+export function childViewportId(child: {
+  id: string;
+  restUid?: string | null;
+}): string {
+  const uid = child.restUid?.trim();
+  return uid ? uid : child.id;
+}
+
 async function seedChildren(
   children: SceneChildBootstrap[],
   authToken: string,
@@ -881,7 +894,7 @@ async function seedChildren(
         }
       }
       return {
-        id: c.id,
+        id: childViewportId(c),
         type: "child",
         name: c.name,
         visible: true,
@@ -934,10 +947,7 @@ export function useViewportEntities(
       // Orphan `draft-*` rows left after a server rekey must be removed or
       // the Outliner shows the same region twice.
       for (const [id, e] of Object.entries(state.entities)) {
-        if (
-          (e.type === "region" || e.type === "tripwire") &&
-          !keep.has(id)
-        ) {
+        if ((e.type === "region" || e.type === "tripwire") && !keep.has(id)) {
           state.removeEntity(id);
         }
       }
@@ -973,7 +983,8 @@ export function useViewportEntities(
       const state = getViewportState();
       state.removeEntitiesByType("camera");
       state.removeEntitiesByType("sensor");
-      state.removeEntitiesByType("child");
+      // Children are owned by the child-seed effect. Clearing them here
+      // dropped child scenes whenever this camera effect re-ran.
       getPersistState().clearBaselines();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1147,4 +1158,3 @@ export function useViewportEntities(
     };
   }, [world]);
 }
-

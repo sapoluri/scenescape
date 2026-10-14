@@ -3,8 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  countNoun,
   filterScenes,
   formatModified,
+  gallerySceneFromSummary,
+  modifiedCaption,
   sceneStats,
   type SceneSummary,
 } from "./OpenSceneDialog";
@@ -55,6 +58,51 @@ describe("sceneStats", () => {
 
   it("treats missing arrays as zero", () => {
     expect(sceneStats(C)).toEqual({ cameras: 0, sensors: 0, rois: 0 });
+  });
+});
+
+describe("countNoun", () => {
+  it("is singular only for a count of one", () => {
+    expect(countNoun(1, "region")).toBe("region");
+    expect(countNoun(1, "tripwire")).toBe("tripwire");
+  });
+
+  it("is plural for zero and for more than one", () => {
+    expect(countNoun(0, "sensor")).toBe("sensors");
+    expect(countNoun(5, "camera")).toBe("cameras");
+  });
+});
+
+describe("gallerySceneFromSummary", () => {
+  it("keeps cameras out of the sensor count", () => {
+    expect(gallerySceneFromSummary(A).counts).toEqual({
+      cameras: 2,
+      sensors: 1,
+      regions: 3,
+      tripwires: 1,
+    });
+  });
+
+  it("counts a scene with no lists as zeros", () => {
+    expect(gallerySceneFromSummary(C).counts).toEqual({
+      cameras: 0,
+      sensors: 0,
+      regions: 0,
+      tripwires: 0,
+    });
+  });
+});
+
+describe("modifiedCaption", () => {
+  it("hides the line when there is no date", () => {
+    expect(modifiedCaption(null)).toBeNull();
+    expect(modifiedCaption("not-a-date")).toBeNull();
+  });
+
+  it("includes a formatted date when one exists", () => {
+    const caption = modifiedCaption("2026-09-15T10:00:00");
+    expect(caption?.startsWith("Modified ")).toBe(true);
+    expect(caption).not.toContain("—");
   });
 });
 
