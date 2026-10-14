@@ -20,6 +20,7 @@ import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
 import { calibrationPointColor, calibrationPointColorHex } from "./colors";
 import { preloadOpenCv, solveCameraPose } from "./poseSolve";
 import { fovFromOptics, refineIntrinsics } from "./refineIntrinsics";
+import { transformsToPairs } from "./types";
 
 const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
 /** World-space marker radius (legacy `SPHERE_RADIUS` ≈ 0.05). */
@@ -156,9 +157,23 @@ export function useCalibrateSession(
         if (cancelled) {
           return;
         }
-        useCalibrateStore
-          .getState()
-          .setOptics(parseCameraOptics(row, cameraName));
+        const store = useCalibrateStore.getState();
+        store.setOptics(parseCameraOptics(row, cameraName));
+        // Hydrate saved correspondences (legacy addInitialCalibrationPoints).
+        const stored = transformsToPairs(
+          row.transforms,
+          typeof row.transform_type === "string" ? row.transform_type : null,
+        );
+        if (
+          stored &&
+          store.active &&
+          store.sensorId === sensorId &&
+          !store.dirty &&
+          store.camPoints.length === 0 &&
+          store.mapPoints.length === 0
+        ) {
+          store.replacePoints(stored.camPoints, stored.mapPoints, false);
+        }
       } catch {
         if (!cancelled) {
           useCalibrateStore

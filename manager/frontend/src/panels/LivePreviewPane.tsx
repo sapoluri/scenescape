@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
 import { type RestError } from "../lib/rest";
@@ -21,6 +21,21 @@ type Props = {
   maximized?: boolean;
   onMaximizedChange?: (maximized: boolean) => void;
 };
+
+/** Case-insensitive match on camera name or sensor id. */
+function cameraMatchesQuery(
+  cam: SceneCameraBootstrap,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return true;
+  }
+  return (
+    cam.name.toLowerCase().includes(q) ||
+    cam.sensorId.toLowerCase().includes(q)
+  );
+}
 
 function isLivePreview(img: HTMLImageElement | null): boolean {
   if (!img || img.classList.contains("display-none")) {
@@ -48,6 +63,7 @@ export function LivePreviewPane({
   onMaximizedChange,
 }: Props) {
   const toast = useAppToast();
+  const [query, setQuery] = useState("");
   const [onlineBySensor, setOnlineBySensor] = useState<Record<string, boolean>>(
     {},
   );
@@ -69,6 +85,16 @@ export function LivePreviewPane({
   const projectAllFrames =
     posedCameraIds.length > 0 &&
     posedCameraIds.every((id) => projectCameraIds.includes(id));
+
+  const visibleCameras = useMemo(
+    () => cameras.filter((cam) => cameraMatchesQuery(cam, query)),
+    [cameras, query],
+  );
+  const filtering = query.trim().length > 0;
+  const visibleIdSet = useMemo(
+    () => new Set(visibleCameras.map((c) => c.id)),
+    [visibleCameras],
+  );
 
   useEffect(() => {
     refreshCameraStrip();
@@ -185,9 +211,15 @@ export function LivePreviewPane({
         <span className="ss-live-preview-title">Live</span>
         <span
           className="ss-live-preview-count"
-          aria-label={`${cameras.length} cameras`}
+          aria-label={
+            filtering
+              ? `${visibleCameras.length} of ${cameras.length} cameras`
+              : `${cameras.length} cameras`
+          }
         >
-          {cameras.length}
+          {filtering
+            ? `${visibleCameras.length}/${cameras.length}`
+            : cameras.length}
         </span>
         <div className="ss-live-preview-head-actions">
           <button
@@ -228,6 +260,19 @@ export function LivePreviewPane({
         </div>
       </div>
 
+      {cameras.length > 0 ? (
+        <div className="ss-live-preview-search-row">
+          <input
+            type="search"
+            className="ss-live-preview-search"
+            placeholder="Search cameras…"
+            value={query}
+            onChange={(ev) => setQuery(ev.target.value)}
+            aria-label="Search cameras"
+          />
+        </div>
+      ) : null}
+
       <div
         id="ss-strip-cards"
         className="ss-live-preview-grid"
@@ -237,18 +282,24 @@ export function LivePreviewPane({
         {cameras.length === 0 && (
           <p className="ss-live-preview-empty">No cameras in this scene yet.</p>
         )}
+        {cameras.length > 0 && filtering && visibleCameras.length === 0 ? (
+          <p className="ss-live-preview-empty">No cameras match “{query.trim()}”.</p>
+        ) : null}
         {cameras.map((cam) => {
           const online = Boolean(onlineBySensor[cam.sensorId]);
           const selected = selectedId === cam.id;
           const entity = entities[cam.id];
           const posed = entity?.type === "camera" && entity.posed;
           const projecting = projectCameraIds.includes(cam.id);
+          const shown = visibleIdSet.has(cam.id);
           return (
             <div
               key={cam.id}
               role="option"
               aria-selected={selected}
-              tabIndex={0}
+              aria-hidden={!shown}
+              tabIndex={shown ? 0 : -1}
+              hidden={!shown}
               className={`ss-camera-card${selected ? " is-selected" : ""}`}
               onClick={() => handleSelect(cam)}
               onKeyDown={(ev) => {

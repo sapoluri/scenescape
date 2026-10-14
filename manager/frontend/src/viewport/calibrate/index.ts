@@ -32,6 +32,7 @@ export {
 export {
   pairsToTransforms,
   TRANSFORM_TYPE_POINT,
+  transformsToPairs,
   zipCalibratePairs,
 } from "./types";
 export type { CalibratePair, CameraOptics } from "./types";
