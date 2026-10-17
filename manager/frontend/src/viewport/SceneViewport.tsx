@@ -47,8 +47,8 @@ import {
  * - `useViewportMarks` feeds live tracked-object marks from the frozen
  *   `ss-scene-objects` event into the store;
  * - `attachMarkRenderer` draws them imperatively;
- * - `useViewportEntities` seeds regions/tripwires (geometry model) and
- *   cameras/sensors (bootstrap + REST poses) and reconciles their meshes;
+ * - `useViewportEntities` seeds regions/tripwires (geometry model), syncs
+ *   cameras/sensors/children when those lists change, and reconciles meshes;
  * - `useViewportTools` wires selection, the TransformControls gizmo,
  *   creation gestures, and keyboard shortcuts.
  * React never re-renders per frame.

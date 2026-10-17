@@ -1265,33 +1265,105 @@ export function useViewportEntities(
     seedFromModel();
     const unsubGeometry = subscribeGeometry(seedFromModel);
 
-    (async () => {
-      const camEntities = await seedCameras(seed.cameras, seed.authToken);
-      if (cancelled) {
-        return;
-      }
-      getViewportState().upsertEntities(camEntities);
-      getPersistState().captureBaselines(camEntities.map((e) => e.id));
-      const senEntities = await seedSensors(seed.sensors, seed.authToken);
-      if (cancelled) {
-        return;
-      }
-      getViewportState().upsertEntities(senEntities);
-      getPersistState().captureBaselines(senEntities.map((e) => e.id));
-    })();
-
     return () => {
       cancelled = true;
       unsubGeometry();
       const state = getViewportState();
       state.removeEntitiesByType("camera");
       state.removeEntitiesByType("sensor");
-      // Children are owned by the child-seed effect. Clearing them here
-      // dropped child scenes whenever this camera effect re-ran.
+      // Children / cameras / sensors are owned by their list-sync effects.
+      // Clearing children here dropped them whenever this geometry effect re-ran.
       getPersistState().clearBaselines();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);
+
+  // Cameras: sync when the gallery/bootstrap list changes (sheet create/edit).
+  // Only seed ids missing from the store so in-progress Properties edits stay.
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const state = getViewportState();
+      const keep = new Set(seed.cameras.map((c) => c.id));
+      for (const [id, e] of Object.entries(state.entities)) {
+        if (
+          e.type === "camera" &&
+          !id.startsWith("draft-") &&
+          !keep.has(id)
+        ) {
+          state.removeEntity(id);
+        }
+      }
+      for (const c of seed.cameras) {
+        const existing = state.entities[c.id];
+        if (existing?.type === "camera" && existing.name !== c.name) {
+          state.updateEntity(c.id, { name: c.name });
+        }
+      }
+      const missing = seed.cameras.filter((c) => !state.entities[c.id]);
+      if (missing.length === 0) {
+        return;
+      }
+      const camEntities = await seedCameras(missing, seed.authToken);
+      if (cancelled) {
+        return;
+      }
+      getViewportState().upsertEntities(camEntities);
+      getPersistState().captureBaselines(
+        camEntities.map((e) => e.id),
+        { onlyMissing: true },
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [world, seed.cameras, seed.authToken]);
+
+  // Sensors: same list-sync as cameras (gallery / sheet create).
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const state = getViewportState();
+      const keep = new Set(seed.sensors.map((s) => s.id));
+      for (const [id, e] of Object.entries(state.entities)) {
+        if (
+          e.type === "sensor" &&
+          !id.startsWith("draft-") &&
+          !keep.has(id)
+        ) {
+          state.removeEntity(id);
+        }
+      }
+      for (const s of seed.sensors) {
+        const existing = state.entities[s.id];
+        if (existing?.type === "sensor" && existing.name !== s.name) {
+          state.updateEntity(s.id, { name: s.name });
+        }
+      }
+      const missing = seed.sensors.filter((s) => !state.entities[s.id]);
+      if (missing.length === 0) {
+        return;
+      }
+      const senEntities = await seedSensors(missing, seed.authToken);
+      if (cancelled) {
+        return;
+      }
+      getViewportState().upsertEntities(senEntities);
+      getPersistState().captureBaselines(
+        senEntities.map((e) => e.id),
+        { onlyMissing: true },
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [world, seed.sensors, seed.authToken]);
 
   // Child scenes: re-seed when the linked-children list reference changes
   // (create/edit/unlink via ChildSheet or Properties).
