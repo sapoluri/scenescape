@@ -192,32 +192,38 @@ export function ViewportOptionsBar({
         </button>
       </div>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
-      <span className="ss-viewport-bar-label">Overlays</span>
-      <OverlayCheck
-        checked={showGrid}
-        onChange={() => toggleOverlay("showGrid")}
-        label="Grid"
-      />
-      {!emptyScene ? (
-        <>
-          <OverlayCheck
-            checked={showTrails}
-            onChange={() => toggleOverlay("showTrails")}
-            label="Trails"
-          />
-          <OverlayCheck
-            checked={showLabels}
-            onChange={() => toggleOverlay("showLabels")}
-            label="Labels"
-          />
-          <OverlayCheck
-            checked={showTelemetry}
-            onChange={toggleTelemetry}
-            label="Telemetry"
-            title="Show scene controller rate and camera preview FPS"
-          />
-        </>
-      ) : null}
+      <div
+        className="ss-viewport-overlays"
+        role="group"
+        aria-label="Overlays"
+      >
+        <span className="ss-viewport-bar-label">Overlays</span>
+        <OverlayCheck
+          checked={showGrid}
+          onChange={() => toggleOverlay("showGrid")}
+          label="Grid"
+        />
+        {!emptyScene ? (
+          <>
+            <OverlayCheck
+              checked={showTrails}
+              onChange={() => toggleOverlay("showTrails")}
+              label="Trails"
+            />
+            <OverlayCheck
+              checked={showLabels}
+              onChange={() => toggleOverlay("showLabels")}
+              label="Labels"
+            />
+            <OverlayCheck
+              checked={showTelemetry}
+              onChange={toggleTelemetry}
+              label="Telemetry"
+              title="Show scene controller rate and camera preview FPS"
+            />
+          </>
+        ) : null}
+      </div>
       {showScene ? (
         <>
           <div className="ss-viewport-bar-spacer" aria-hidden="true" />

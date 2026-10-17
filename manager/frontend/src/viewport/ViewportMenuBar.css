@@ -22,8 +22,9 @@
 .ss-viewport-scene-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 2px;
   min-width: 0;
+  height: var(--ss-bar-control-h, 28px);
   /* Avoid clipping descenders on the scene title. */
   overflow: visible;
 }
@@ -33,15 +34,23 @@
   flex: 1 1 6rem;
   max-width: 18rem;
   min-width: 4.5rem;
+  height: var(--ss-bar-control-h, 28px);
+  display: inline-flex;
+  align-items: center;
   font-size: 15px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* Room for glyph descenders; horizontal ellipsis still applies. */
-  padding-block: 0.1em;
+}
+
+/* Icon-only scene chrome actions (export / edit / delete). */
+.ss-viewport-options .ss-viewport-scene-actions .ss-viewport-bar-btn {
+  width: var(--ss-bar-control-h, 28px);
+  padding: 0;
+  gap: 0;
 }
 
 .ss-viewport-bar-btn--danger {
@@ -59,7 +68,11 @@
 }
 
 .ss-viewport-options .ss-scene-rate {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ss-bar-control-h, 28px);
   font-size: 11px;
+  line-height: 1;
   color: var(--ss-text-muted);
   white-space: nowrap;
 }

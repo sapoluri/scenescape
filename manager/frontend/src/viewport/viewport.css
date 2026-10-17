@@ -17,16 +17,19 @@
 }
 
 .ss-viewport-bar {
+  --ss-bar-control-h: 28px;
   flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   row-gap: 4px;
+  min-height: calc(var(--ss-bar-control-h) + 12px);
   padding: 6px 10px;
   background: var(--ss-panel-bg, var(--ss-card-bg));
   border-bottom: 1px solid var(--ss-border, var(--ss-card-border));
   font-size: 12px;
+  line-height: 1;
   z-index: 5;
   color: var(--ss-text);
 }
@@ -34,9 +37,25 @@
 .ss-viewport-bar-label {
   font-size: 10px;
   font-weight: 700;
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--ss-text-muted);
+}
+
+.ss-viewport-bar > .ss-viewport-bar-label,
+.ss-viewport-overlays > .ss-viewport-bar-label {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ss-bar-control-h);
+}
+
+/* Keep Overlays label + checks on one baseline (Bootstrap label margin). */
+.ss-viewport-overlays {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--ss-bar-control-h);
 }
 
 .ss-viewport-bar-sep {
@@ -46,7 +65,10 @@
 }
 
 .ss-viewport-bar .seg {
-  display: flex;
+  display: inline-flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: var(--ss-bar-control-h);
   background: var(--ss-fill-secondary, var(--ss-input-bg));
   border: 1px solid var(--ss-border, var(--ss-card-border));
   border-radius: 8px;
@@ -55,12 +77,16 @@
 }
 
 .ss-viewport-bar .seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: var(--ss-text-muted);
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 0 10px;
   font-size: 12px;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -78,11 +104,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  box-sizing: border-box;
+  height: var(--ss-bar-control-h);
+  margin: 0;
   color: var(--ss-text-muted);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 0 6px;
   border-radius: 6px;
   font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
   user-select: none;
 }
 
@@ -401,23 +432,30 @@
 }
 
 .ss-viewport-bar-btn {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 5px 10px;
+  height: var(--ss-bar-control-h, 28px);
+  padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: none;
   color: var(--ss-text);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
 }
 .ss-viewport-bar-btn:hover {
   background: var(--ss-hover-bg);
   border-color: var(--ss-border, var(--ss-card-border));
 }
 .ss-viewport-bar-btn .bi {
+  display: block;
   font-size: 14px;
+  line-height: 1;
 }

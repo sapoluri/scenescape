@@ -14,6 +14,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  min-height: 28px;
   padding: 2px 4px 2px 2px;
 }
 
@@ -23,7 +24,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  height: 24px;
+  padding: 0 6px;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -31,10 +33,20 @@
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
+  line-height: 1;
   text-transform: uppercase;
   color: var(--ss-text-muted, #8e8e93);
   cursor: pointer;
   text-align: left;
+}
+
+.ss-outliner-group-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: none;
+  height: 24px;
 }
 
 .ss-outliner-group-toggle:hover {
@@ -62,7 +74,11 @@
 }
 
 .ss-outliner-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 20px;
+  height: 16px;
   text-align: center;
   padding: 0 6px;
   border-radius: 10px;
@@ -70,6 +86,7 @@
   color: var(--ss-text-secondary, #aeaeb2);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1;
   flex: none;
 }
 
@@ -85,7 +102,7 @@
 
 .ss-outliner-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 7px;
   padding: 4px 8px;
   border-radius: 6px;
@@ -145,28 +162,45 @@
   flex: none;
 }
 
-.ss-outliner-preview {
+.ss-outliner-preview,
+.ss-outliner-project-all,
+.ss-outliner-add,
+.ss-outliner-edit,
+.ss-outliner-delete,
+.ss-outliner-row-action {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
   flex: none;
+  margin: 0;
   padding: 0;
-  border-radius: 4px;
   border: none;
+  border-radius: 4px;
   background: none;
-  color: var(--ss-text-muted, #8e8e93);
+  color: var(--ss-text-muted, #8a8f9e);
   cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
   user-select: none;
 }
 
-.ss-outliner-preview:hover {
-  color: var(--ss-text, #f5f5f7);
+.ss-outliner-preview:hover,
+.ss-outliner-project-all:hover:not(:disabled),
+.ss-outliner-add:hover,
+.ss-outliner-edit:hover,
+.ss-outliner-row-action:hover:not(:disabled) {
   background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
+  color: var(--ss-accent, #0a84ff);
 }
 
-.ss-outliner-preview.is-on {
+.ss-outliner-preview.is-on,
+.ss-outliner-project-all.is-on,
+.ss-outliner-row-action.is-on {
   color: var(--ss-brand, var(--ss-accent, #0a84ff));
   background: var(--ss-accent-fill, var(--ss-brand-dim));
 }
@@ -183,35 +217,15 @@
   border: 0;
 }
 
-.ss-outliner-preview .bi {
+.ss-outliner-preview .bi,
+.ss-outliner-project-all .bi,
+.ss-outliner-add .bi,
+.ss-outliner-edit .bi,
+.ss-outliner-delete .bi,
+.ss-outliner-row-action .bi {
+  display: block;
   font-size: 12px;
   line-height: 1;
-}
-
-.ss-outliner-project-all {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  color: var(--ss-text-muted, #8a8f9e);
-  cursor: pointer;
-  font: inherit;
-}
-
-.ss-outliner-project-all:hover:not(:disabled) {
-  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
-  color: var(--ss-accent, #0a84ff);
-}
-
-.ss-outliner-project-all.is-on {
-  color: var(--ss-brand, var(--ss-accent, #0a84ff));
-  background: var(--ss-accent-fill, var(--ss-brand-dim));
 }
 
 .ss-outliner-project-all:disabled {
@@ -258,32 +272,6 @@
   color: var(--ss-text, #f5f5f7);
 }
 
-.ss-outliner-add,
-.ss-outliner-edit,
-.ss-outliner-delete,
-.ss-outliner-row-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  color: var(--ss-text-muted, #8a8f9e);
-  text-decoration: none;
-  flex: none;
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-}
-.ss-outliner-add:hover,
-.ss-outliner-edit:hover,
-.ss-outliner-row-action:hover:not(:disabled) {
-  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
-  color: var(--ss-accent, #0a84ff);
-}
-
 /* Row actions show on hover / selected; active Project stays visible. */
 .ss-outliner-delete,
 .ss-outliner-row-action {
@@ -300,10 +288,6 @@
 .ss-outliner-row-action.is-on {
   opacity: 1;
   pointer-events: auto;
-}
-.ss-outliner-row-action.is-on {
-  color: var(--ss-brand, var(--ss-accent, #0a84ff));
-  background: var(--ss-accent-fill, var(--ss-brand-dim));
 }
 .ss-outliner-row-action:disabled {
   opacity: 0.35;

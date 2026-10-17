@@ -614,86 +614,92 @@ export function Outliner({
                 <span className="ss-outliner-group-label">{label}</span>
                 <span className="ss-outliner-badge">{items.length}</span>
               </button>
-              {type === "camera" && showPreviewToggle && onPreviewOpenChange ? (
-                <label
-                  className={`ss-outliner-preview${previewOpen ? " is-on" : ""}`}
-                  title={
-                    previewOpen
-                      ? "Hide live camera preview"
-                      : "Show live camera preview in the dock"
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    className="ss-outliner-preview-input"
-                    checked={previewOpen}
-                    onChange={(ev) => onPreviewOpenChange(ev.target.checked)}
-                    aria-label="Camera preview"
-                  />
-                  <i
-                    className={`bi ${previewOpen ? "bi-camera-video-fill" : "bi-camera-video"}`}
-                    aria-hidden="true"
-                  />
-                </label>
-              ) : null}
-              {type === "camera" && items.length > 0 ? (
-                <button
-                  type="button"
-                  id="project-all-frames"
-                  className={`ss-outliner-project-all${projectAllActive ? " is-on" : ""}`}
-                  disabled={posedCameraIds.length === 0}
-                  title={
-                    posedCameraIds.length > 0
-                      ? projectAllActive
-                        ? "Stop projecting all cameras"
-                        : "Project all calibrated cameras onto the scene map"
-                      : "Calibrate cameras first — projection needs a pose"
-                  }
-                  aria-label="Project all cameras"
-                  aria-pressed={projectAllActive}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    getViewportState().setProjectAllCameras(!projectAllActive);
-                  }}
-                >
-                  <i className="bi bi-cast" aria-hidden="true" />
-                </button>
-              ) : null}
-              {showToolAdd && addTool ? (
-                <button
-                  type="button"
-                  className="ss-outliner-add"
-                  title={addLabel}
-                  aria-label={addLabel}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    // Match the toolbar: expand the group and arm the tool.
-                    setCollapsed((prev) => {
-                      if (!prev.has(type)) {
-                        return prev;
-                      }
-                      const next = new Set(prev);
-                      next.delete(type);
-                      writeCollapsed(next);
-                      return next;
-                    });
-                    getViewportState().setTool(addTool);
-                  }}
-                >
-                  <i className="bi bi-plus" aria-hidden="true" />
-                </button>
-              ) : null}
-              {showSheetAdd && addHref ? (
-                <a
-                  className="ss-outliner-add"
-                  href={addHref}
-                  title={addLabel}
-                  aria-label={addLabel}
-                  onClick={(ev) => ev.stopPropagation()}
-                >
-                  <i className="bi bi-plus" aria-hidden="true" />
-                </a>
-              ) : null}
+              <div className="ss-outliner-group-actions">
+                {type === "camera" &&
+                showPreviewToggle &&
+                onPreviewOpenChange ? (
+                  <label
+                    className={`ss-outliner-preview${previewOpen ? " is-on" : ""}`}
+                    title={
+                      previewOpen
+                        ? "Hide live camera preview"
+                        : "Show live camera preview in the dock"
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="ss-outliner-preview-input"
+                      checked={previewOpen}
+                      onChange={(ev) => onPreviewOpenChange(ev.target.checked)}
+                      aria-label="Camera preview"
+                    />
+                    <i
+                      className={`bi ${previewOpen ? "bi-camera-video-fill" : "bi-camera-video"}`}
+                      aria-hidden="true"
+                    />
+                  </label>
+                ) : null}
+                {type === "camera" && items.length > 0 ? (
+                  <button
+                    type="button"
+                    id="project-all-frames"
+                    className={`ss-outliner-project-all${projectAllActive ? " is-on" : ""}`}
+                    disabled={posedCameraIds.length === 0}
+                    title={
+                      posedCameraIds.length > 0
+                        ? projectAllActive
+                          ? "Stop projecting all cameras"
+                          : "Project all calibrated cameras onto the scene map"
+                        : "Calibrate cameras first — projection needs a pose"
+                    }
+                    aria-label="Project all cameras"
+                    aria-pressed={projectAllActive}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      getViewportState().setProjectAllCameras(
+                        !projectAllActive,
+                      );
+                    }}
+                  >
+                    <i className="bi bi-cast" aria-hidden="true" />
+                  </button>
+                ) : null}
+                {showToolAdd && addTool ? (
+                  <button
+                    type="button"
+                    className="ss-outliner-add"
+                    title={addLabel}
+                    aria-label={addLabel}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      // Match the toolbar: expand the group and arm the tool.
+                      setCollapsed((prev) => {
+                        if (!prev.has(type)) {
+                          return prev;
+                        }
+                        const next = new Set(prev);
+                        next.delete(type);
+                        writeCollapsed(next);
+                        return next;
+                      });
+                      getViewportState().setTool(addTool);
+                    }}
+                  >
+                    <i className="bi bi-plus" aria-hidden="true" />
+                  </button>
+                ) : null}
+                {showSheetAdd && addHref ? (
+                  <a
+                    className="ss-outliner-add"
+                    href={addHref}
+                    title={addLabel}
+                    aria-label={addLabel}
+                    onClick={(ev) => ev.stopPropagation()}
+                  >
+                    <i className="bi bi-plus" aria-hidden="true" />
+                  </a>
+                ) : null}
+              </div>
             </div>
             {type === "camera" && projectAllActive ? (
               <div className="ss-outliner-overlay-bar">
