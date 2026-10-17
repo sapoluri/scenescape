@@ -383,7 +383,7 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
       <ReadField label="Length" value={`${fmt(polylineLength(e.points))} m`} />
       <ReadField label="Points" value={String(e.points.length)} />
       <ReadField
-        label="Direction"
+        label="Point order"
         value={`${fmt(e.a[0])}, ${fmt(e.a[1])} → ${fmt(e.b[0])}, ${fmt(e.b[1])}`}
       />
       <SaveBar
@@ -393,8 +393,8 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
         onSave={() => void onSave()}
       />
       <p className="ss-prop-hint">
-        Crossings are counted A → B. Save writes this tripwire; use toolbar Save
-        all for bulk edits.
+        The arrow marks the +1 crossing side. Save writes this tripwire; use
+        toolbar Save all for bulk edits.
       </p>
     </>
   );

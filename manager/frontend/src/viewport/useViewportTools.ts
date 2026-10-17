@@ -18,7 +18,7 @@ import {
   Vector3,
 } from "three";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
-import { lookAtOriginEuler } from "./entities";
+import { addTripwireCurtain, lookAtOriginEuler } from "./entities";
 import {
   bboxOf,
   centroidOf,
@@ -252,7 +252,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (draft.cursor) {
         trail.push(draft.cursor);
       }
-      if (trail.length >= 2) {
+      if (draft.tool === "tripwire" && trail.length >= 2) {
+        addTripwireCurtain(g, trail, color, { showLabel: false });
+      } else if (trail.length >= 2) {
         const line = new Line(
           new BufferGeometry().setFromPoints(
             trail.map(([x, y]) => new Vector3(x, y, 0.12)),
@@ -967,7 +969,21 @@ function disposeGroup(root: Group): void {
     const mesh = o as Mesh;
     const geo = (mesh as { geometry?: { dispose?: () => void } }).geometry;
     geo?.dispose?.();
-    const mat = mesh.material as { dispose?: () => void } | undefined;
-    mat?.dispose?.();
+    const mat = mesh.material as
+      | { dispose?: () => void; map?: { dispose?: () => void } }
+      | { dispose?: () => void; map?: { dispose?: () => void } }[]
+      | undefined;
+    const disposeMat = (m: {
+      dispose?: () => void;
+      map?: { dispose?: () => void };
+    }) => {
+      m.map?.dispose?.();
+      m.dispose?.();
+    };
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => disposeMat(m));
+    } else if (mat) {
+      disposeMat(mat);
+    }
   });
 }

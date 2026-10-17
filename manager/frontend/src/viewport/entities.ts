@@ -4,8 +4,10 @@
 import { useEffect } from "react";
 import {
   BoxGeometry,
+  BufferAttribute,
   BufferGeometry,
   CameraHelper,
+  CanvasTexture,
   CircleGeometry,
   Color,
   ConeGeometry,
@@ -15,7 +17,6 @@ import {
   Euler,
   ExtrudeGeometry,
   Group,
-  Line,
   LineBasicMaterial,
   LineDashedMaterial,
   LineSegments,
@@ -29,6 +30,8 @@ import {
   Shape,
   ShapeGeometry,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector2,
   Vector3,
 } from "three";
@@ -93,10 +96,17 @@ function disposeObject(root: Object3D): void {
     geo?.dispose?.();
     const mat = mesh.material as
       { dispose?: () => void } | { dispose?: () => void }[] | undefined;
+    const disposeMat = (m: {
+      dispose?: () => void;
+      map?: { dispose?: () => void };
+    }) => {
+      m.map?.dispose?.();
+      m.dispose?.();
+    };
     if (Array.isArray(mat)) {
-      mat.forEach((m) => m.dispose?.());
-    } else {
-      mat?.dispose?.();
+      mat.forEach((m) => disposeMat(m));
+    } else if (mat) {
+      disposeMat(mat);
     }
   });
 }
@@ -202,71 +212,312 @@ function buildRegion(e: RegionEntity): EntityNodes {
 }
 
 /* ------------------------------------------------------------------ */
-/* Tripwires                                                           */
+/* Tripwires — light curtain                                           */
 /* ------------------------------------------------------------------ */
 
-function buildTripwire(e: TripwireEntity): EntityNodes {
+/** Vertical sheet height in meters. */
+export const TRIPWIRE_CURTAIN_HEIGHT = 2;
+
+const TRIPWIRE_CURTAIN_FLOOR = 0.02;
+const TRIPWIRE_BEAM_SPACING = 0.22;
+const TRIPWIRE_PLUS_OFFSET = 0.28;
+const TRIPWIRE_CURTAIN_OPACITY = 0.26;
+const TRIPWIRE_CURTAIN_OPACITY_SELECTED = 0.42;
+
+/**
+ * Unit normal of the +1 crossing side.
+ *
+ * Scene Controller counts a crossing +1 when the object's current point lies
+ * to the right of the directed segment (see Tripwire.lineCrosses). Walking
+ * from the first point toward the next, +1 is to the right: (dy, -dx) / len.
+ */
+export function tripwirePlusNormal(
+  a: [number, number],
+  b: [number, number],
+): [number, number] | null {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) {
+    return null;
+  }
+  return [dy / len, -dx / len];
+}
+
+interface CurtainMaterials {
+  curtain: MeshBasicMaterial;
+  beams: LineBasicMaterial;
+  posts: MeshBasicMaterial;
+}
+
+/** Point and +1 normal at half the polyline length. Skips zero-length spans. */
+function curtainMidpoint(points: [number, number][]): {
+  point: [number, number];
+  normal: [number, number];
+} | null {
+  const segs: {
+    a: [number, number];
+    b: [number, number];
+    len: number;
+    normal: [number, number];
+  }[] = [];
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const normal = tripwirePlusNormal(a, b);
+    if (!normal) {
+      continue;
+    }
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    segs.push({ a, b, len, normal });
+    total += len;
+  }
+  if (total < 1e-6 || segs.length === 0) {
+    return null;
+  }
+  let remain = total / 2;
+  for (const seg of segs) {
+    if (remain <= seg.len + 1e-9) {
+      const t = seg.len > 1e-9 ? remain / seg.len : 0;
+      return {
+        point: [
+          seg.a[0] + (seg.b[0] - seg.a[0]) * t,
+          seg.a[1] + (seg.b[1] - seg.a[1]) * t,
+        ],
+        normal: seg.normal,
+      };
+    }
+    remain -= seg.len;
+  }
+  const last = segs[segs.length - 1];
+  return { point: [...last.b], normal: last.normal };
+}
+
+function plusOneTexture(): CanvasTexture | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(20, 20, 24, 0.78)";
+  ctx.fillRect(4, 8, 120, 48);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 40px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("+1", 64, 34);
+  const tex = new CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Vertical light curtain for a floor polyline, in the parent's local XY.
+ * One small arrow sits on the +1 side at the path midpoint.
+ */
+export function addTripwireCurtain(
+  parent: Object3D,
+  points: [number, number][],
+  color: string | number,
+  options?: { showLabel?: boolean },
+): CurtainMaterials {
+  const base = new Color(color);
+  const curtainMat = new MeshBasicMaterial({
+    color: base.clone(),
+    transparent: true,
+    opacity: TRIPWIRE_CURTAIN_OPACITY,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const beamMat = new LineBasicMaterial({ color: base.clone() });
+  const postMat = new MeshBasicMaterial({ color: base.clone() });
+  const z0 = TRIPWIRE_CURTAIN_FLOOR;
+  const z1 = TRIPWIRE_CURTAIN_HEIGHT;
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const beams: number[] = [];
+  const pushBeam = (x: number, y: number) => {
+    beams.push(x, y, z0, x, y, z1);
+  };
+  let vertex = 0;
+  let beamed = false;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) {
+      continue;
+    }
+    positions.push(
+      a[0],
+      a[1],
+      z0,
+      b[0],
+      b[1],
+      z0,
+      b[0],
+      b[1],
+      z1,
+      a[0],
+      a[1],
+      z1,
+    );
+    indices.push(
+      vertex,
+      vertex + 1,
+      vertex + 2,
+      vertex,
+      vertex + 2,
+      vertex + 3,
+    );
+    vertex += 4;
+    if (!beamed) {
+      pushBeam(a[0], a[1]);
+      beamed = true;
+    }
+    beams.push(a[0], a[1], z0, b[0], b[1], z0, a[0], a[1], z1, b[0], b[1], z1);
+    for (
+      let dist = TRIPWIRE_BEAM_SPACING;
+      dist < len - 1e-4;
+      dist += TRIPWIRE_BEAM_SPACING
+    ) {
+      const t = dist / len;
+      pushBeam(a[0] + dx * t, a[1] + dy * t);
+    }
+    pushBeam(b[0], b[1]);
+  }
+
+  if (positions.length > 0) {
+    const geo = new BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new BufferAttribute(new Float32Array(positions), 3),
+    );
+    geo.setIndex(indices);
+    const sheet = new Mesh(geo, curtainMat);
+    sheet.name = "tripwire-curtain";
+    sheet.renderOrder = 2;
+    parent.add(sheet);
+  }
+  if (beams.length > 0) {
+    const geo = new BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new BufferAttribute(new Float32Array(beams), 3),
+    );
+    const lines = new LineSegments(geo, beamMat);
+    lines.name = "tripwire-beams";
+    lines.renderOrder = 3;
+    parent.add(lines);
+  }
+
+  const postGeo = new CylinderGeometry(0.04, 0.04, z1 - z0, 8);
+  postGeo.rotateX(Math.PI / 2);
+  const seen = new Set<string>();
+  for (const [x, y] of points) {
+    const key = `${x.toFixed(4)},${y.toFixed(4)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const post = new Mesh(postGeo, postMat);
+    post.position.set(x, y, (z0 + z1) / 2);
+    parent.add(post);
+  }
+
+  const mid = curtainMidpoint(points);
+  if (mid) {
+    const [nx, ny] = mid.normal;
+    const cone = new Mesh(
+      new ConeGeometry(0.09, 0.4, 10),
+      new MeshBasicMaterial({ color: 0xffffff }),
+    );
+    cone.name = "tripwire-plus";
+    cone.quaternion.setFromUnitVectors(
+      new Vector3(0, 1, 0),
+      new Vector3(nx, ny, 0),
+    );
+    cone.position.set(
+      mid.point[0] + nx * TRIPWIRE_PLUS_OFFSET,
+      mid.point[1] + ny * TRIPWIRE_PLUS_OFFSET,
+      z1 * 0.55,
+    );
+    cone.renderOrder = 4;
+    parent.add(cone);
+
+    if (options?.showLabel !== false) {
+      const tex = plusOneTexture();
+      if (tex) {
+        const sprite = new Sprite(
+          new SpriteMaterial({
+            map: tex,
+            transparent: true,
+            depthWrite: false,
+          }),
+        );
+        sprite.name = "tripwire-plus-label";
+        sprite.position.set(
+          mid.point[0] + nx * (TRIPWIRE_PLUS_OFFSET + 0.34),
+          mid.point[1] + ny * (TRIPWIRE_PLUS_OFFSET + 0.34),
+          z1 * 0.55 + 0.28,
+        );
+        sprite.scale.set(0.5, 0.25, 1);
+        sprite.renderOrder = 5;
+        parent.add(sprite);
+      }
+    }
+  }
+
+  return { curtain: curtainMat, beams: beamMat, posts: postMat };
+}
+
+export function buildTripwire(e: TripwireEntity): EntityNodes {
   const group = new Group();
-  const baseColor = new Color(e.color);
   const [cx, cy] = centroidOf(e.points);
   const pivot = new Group();
   pivot.position.set(cx, cy, 0);
-
-  const lineMat = new LineBasicMaterial({ color: baseColor.clone() });
-  const pts = e.points.map(([x, y]) => new Vector3(x - cx, y - cy, 0.15));
-  const line = new Line(new BufferGeometry().setFromPoints(pts), lineMat);
-  pivot.add(line);
-
-  const postMat = new MeshBasicMaterial({ color: baseColor.clone() });
-  const postGeo = new CylinderGeometry(0.06, 0.06, 1.6, 8);
-  postGeo.rotateX(Math.PI / 2); // axis Y -> Z (Z-up)
-  for (const [x, y] of e.points) {
-    const post = new Mesh(postGeo, postMat);
-    post.position.set(x - cx, y - cy, 0.8);
-    pivot.add(post);
-  }
-
-  // Direction cone on the last segment (mockup language).
-  if (e.points.length >= 2) {
-    const ra = e.points[e.points.length - 2];
-    const rb = e.points[e.points.length - 1];
-    const dir = new Vector3(rb[0] - ra[0], rb[1] - ra[1], 0);
-    if (dir.lengthSq() > 1e-6) {
-      dir.normalize();
-      const cone = new Mesh(new ConeGeometry(0.35, 1, 12), postMat);
-      cone.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), dir);
-      cone.position.set(rb[0] - cx, rb[1] - cy, 0.5);
-      pivot.add(cone);
-    }
-  }
+  const local = e.points.map(([x, y]) => [x - cx, y - cy] as [number, number]);
+  const mats = addTripwireCurtain(pivot, local, e.color);
 
   const { min, max } = bboxOf(e.points);
   const proxy = new Mesh(
     new BoxGeometry(
       Math.max(max[0] - min[0], 0.5),
       Math.max(max[1] - min[1], 0.5),
-      1.6,
+      TRIPWIRE_CURTAIN_HEIGHT,
     ),
     proxyMaterial(),
   );
   proxy.position.set(
     (min[0] + max[0]) / 2 - cx,
     (min[1] + max[1]) / 2 - cy,
-    0.8,
+    TRIPWIRE_CURTAIN_HEIGHT / 2,
   );
   pivot.add(proxy);
   group.add(pivot);
   group.userData.entityId = e.id;
 
-  const mid: [number, number] = [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
   return {
     group,
     gizmoTarget: pivot,
-    labelPos: new Vector3(mid[0], mid[1], 1.9),
+    labelPos: new Vector3(cx, cy, TRIPWIRE_CURTAIN_HEIGHT + 0.35),
     setSelected: (on: boolean) => {
+      mats.curtain.opacity = on
+        ? TRIPWIRE_CURTAIN_OPACITY_SELECTED
+        : TRIPWIRE_CURTAIN_OPACITY;
       const c = on ? "#ffffff" : e.color;
-      lineMat.color.set(c);
-      postMat.color.set(c);
+      mats.beams.color.set(c);
+      mats.posts.color.set(c);
     },
     dispose: () => disposeObject(group),
   };
