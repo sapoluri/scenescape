@@ -5,8 +5,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
 import { LibraryDrawer } from "../library/LibraryDrawer";
@@ -39,15 +42,44 @@ import "./Outliner.css";
 import "./Properties.css";
 import "./SinglePaneView.css";
 
-type DockTab = "outliner" | "properties" | "telemetry";
+type DockTab = "outliner" | "telemetry";
 
 const DOCK_TABS: { id: DockTab; label: string }[] = [
   { id: "outliner", label: "Outliner" },
-  { id: "properties", label: "Properties" },
   { id: "telemetry", label: "Telemetry" },
 ];
 
 const DOCK_COLLAPSED_KEY = "ss-sp-dock-collapsed";
+const PROPS_RATIO_KEY = "ss-sp-props-ratio";
+const PROPS_RATIO_DEFAULT = 0.42;
+
+function readPropsRatio(): number {
+  try {
+    const n = Number(sessionStorage.getItem(PROPS_RATIO_KEY));
+    if (Number.isFinite(n) && n > 0.15 && n < 0.85) {
+      return n;
+    }
+  } catch {
+    /* private mode / quota */
+  }
+  return PROPS_RATIO_DEFAULT;
+}
+
+function writePropsRatio(ratio: number): void {
+  try {
+    sessionStorage.setItem(PROPS_RATIO_KEY, String(ratio));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function clampPropsRatio(ratio: number, height: number): number {
+  if (height <= 0) {
+    return Math.min(0.85, Math.max(0.15, ratio));
+  }
+  const min = Math.min(0.4, 96 / height);
+  return Math.min(1 - min, Math.max(min, ratio));
+}
 
 function readDockCollapsed(): boolean {
   try {
@@ -84,11 +116,13 @@ export interface SinglePaneViewProps {
 
 /**
  * Single-pane 3D workspace (Phase 1.3): the 3D viewport fills the window with
- * a docked right panel (Outliner / Properties / Telemetry tabs), a left
- * Object Library drawer (B), and the ⌘O Open Scene gallery dialog.
+ * a docked right panel (Outliner / Telemetry), a left Object Library drawer
+ * (B), and the ⌘O Open Scene gallery dialog.
  *
- * Outliner Cameras → Preview splits the dock: active tab on top, Live glance
- * on the bottom half. Maximize fills the dock; close via Outliner Preview.
+ * Selecting an entity opens Properties as a bottom split of the dock, the
+ * same way Preview opens the live glance. The split between Outliner and
+ * Properties can be dragged. Outliner Cameras → Preview adds the glance
+ * under that stack. Maximize fills the dock; close via Outliner Preview.
  */
 export function SinglePaneView({
   sceneId,
@@ -108,6 +142,11 @@ export function SinglePaneView({
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
+  const [propsRatio, setPropsRatio] = useState(readPropsRatio);
+  const propsRatioRef = useRef(propsRatio);
+  propsRatioRef.current = propsRatio;
+  const editorRef = useRef<HTMLDivElement>(null);
+  const splitDrag = useRef<{ pointerId: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewMaximized, setPreviewMaximized] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -132,6 +171,9 @@ export function SinglePaneView({
   const [replayMode, setReplayMode] = useState(false);
   const calibrating = useCalibrateStore((s) => s.active);
   const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
+  const selectedId = useViewportStore((s) => s.selectedId);
+  const editFocus = useViewportStore((s) => s.editFocus);
+  const propertiesOpen = selectedId != null;
 
   useOpenSceneHotkey(() => {
     setAdminListKind(null);
@@ -142,6 +184,67 @@ export function SinglePaneView({
     setDockCollapsed(collapsed);
     writeDockCollapsed(collapsed);
   }, []);
+
+  useEffect(() => {
+    if (editFocus < 1) {
+      return;
+    }
+    setDockTab("outliner");
+    setCollapsed(false);
+  }, [editFocus, setCollapsed]);
+
+  const applySplitRatio = useCallback((clientY: number) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const rect = editor.getBoundingClientRect();
+    const ratio = clampPropsRatio(
+      (rect.bottom - clientY) / rect.height,
+      rect.height,
+    );
+    propsRatioRef.current = ratio;
+    setPropsRatio(ratio);
+  }, []);
+
+  const onSplitPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+    if (ev.button !== 0) {
+      return;
+    }
+    ev.preventDefault();
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    splitDrag.current = { pointerId: ev.pointerId };
+    applySplitRatio(ev.clientY);
+  };
+
+  const onSplitPointerMove = (ev: ReactPointerEvent<HTMLDivElement>) => {
+    if (splitDrag.current?.pointerId !== ev.pointerId) {
+      return;
+    }
+    applySplitRatio(ev.clientY);
+  };
+
+  const onSplitPointerUp = (ev: ReactPointerEvent<HTMLDivElement>) => {
+    if (splitDrag.current?.pointerId !== ev.pointerId) {
+      return;
+    }
+    splitDrag.current = null;
+    writePropsRatio(propsRatioRef.current);
+  };
+
+  const onSplitKeyDown = (ev: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") {
+      return;
+    }
+    ev.preventDefault();
+    const editor = editorRef.current;
+    const height = editor?.getBoundingClientRect().height ?? 0;
+    const delta = ev.key === "ArrowUp" ? 0.04 : -0.04;
+    const ratio = clampPropsRatio(propsRatioRef.current + delta, height);
+    propsRatioRef.current = ratio;
+    setPropsRatio(ratio);
+    writePropsRatio(ratio);
+  };
 
   const closePreview = useCallback(() => {
     setPreviewOpen(false);
@@ -272,7 +375,7 @@ export function SinglePaneView({
                 <div
                   className="ss-sp-dock-rail-tabs"
                   role="tablist"
-                  aria-label="Outliner, Properties, Telemetry"
+                  aria-label="Outliner and Telemetry"
                   aria-orientation="vertical"
                 >
                   {DOCK_TABS.map((t) => (
@@ -298,52 +401,85 @@ export function SinglePaneView({
               "ss-sp-dock-main",
               previewOpen ? "is-preview-split" : "",
               previewOpen && previewMaximized ? "is-preview-maximized" : "",
+              propertiesOpen ? "is-props-split" : "",
             ]
               .filter(Boolean)
               .join(" ")}
           >
-            <div className="ss-sp-dock-tabs-pane">
+            <div className="ss-sp-dock-editor" ref={editorRef}>
               <div
-                className="ss-sp-dock-tabs"
-                role="tablist"
-                aria-label="Outliner, Properties, Telemetry"
+                className="ss-sp-dock-tabs-pane"
+                style={
+                  propertiesOpen && !(previewOpen && previewMaximized)
+                    ? { flex: `${1 - propsRatio} 1 0` }
+                    : undefined
+                }
               >
-                {DOCK_TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={dockTab === t.id}
-                    className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
-                    onClick={() => pickTab(t.id)}
+                <div
+                  className="ss-sp-dock-tabs"
+                  role="tablist"
+                  aria-label="Outliner and Telemetry"
+                >
+                  {DOCK_TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={dockTab === t.id}
+                      className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
+                      onClick={() => pickTab(t.id)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="ss-sp-dock-body">
+                  {dockTab === "outliner" && (
+                    <Outliner
+                      isSuperuser={isSuperuser}
+                      showPreviewToggle={cameras.length > 0}
+                      previewOpen={previewOpen}
+                      onPreviewOpenChange={setPreview}
+                    />
+                  )}
+                  {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+                </div>
+              </div>
+              {propertiesOpen ? (
+                <>
+                  <div
+                    className="ss-sp-dock-split"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Resize outliner and properties"
+                    aria-valuemin={15}
+                    aria-valuemax={85}
+                    aria-valuenow={Math.round(propsRatio * 100)}
+                    tabIndex={0}
+                    onPointerDown={onSplitPointerDown}
+                    onPointerMove={onSplitPointerMove}
+                    onPointerUp={onSplitPointerUp}
+                    onPointerCancel={onSplitPointerUp}
+                    onKeyDown={onSplitKeyDown}
+                  />
+                  <div
+                    className="ss-sp-dock-props"
+                    style={{ flex: `${propsRatio} 1 0` }}
                   >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <div className="ss-sp-dock-body">
-                {dockTab === "outliner" && (
-                  <Outliner
-                    isSuperuser={isSuperuser}
-                    showPreviewToggle={cameras.length > 0}
-                    previewOpen={previewOpen}
-                    onPreviewOpenChange={setPreview}
-                  />
-                )}
-                {dockTab === "properties" && (
-                  <Properties
-                    sceneName={sceneName}
-                    sceneId={sceneId}
-                    cameras={cameras}
-                    sensors={sensors}
-                    children={children}
-                    onChildrenChange={onChildrenChange}
-                    authToken={authToken}
-                    isSuperuser={isSuperuser}
-                  />
-                )}
-                {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
-              </div>
+                    <div className="ss-sp-dock-props-head">Properties</div>
+                    <Properties
+                      sceneName={sceneName}
+                      sceneId={sceneId}
+                      cameras={cameras}
+                      sensors={sensors}
+                      children={children}
+                      onChildrenChange={onChildrenChange}
+                      authToken={authToken}
+                      isSuperuser={isSuperuser}
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
             {previewOpen && cameras.length > 0 ? (
               <div className="ss-sp-dock-glance">

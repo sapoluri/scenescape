@@ -18,7 +18,7 @@ import {
   Vector3,
 } from "three";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
-import { lookAtOriginEuler } from "./entities";
+import { addTripwireCurtain, lookAtOriginEuler } from "./entities";
 import {
   bboxOf,
   centroidOf,
@@ -28,7 +28,7 @@ import {
   writeTripwireToModel,
 } from "./geometrySync";
 import { getViewportState, useViewportStore } from "./store";
-import { CREATION_TOOLS } from "./tools";
+import { CREATION_TOOLS, entityCanScale } from "./tools";
 import type {
   CameraEntity,
   RegionEntity,
@@ -87,10 +87,7 @@ function floorPoint(
   return [hit.x, hit.y];
 }
 
-function pickEntity(
-  world: ViewportWorld,
-  ev: PointerEvent,
-): string | null {
+function pickEntity(world: ViewportWorld, ev: PointerEvent): string | null {
   const rect = world.host.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) {
     return null;
@@ -105,8 +102,7 @@ function pickEntity(
   for (const hit of hits) {
     let o: object | null = hit.object;
     while (o) {
-      const id = (o as { userData?: { entityId?: string } }).userData
-        ?.entityId;
+      const id = (o as { userData?: { entityId?: string } }).userData?.entityId;
       if (typeof id === "string") {
         return id;
       }
@@ -154,10 +150,7 @@ function rotatePoint(
   return [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
 }
 
-function pointsEqual(
-  a: [number, number][],
-  b: [number, number][],
-): boolean {
+function pointsEqual(a: [number, number][], b: [number, number][]): boolean {
   if (a.length !== b.length) {
     return false;
   }
@@ -198,7 +191,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
     visuals: Group | null;
     label: HTMLDivElement | null;
   }>({ a: null, visuals: null, label: null });
-  const downRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  const downRef = useRef<{
+    x: number;
+    y: number;
+    at: number;
+    tool: ToolId;
+  } | null>(null);
   /** What pointerdown hit: entity id, "gizmo", or null (empty space). */
   const downPickRef = useRef<string | null>(null);
 
@@ -254,7 +252,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (draft.cursor) {
         trail.push(draft.cursor);
       }
-      if (trail.length >= 2) {
+      if (draft.tool === "tripwire" && trail.length >= 2) {
+        addTripwireCurtain(g, trail, color, { showLabel: false });
+      } else if (trail.length >= 2) {
         const line = new Line(
           new BufferGeometry().setFromPoints(
             trail.map(([x, y]) => new Vector3(x, y, 0.12)),
@@ -338,7 +338,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         };
         s.upsertEntities([entity]);
         writeRegionToModel(entity);
-        s.select(id);
+        s.beginEditing(id);
       } else {
         const count = Object.values(s.entities).filter(
           (e) => e.type === "tripwire",
@@ -355,7 +355,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         };
         s.upsertEntities([entity]);
         writeTripwireToModel(entity);
-        s.select(id);
+        s.beginEditing(id);
       }
     };
 
@@ -365,7 +365,11 @@ export function useViewportTools(world: ViewportWorld | null): void {
         return;
       }
       let draft = draftRef.current;
-      if (!draft || draft.tool !== "sensor-poly" || draft.sensorId !== sensor.id) {
+      if (
+        !draft ||
+        draft.tool !== "sensor-poly" ||
+        draft.sensorId !== sensor.id
+      ) {
         startDraft("sensor-poly", sensor.id);
         draft = draftRef.current;
       }
@@ -418,7 +422,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
       };
       s.commitHistory();
       s.upsertEntities([entity]);
-      s.select(id);
+      s.beginEditing(id);
     };
 
     const placeSensor = (pt: [number, number]) => {
@@ -492,7 +496,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (ev.button !== 0) {
         return;
       }
-      downRef.current = { x: ev.clientX, y: ev.clientY, at: performance.now() };
+      downRef.current = {
+        x: ev.clientX,
+        y: ev.clientY,
+        at: performance.now(),
+        tool: getViewportState().activeTool,
+      };
       const tool = getViewportState().activeTool;
       // Sensor polygon drawing uses click (pointerup) so Ortho pan still works.
       if (sensorNeedsPolyDraw() && !CREATION_TOOLS.includes(tool)) {
@@ -564,9 +573,10 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (moved > CLICK_TOLERANCE_PX) {
         return; // it was a drag, not a click
       }
-      const tool = getViewportState().activeTool;
-      if (CREATION_TOOLS.includes(tool)) {
-        return; // creation tools act on pointerdown
+      // Use the tool from pointerdown. Placing a camera switches to Live
+      // before pointerup; a live click would otherwise replace that selection.
+      if (CREATION_TOOLS.includes(down.tool)) {
+        return;
       }
       // Incomplete poly sensor: floor clicks add / close vertices.
       if (sensorNeedsPolyDraw()) {
@@ -624,10 +634,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
   const selectedSensorPolyPending = useViewportStore((s) => {
     const e = s.selectedId ? s.entities[s.selectedId] : undefined;
     return (
-      !!e &&
-      e.type === "sensor" &&
-      e.areaMode === "poly" &&
-      e.points.length < 3
+      !!e && e.type === "sensor" && e.areaMode === "poly" && e.points.length < 3
     );
   });
   // Calibrate uses double-click to add points; left-drag must still orbit.
@@ -653,16 +660,14 @@ export function useViewportTools(world: ViewportWorld | null): void {
           (entity.type === "region" ||
             entity.type === "tripwire" ||
             entity.type === "camera")) ||
-        (tool === "scale" &&
-          (entity.type === "region" || entity.type === "tripwire")));
+        (tool === "scale" && entityCanScale(entity)));
 
     // Left-drag orbits/pans for navigation tools. During floor drawing
     // (region / tripwire / measure / sensor poly), disable LEFT so Ortho pan
     // or Persp orbit cannot move the camera before the floor pick — that was
     // shifting ROI/tripwire/measure points off the click (calibrate avoids
     // this via capture + no left-drag on markers). Middle/right still navigate.
-    const drawingFloor =
-      drawingSensorPoly || CREATION_TOOLS.includes(tool);
+    const drawingFloor = drawingSensorPoly || CREATION_TOOLS.includes(tool);
     const orbitLeftDrag =
       !drawingFloor &&
       (calActive ||
@@ -726,15 +731,25 @@ export function useViewportTools(world: ViewportWorld | null): void {
     if (!draft || draft.tool !== "sensor-poly") {
       return;
     }
-    if (
-      !selectedSensorPolyPending ||
-      draft.sensorId !== selectedId
-    ) {
+    if (!selectedSensorPolyPending || draft.sensorId !== selectedId) {
       world.scene.remove(draft.preview);
       disposeGroup(draft.preview);
       draftRef.current = null;
     }
   }, [world, selectedId, selectedSensorPolyPending]);
+
+  // Scale is only meaningful for a region or tripwire. Leave the tool when
+  // the selection cannot be scaled so the button does not stay pressed.
+  useEffect(() => {
+    if (activeTool !== "scale") {
+      return;
+    }
+    const id = getViewportState().selectedId;
+    const entity = id ? getViewportState().entities[id] : undefined;
+    if (!entityCanScale(entity)) {
+      getViewportState().setTool("live");
+    }
+  }, [activeTool, selectedId, structVersion]);
 
   /* ---------------- keyboard ------------------------------------------- */
   useEffect(() => {
@@ -758,7 +773,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
       const t = ev.target as HTMLElement | null;
       if (
         t &&
-        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
       ) {
         return;
       }
@@ -811,6 +828,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
       }
       const tool = toolKeys[key];
       if (tool) {
+        if (
+          tool === "scale" &&
+          !entityCanScale(s.selectedId ? s.entities[s.selectedId] : undefined)
+        ) {
+          return;
+        }
         // Cancel any in-progress draft when switching tools.
         if (draftRef.current) {
           const draft = draftRef.current;
@@ -827,11 +850,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
 }
 
 /** Bake a finished gizmo drag into the entity + geometry model. */
-function bakeTransform(
-  world: ViewportWorld,
-  id: string,
-  tool: ToolId,
-): void {
+function bakeTransform(world: ViewportWorld, id: string, tool: ToolId): void {
   const s = getViewportState();
   const e = s.entities[id];
   const nodes = world.entityNodes.get(id);
@@ -869,10 +888,7 @@ function bakeTransform(
       tool === "scale" && e.type === "region" && e.volumetric
         ? pivot.scale.z
         : 1;
-    if (
-      pointsEqual(newPoints, e.points) &&
-      Math.abs(heightScale - 1) < 0.001
-    ) {
+    if (pointsEqual(newPoints, e.points) && Math.abs(heightScale - 1) < 0.001) {
       return;
     }
     if (e.type === "region") {
@@ -953,7 +969,21 @@ function disposeGroup(root: Group): void {
     const mesh = o as Mesh;
     const geo = (mesh as { geometry?: { dispose?: () => void } }).geometry;
     geo?.dispose?.();
-    const mat = mesh.material as { dispose?: () => void } | undefined;
-    mat?.dispose?.();
+    const mat = mesh.material as
+      | { dispose?: () => void; map?: { dispose?: () => void } }
+      | { dispose?: () => void; map?: { dispose?: () => void } }[]
+      | undefined;
+    const disposeMat = (m: {
+      dispose?: () => void;
+      map?: { dispose?: () => void };
+    }) => {
+      m.map?.dispose?.();
+      m.dispose?.();
+    };
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => disposeMat(m));
+    } else if (mat) {
+      disposeMat(mat);
+    }
   });
 }

@@ -138,10 +138,20 @@
   overflow: hidden;
 }
 
+.ss-viewport-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+
 .ss-viewport-main,
 .ss-viewport-main-3d {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -265,9 +275,15 @@
   color: var(--ss-on-brand, #fff);
 }
 
-.ss-tool-btn:disabled {
+.ss-tool-btn:disabled,
+.ss-tool-btn[aria-disabled="true"] {
   opacity: 0.35;
   cursor: default;
+}
+
+.ss-tool-btn[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--ss-text-muted);
 }
 
 .ss-tool-btn .bi {
@@ -287,6 +303,81 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 40%;
+}
+
+/* Floating icon rail over the 3D view (Blender-style). */
+.ss-viewport-tools.is-vertical {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 30;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: auto;
+  max-width: none;
+  max-height: calc(100% - 24px);
+  overflow: visible;
+  border: 1px solid var(--ss-border, var(--ss-card-border));
+  border-radius: 12px;
+  padding: 6px;
+  gap: 4px;
+  background: color-mix(in srgb, var(--ss-panel-bg, #1e1e21) 92%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+
+.ss-viewport-tools.is-vertical .ss-tools-group {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-btn .bi {
+  font-size: 22px;
+}
+
+.ss-viewport-tools.is-vertical .ss-viewport-bar-sep {
+  width: 22px;
+  height: 1px;
+  align-self: center;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ss-panel-bg, #1e1e21);
+  color: var(--ss-text, #f5f5f7);
+  border: 1px solid var(--ss-border, var(--ss-card-border));
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-btn:hover::after,
+.ss-viewport-tools.is-vertical .ss-tool-btn:focus-visible::after {
+  opacity: 1;
 }
 
 .ss-vlabel--entity {

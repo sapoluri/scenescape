@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { CREATION_TOOLS, TOOLS, TRANSFORM_TOOLS, toolDef } from "./tools";
+import {
+  CREATION_TOOLS,
+  TOOLS,
+  TRANSFORM_TOOLS,
+  entityCanScale,
+  toolDef,
+} from "./tools";
 import type { ToolId } from "./types";
 
 describe("TOOLS", () => {
@@ -37,5 +43,16 @@ describe("TOOLS", () => {
     for (const id of [...TRANSFORM_TOOLS, ...CREATION_TOOLS]) {
       expect(ids.has(id)).toBe(true);
     }
+  });
+
+  it("allows scale only for regions and tripwires", () => {
+    expect(entityCanScale({ type: "region" })).toBe(true);
+    expect(entityCanScale({ type: "tripwire" })).toBe(true);
+    expect(entityCanScale({ type: "camera" })).toBe(false);
+    expect(entityCanScale({ type: "sensor" })).toBe(false);
+    expect(entityCanScale({ type: "mark" })).toBe(false);
+    expect(entityCanScale({ type: "child" })).toBe(false);
+    expect(entityCanScale(null)).toBe(false);
+    expect(entityCanScale(undefined)).toBe(false);
   });
 });

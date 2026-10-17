@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
@@ -151,10 +157,35 @@ function NameRow({
   onRenamed?: (name: string) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
+  const editFocus = useViewportStore((s) => s.editFocus);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editFocus < 1) {
+      return;
+    }
+    if (getViewportState().selectedId !== entity.id) {
+      return;
+    }
+    // The placement click focuses the canvas after this effect. Focus the
+    // name once that click sequence has finished.
+    const timer = window.setTimeout(() => {
+      if (getViewportState().selectedId !== entity.id) {
+        return;
+      }
+      const input = inputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      input.select();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [editFocus, entity.id]);
   return (
     <label className="ss-prop-field ss-prop-name">
       <span className="ss-prop-label">Name</span>
       <input
+        ref={inputRef}
         className="ss-prop-input"
         value={text ?? entity.name}
         onChange={(ev) => setText(ev.target.value)}
@@ -352,7 +383,7 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
       <ReadField label="Length" value={`${fmt(polylineLength(e.points))} m`} />
       <ReadField label="Points" value={String(e.points.length)} />
       <ReadField
-        label="Direction"
+        label="Point order"
         value={`${fmt(e.a[0])}, ${fmt(e.a[1])} → ${fmt(e.b[0])}, ${fmt(e.b[1])}`}
       />
       <SaveBar
@@ -362,8 +393,8 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
         onSave={() => void onSave()}
       />
       <p className="ss-prop-hint">
-        Crossings are counted A → B. Save writes this tripwire; use toolbar Save
-        all for bulk edits.
+        The arrow marks the +1 crossing side. Save writes this tripwire; use
+        toolbar Save all for bulk edits.
       </p>
     </>
   );

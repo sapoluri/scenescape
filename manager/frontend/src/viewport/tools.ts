@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import type { ToolId } from "./types";
+import type { ToolId, ViewportEntityType } from "./types";
 
 /** Phase 1.2 tool system: definitions for the viewport tool header. */
 export interface ToolDef {
@@ -90,6 +90,13 @@ export const CREATION_TOOLS: ToolId[] = [
   "sensor",
   "measure",
 ];
+
+/** Regions and tripwires are the only entities the scale gizmo can edit. */
+export function entityCanScale(
+  entity: { type: ViewportEntityType } | null | undefined,
+): boolean {
+  return entity?.type === "region" || entity?.type === "tripwire";
+}
 
 export function toolDef(id: ToolId): ToolDef {
   const def = TOOLS.find((t) => t.id === id);

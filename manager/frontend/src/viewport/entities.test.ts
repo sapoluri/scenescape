@@ -1,17 +1,27 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { Euler, Object3D, Quaternion, Vector3 } from "three";
+import {
+  Euler,
+  Mesh,
+  Object3D,
+  PerspectiveCamera,
+  Quaternion,
+  Vector3,
+} from "three";
 import { describe, expect, it } from "vitest";
 import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
   buildChild,
+  buildTripwire,
   childViewportId,
   lookAtOriginEuler,
   restPoseToRigEuler,
+  TRIPWIRE_CURTAIN_HEIGHT,
+  tripwirePlusNormal,
 } from "./entities";
-import type { CameraEntity, ChildSceneEntity } from "./types";
+import type { CameraEntity, ChildSceneEntity, TripwireEntity } from "./types";
 
 const D2R = Math.PI / 180;
 
@@ -140,6 +150,30 @@ describe("buildCamera frustum alignment", () => {
       nodes.dispose();
     }
   });
+
+  it("draws a unit frustum and a half-size camera body", () => {
+    const nodes = buildCamera(makeCamEntity());
+    try {
+      nodes.group.updateMatrixWorld(true);
+      const persp = nodes.group.getObjectByProperty(
+        "type",
+        "PerspectiveCamera",
+      ) as PerspectiveCamera;
+      // Legacy CustomCameraHelper: visual near 0.2 m, far 1 m.
+      expect(persp.near).toBeCloseTo(0.2);
+      expect(persp.far).toBeCloseTo(1);
+      const asset = nodes.gizmoTarget.getObjectByName("camera-asset");
+      expect(asset).toBeTruthy();
+      expect(asset!.scale.x).toBeCloseTo(0.5);
+      expect(asset!.scale.y).toBeCloseTo(0.5);
+      expect(asset!.scale.z).toBeCloseTo(0.5);
+      expect(
+        asset!.getObjectByProperty("type", "CameraHelper"),
+      ).toBeUndefined();
+    } finally {
+      nodes.dispose();
+    }
+  });
 });
 
 describe("childViewportId", () => {
@@ -189,6 +223,94 @@ describe("buildChild footprint", () => {
       expect(nodes.group.position.y).toBeCloseTo(3, 9);
       expect(nodes.group.position.z).toBeCloseTo(0.5, 9);
       expect(nodes.group.rotation.z).toBeCloseTo(Math.PI / 4, 9);
+    } finally {
+      nodes.dispose();
+    }
+  });
+});
+
+describe("tripwirePlusNormal", () => {
+  it("is the right-hand normal of the directed segment", () => {
+    const horizontal = tripwirePlusNormal([0, 0], [10, 0]);
+    expect(horizontal).not.toBeNull();
+    expect(horizontal![0]).toBeCloseTo(0, 6);
+    expect(horizontal![1]).toBeCloseTo(-1, 6);
+    const vertical = tripwirePlusNormal([5, 0], [5, 10]);
+    expect(vertical![0]).toBeCloseTo(1, 6);
+    expect(vertical![1]).toBeCloseTo(0, 6);
+  });
+
+  it("returns null for a zero-length segment", () => {
+    expect(tripwirePlusNormal([1, 2], [1, 2])).toBeNull();
+  });
+});
+
+describe("buildTripwire light curtain", () => {
+  function wire(points: [number, number][]): TripwireEntity {
+    return {
+      id: "tw",
+      type: "tripwire",
+      name: "Checkout",
+      visible: true,
+      points,
+      a: points[0],
+      b: points[points.length - 1],
+      color: "#ff9f0a",
+    };
+  }
+
+  function plusArrows(root: Object3D): Object3D[] {
+    const found: Object3D[] = [];
+    root.traverse((o) => {
+      if (o.name === "tripwire-plus") {
+        found.push(o);
+      }
+    });
+    return found;
+  }
+
+  it("raises a curtain and aims one +1 arrow to the right of the wire", () => {
+    const nodes = buildTripwire(
+      wire([
+        [0, 0],
+        [10, 0],
+      ]),
+    );
+    try {
+      const curtain = nodes.group.getObjectByName("tripwire-curtain") as Mesh;
+      expect(curtain).toBeTruthy();
+      expect(nodes.group.getObjectByName("tripwire-beams")).toBeTruthy();
+      curtain.geometry.computeBoundingBox();
+      expect(curtain.geometry.boundingBox!.max.z).toBeCloseTo(
+        TRIPWIRE_CURTAIN_HEIGHT,
+        5,
+      );
+      const arrows = plusArrows(nodes.group);
+      expect(arrows).toHaveLength(1);
+      const axis = new Vector3(0, 1, 0).applyQuaternion(arrows[0].quaternion);
+      expect(axis.x).toBeCloseTo(0, 5);
+      expect(axis.y).toBeCloseTo(-1, 5);
+      expect(axis.z).toBeCloseTo(0, 5);
+      expect(arrows[0].position.y).toBeLessThan(0);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("aims the +1 arrow to +X on an upward wire", () => {
+    const nodes = buildTripwire(
+      wire([
+        [5, 0],
+        [5, 10],
+      ]),
+    );
+    try {
+      const arrow = nodes.group.getObjectByName("tripwire-plus");
+      expect(arrow).toBeTruthy();
+      const axis = new Vector3(0, 1, 0).applyQuaternion(arrow!.quaternion);
+      expect(axis.x).toBeCloseTo(1, 5);
+      expect(axis.y).toBeCloseTo(0, 5);
+      expect(arrow!.position.x).toBeGreaterThan(0);
     } finally {
       nodes.dispose();
     }

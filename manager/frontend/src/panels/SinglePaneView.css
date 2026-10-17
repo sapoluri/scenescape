@@ -205,7 +205,15 @@
   overflow: hidden;
 }
 
-/* Outliner Preview: tabs on top, Live glance on the bottom half. */
+/* Outliner (or Telemetry) on top. Properties rises from below when something
+   is selected. Preview, when open, sits under that stack. */
+.ss-sp-dock-editor {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .ss-sp-dock-tabs-pane {
   flex: 1 1 0;
   min-height: 0;
@@ -213,8 +221,74 @@
   flex-direction: column;
 }
 
-.ss-sp-dock-main:not(.is-preview-split) .ss-sp-dock-tabs-pane {
+.ss-sp-dock-main:not(.is-preview-split):not(.is-props-split)
+  .ss-sp-dock-tabs-pane {
   flex: 1 1 auto;
+}
+
+.ss-sp-dock-split {
+  flex: none;
+  height: 6px;
+  margin: -1px 0;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.ss-sp-dock-split::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 1px;
+  background: var(--ss-border, rgba(120, 120, 128, 0.25));
+}
+
+.ss-sp-dock-split:hover::after,
+.ss-sp-dock-split:focus-visible::after {
+  height: 2px;
+  top: 2px;
+  background: var(--ss-accent, #0a84ff);
+}
+
+.ss-sp-dock-split:focus-visible {
+  outline: none;
+}
+
+.ss-sp-dock-props {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ss-panel-bg, #1e1e21);
+  animation: ss-props-rise 180ms ease;
+}
+
+.ss-sp-dock-props-head {
+  flex: none;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ss-text, #f5f5f7);
+}
+
+.ss-sp-dock-props > .ss-props {
+  flex: 1;
+  min-height: 0;
+}
+
+@keyframes ss-props-rise {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: none;
+  }
 }
 
 .ss-sp-dock-glance {
@@ -225,7 +299,7 @@
   border-top: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
 }
 
-.ss-sp-dock-main.is-preview-maximized .ss-sp-dock-tabs-pane {
+.ss-sp-dock-main.is-preview-maximized .ss-sp-dock-editor {
   display: none;
 }
 
@@ -282,5 +356,9 @@
   .ss-sp-dock-rail,
   .ss-sp-dock-main {
     transition: none;
+  }
+
+  .ss-sp-dock-props {
+    animation: none;
   }
 }
