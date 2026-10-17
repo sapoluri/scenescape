@@ -308,14 +308,14 @@
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: none;
-  color: var(--ss-text-muted, #8e8e93);
+  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.16));
+  color: var(--ss-text, #f5f5f7);
   cursor: pointer;
 }
 
 .ss-sp-dock-props-close:hover {
   color: var(--ss-text, #f5f5f7);
-  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.18));
+  background: var(--ss-fill-tertiary, rgba(120, 120, 128, 0.28));
 }
 
 .ss-sp-dock-props-close:focus-visible {
@@ -324,7 +324,7 @@
 }
 
 .ss-sp-dock-props-close .bi {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1;
 }
 

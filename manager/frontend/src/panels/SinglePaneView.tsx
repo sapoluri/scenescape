@@ -492,7 +492,7 @@ export function SinglePaneView({
                       aria-label="Close properties"
                       onClick={() => getViewportState().select(null)}
                     >
-                      <i className="bi bi-x-lg" aria-hidden="true" />
+                      <i className="bi bi-x" aria-hidden="true" />
                     </button>
                   </div>
                   <Properties
