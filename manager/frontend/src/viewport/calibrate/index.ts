@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getViewportState } from "../store";
+import { useVisualizeStore } from "../visualize/visualizeStore";
 import { getCalibrateState, useCalibrateStore } from "./calibrateStore";
 
 /** Enter Phase 2.3 in-viewport calibrate for a scene camera. */
@@ -19,6 +20,8 @@ export function enterCameraCalibrate(args: {
   ) {
     return;
   }
+  // Visualize and calibrate share the split chrome — never both.
+  useVisualizeStore.getState().exit();
   // Live tool: double-click adds points; empty left-drag still orbits.
   getViewportState().setTool("live");
   useCalibrateStore.getState().enter(args);

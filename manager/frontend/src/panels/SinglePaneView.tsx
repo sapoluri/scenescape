@@ -23,6 +23,7 @@ import type {
 } from "../scene/types";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
+import { useVisualizeStore } from "../viewport/visualize";
 import { SceneViewport } from "../viewport/SceneViewport";
 import { ViewportMenuBar } from "../viewport/ViewportMenuBar";
 import {
@@ -178,11 +179,14 @@ export function SinglePaneView({
   const [adminListRefresh, setAdminListRefresh] = useState(0);
   const [replayMode, setReplayMode] = useState(false);
   const calibrating = useCalibrateStore((s) => s.active);
+  const visualizing = useVisualizeStore((s) => s.active);
   const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
   const selectedId = useViewportStore((s) => s.selectedId);
   const editFocus = useViewportStore((s) => s.editFocus);
   // Properties and Preview share the dock bottom — never both at once.
-  const propertiesOpen = selectedId != null && !previewOpen;
+  // Live visualize keeps Preview open and suppresses Properties.
+  const propertiesOpen =
+    selectedId != null && !previewOpen && !visualizing;
 
   useOpenSceneHotkey(() => {
     setAdminListKind(null);
@@ -205,9 +209,10 @@ export function SinglePaneView({
     setPreviewMaximized(false);
   }, [editFocus, setCollapsed]);
 
-  // Selecting an entity closes Preview so Properties can open.
+  // Selecting an entity closes Preview so Properties can open — unless
+  // Live visualize is active (thumbnail click selects + opens the split).
   useEffect(() => {
-    if (selectedId == null) {
+    if (selectedId == null || useVisualizeStore.getState().active) {
       return;
     }
     setPreviewOpen(false);
@@ -328,7 +333,7 @@ export function SinglePaneView({
         />
         <ViewportOptionsBar
           emptyScene={false}
-          calibrating={calibrating && !replayMode}
+          calibrating={(calibrating || visualizing) && !replayMode}
           mode={replayMode ? "replay" : "live"}
           onModeChange={(m) => setReplayMode(m === "replay")}
           sceneChrome={sceneChrome}
@@ -353,6 +358,7 @@ export function SinglePaneView({
               children={children}
               authToken={authToken}
               showTopChrome={false}
+              isSuperuser={isSuperuser}
               onOpenLibrary={() => setLibraryOpen(true)}
               onOpenScene={openSceneDialog}
               onOpenCameras={openCameras}

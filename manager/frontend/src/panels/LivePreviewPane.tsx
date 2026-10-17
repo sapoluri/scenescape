@@ -10,6 +10,7 @@ import { refreshCameraStrip } from "../mqtt";
 import type { SceneCameraBootstrap } from "../scene/types";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { getViewportState, useViewportStore } from "../viewport/store";
+import { enterCameraVisualize } from "../viewport/visualize";
 import "./LivePreviewPane.css";
 
 type Props = {
@@ -214,8 +215,13 @@ export function LivePreviewPane({
     };
   }, [cameras]);
 
+  /** Thumbnail click opens the annotated Live visualize split. */
   const handleSelect = (cam: SceneCameraBootstrap) => {
-    getViewportState().select(cam.id);
+    enterCameraVisualize({
+      cameraId: cam.id,
+      sensorId: cam.sensorId,
+      cameraName: cam.name,
+    });
   };
 
   const onConfirmDelete = async () => {

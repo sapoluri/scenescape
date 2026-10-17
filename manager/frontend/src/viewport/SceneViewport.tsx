@@ -29,7 +29,11 @@ import {
   ViewportOptionsBar,
   type SceneChromeActions,
 } from "./ViewportOptionsBar";
+import { VisualizeBar } from "./visualize/VisualizeBar";
+import { VisualizeFeedPane } from "./visualize/VisualizeFeedPane";
+import { useVisualizeStore } from "./visualize/visualizeStore";
 import "./viewport.css";
+import "./calibrate/CalibrateWizard.css";
 import {
   createViewportWorld,
   type ViewportTheme,
@@ -76,6 +80,8 @@ interface SceneViewportProps {
    * chrome above the Outliner dock). Default true for home / standalone.
    */
   showTopChrome?: boolean;
+  /** Show Calibrate on the Live visualize bar. */
+  isSuperuser?: boolean;
 }
 
 function readTheme(): ViewportTheme {
@@ -268,7 +274,7 @@ function ToolHeader({
         aria-label={saving ? "Saving" : "Save all"}
         data-tip={
           saving
-            ? "Saving…"
+            ? "Saving?"
             : dirty
               ? `Save all (${entityDirtyCount}${geometryDirty ? " + geometry" : ""})`
               : "Save all"
@@ -302,6 +308,7 @@ export function SceneViewport({
   mqttConnected = null,
   sceneChrome = null,
   showTopChrome = true,
+  isSuperuser = false,
 }: SceneViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -377,6 +384,8 @@ export function SceneViewport({
   useLiveCameraProjection(world, emptyScene ? [] : cameras);
 
   const calibrating = useCalibrateStore((s) => s.active) && !emptyScene;
+  const visualizing = useVisualizeStore((s) => s.active) && !emptyScene;
+  const splitActive = calibrating || visualizing;
 
   // View state -> world (presets, projection, grid).
   useEffect(() => {
@@ -416,7 +425,14 @@ export function SceneViewport({
 
   return (
     <div
-      className={`ss-viewport${calibrating ? " is-calibrating" : ""}${emptyScene ? " is-empty" : ""}`}
+      className={[
+        "ss-viewport",
+        calibrating ? "is-calibrating" : "",
+        splitActive ? "is-split" : "",
+        emptyScene ? "is-empty" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-scene-id={sceneId || ""}
     >
       {showTopChrome ? (
@@ -430,7 +446,7 @@ export function SceneViewport({
           />
           <ViewportOptionsBar
             emptyScene={emptyScene}
-            calibrating={calibrating}
+            calibrating={splitActive}
             mode={mode}
             onModeChange={onModeChange}
             sceneChrome={emptyScene ? null : sceneChrome}
@@ -444,8 +460,11 @@ export function SceneViewport({
           cameras={cameras}
         />
       ) : null}
+      {!emptyScene && visualizing && !calibrating ? (
+        <VisualizeBar cameras={cameras} isSuperuser={isSuperuser} />
+      ) : null}
       <div className="ss-viewport-stage">
-        {!emptyScene && !calibrating ? (
+        {!emptyScene && !splitActive ? (
           <ToolHeader
             sceneId={sceneId || ""}
             authToken={authToken}
@@ -453,10 +472,10 @@ export function SceneViewport({
             sensors={sensors}
           />
         ) : null}
-        <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
+        <div className={splitActive ? "ss-viewport-split" : "ss-viewport-main"}>
           <div
             className={
-              calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"
+              splitActive ? "ss-viewport-split-3d" : "ss-viewport-main-3d"
             }
           >
             <div className="ss-viewport-host" ref={hostRef}>
@@ -479,6 +498,7 @@ export function SceneViewport({
             <ViewportPoweredBy />
           </div>
           {calibrating ? <CalibrateFeedPane /> : null}
+          {visualizing && !calibrating ? <VisualizeFeedPane /> : null}
         </div>
       </div>
     </div>

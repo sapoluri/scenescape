@@ -106,7 +106,9 @@
   margin-left: auto;
 }
 
-.ss-viewport.is-calibrating .ss-viewport-split {
+/* Calibrate and Live visualize share the same 3D | feed grid. */
+.ss-viewport.is-calibrating .ss-viewport-split,
+.ss-viewport.is-split .ss-viewport-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
   flex: 1;
@@ -114,7 +116,8 @@
   position: relative;
 }
 
-.ss-viewport.is-calibrating .ss-viewport-split-3d {
+.ss-viewport.is-calibrating .ss-viewport-split-3d,
+.ss-viewport.is-split .ss-viewport-split-3d {
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -123,13 +126,21 @@
   background: var(--ss-viewport-bg, var(--ss-surface));
 }
 
-.ss-viewport.is-calibrating .ss-viewport-host {
+.ss-viewport.is-calibrating .ss-viewport-host,
+.ss-viewport.is-split .ss-viewport-host {
   flex: 1;
   min-height: 0;
 }
 
-.ss-viewport.is-calibrating .ss-camera-panel {
+.ss-viewport.is-calibrating .ss-camera-panel,
+.ss-viewport.is-split .ss-camera-panel {
   display: none;
+}
+
+.ss-viz-bar .ss-cal-wizard-badge {
+  background: color-mix(in srgb, #30d158 22%, transparent);
+  border-color: color-mix(in srgb, #30d158 55%, transparent);
+  color: #30d158;
 }
 
 .ss-cal-floor-markers {
