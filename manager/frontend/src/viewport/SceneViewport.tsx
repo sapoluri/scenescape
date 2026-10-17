@@ -21,19 +21,20 @@ import { attachMarkRenderer } from "./renderMarks";
 import { useLiveCameraProjection } from "./useLiveCameraProjection";
 import { useSceneMap } from "./useSceneMap";
 import { getViewportState, useViewportStore } from "./store";
-import { TOOLS, toolDef } from "./tools";
+import { TOOLS, entityCanScale, toolDef } from "./tools";
 import type { ToolId } from "./types";
 import { useViewportTools } from "./useViewportTools";
-import {
-  ViewportMenuBar,
-  ViewportPoweredBy,
-} from "./ViewportMenuBar";
+import { ViewportMenuBar, ViewportPoweredBy } from "./ViewportMenuBar";
 import {
   ViewportOptionsBar,
   type SceneChromeActions,
 } from "./ViewportOptionsBar";
 import "./viewport.css";
-import { createViewportWorld, type ViewportTheme, type ViewportWorld } from "./world";
+import {
+  createViewportWorld,
+  type ViewportTheme,
+  type ViewportWorld,
+} from "./world";
 
 /**
  * Single-pane 3D viewport (Phase 1.1 foundation, Phase 1.2 tools).
@@ -113,6 +114,10 @@ function ToolHeader({
   const undo = useViewportStore((s) => s.undo);
   const redo = useViewportStore((s) => s.redo);
   const entities = useViewportStore((s) => s.entities);
+  const selected = useViewportStore((s) =>
+    s.selectedId ? s.entities[s.selectedId] : undefined,
+  );
+  const scaleEnabled = entityCanScale(selected);
   const baselines = usePersistStore((s) => s.baselines);
   const [roiDirty, setRoiDirty] = useState(false);
   const [tripDirty, setTripDirty] = useState(false);
@@ -196,26 +201,42 @@ function ToolHeader({
   }, [dirty, saving, authToken, sceneId, cameras, sensors, geometryDirty]);
 
   const pickTool = (id: ToolId) => {
+    if (id === "scale" && !scaleEnabled) {
+      return;
+    }
     setTool(id);
   };
 
   return (
-    <div className="ss-viewport-tools" role="toolbar" aria-label="Edit tools">
+    <div
+      className="ss-viewport-tools is-vertical"
+      role="toolbar"
+      aria-label="Edit tools"
+      aria-orientation="vertical"
+    >
       <span className="ss-viewport-bar-label">Tools</span>
       <div className="ss-tools-group" role="group" aria-label="Tools">
-        {TOOLS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`ss-tool-btn${activeTool === t.id ? " on" : ""}`}
-            onClick={() => pickTool(t.id)}
-            title={`${t.label} (${t.shortcut}) ? ${t.hint}`}
-            aria-pressed={activeTool === t.id}
-          >
-            <i className={`bi ${t.icon}`} aria-hidden="true" />
-            <span className="ss-tool-label">{t.label}</span>
-          </button>
-        ))}
+        {TOOLS.map((t) => {
+          const disabled = t.id === "scale" && !scaleEnabled;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`ss-tool-btn${activeTool === t.id ? " on" : ""}`}
+              onClick={() => pickTool(t.id)}
+              disabled={disabled}
+              title={
+                disabled
+                  ? "Scale applies to regions and tripwires"
+                  : `${t.label} (${t.shortcut}) — ${t.hint}`
+              }
+              aria-pressed={activeTool === t.id}
+            >
+              <i className={`bi ${t.icon}`} aria-hidden="true" />
+              <span className="ss-tool-label">{t.label}</span>
+            </button>
+          );
+        })}
       </div>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <div className="ss-tools-group" role="group" aria-label="History">
@@ -426,43 +447,49 @@ export function SceneViewport({
           />
         </>
       ) : null}
-      {!emptyScene &&
-        (calibrating ? (
-          <CalibrateWizard
-            sceneId={sceneId || ""}
-            authToken={authToken}
-            cameras={cameras}
-          />
-        ) : (
+      {!emptyScene && calibrating ? (
+        <CalibrateWizard
+          sceneId={sceneId || ""}
+          authToken={authToken}
+          cameras={cameras}
+        />
+      ) : null}
+      <div className="ss-viewport-stage">
+        {!emptyScene && !calibrating ? (
           <ToolHeader
             sceneId={sceneId || ""}
             authToken={authToken}
             cameras={cameras}
             sensors={sensors}
           />
-        ))}
-      <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
-        <div className={calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"}>
-          <div className="ss-viewport-host" ref={hostRef}>
-            {webglFailed && (
-              <p className="ss-viewport-error">
-                WebGL is not available in this browser.
-              </p>
-            )}
+        ) : null}
+        <div className={calibrating ? "ss-viewport-split" : "ss-viewport-main"}>
+          <div
+            className={
+              calibrating ? "ss-viewport-split-3d" : "ss-viewport-main-3d"
+            }
+          >
+            <div className="ss-viewport-host" ref={hostRef}>
+              {webglFailed && (
+                <p className="ss-viewport-error">
+                  WebGL is not available in this browser.
+                </p>
+              )}
+            </div>
+            <div
+              className="ss-viewport-labels"
+              ref={labelLayerRef}
+              aria-hidden="true"
+            />
+            <div
+              className="ss-viewport-stats"
+              ref={statsHostRef}
+              aria-hidden="true"
+            />
+            <ViewportPoweredBy />
           </div>
-          <div
-            className="ss-viewport-labels"
-            ref={labelLayerRef}
-            aria-hidden="true"
-          />
-          <div
-            className="ss-viewport-stats"
-            ref={statsHostRef}
-            aria-hidden="true"
-          />
-          <ViewportPoweredBy />
+          {calibrating ? <CalibrateFeedPane /> : null}
         </div>
-        {calibrating ? <CalibrateFeedPane /> : null}
       </div>
     </div>
   );

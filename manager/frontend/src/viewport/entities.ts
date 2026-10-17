@@ -328,9 +328,9 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   // so it must live under the identity outer group — parenting it under the
   // transformed rig would apply the rig transform twice and the frustum
   // would not align with the camera body.
-  // Match legacy scenecamera.js: near 0.1, far 10 — a 30 m far plane
-  // clutters the viewport with giant frustums.
-  const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.1, 10);
+  // Visual size matches legacy CustomCameraHelper (near 0.2, far 1). This
+  // camera is never rendered; the drawn frustum is one meter along -Z.
+  const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.2, 1);
   const helper = new CameraHelper(persp);
   rig.add(persp);
 
@@ -348,10 +348,14 @@ export function buildCamera(e: CameraEntity): EntityNodes {
     new MeshStandardMaterial({ color: 0x0a84ff, roughness: 0.3 }),
   );
   lens.position.z = -0.45; // toward the -Z view direction
-  rig.add(body, lens);
-
+  // Body, lens, and pick proxy at half the original mesh size. The helper
+  // stays on the unscaled rig so the unit frustum is not shrunk with them.
+  const asset = new Group();
+  asset.name = "camera-asset";
+  asset.scale.setScalar(0.5);
   const proxy = new Mesh(new BoxGeometry(1.6, 1.6, 1.6), proxyMaterial());
-  rig.add(proxy);
+  asset.add(body, lens, proxy);
+  rig.add(asset);
   group.add(rig);
   // Added after the rig: CameraHelper reads the camera's matrixWorld during
   // the scene-graph update, so it must be traversed after the rig subtree
@@ -362,7 +366,7 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   const labelPos = new Vector3(
     e.position[0],
     e.position[1],
-    e.position[2] + 1.2,
+    e.position[2] + 0.7,
   );
 
   return {
@@ -393,7 +397,7 @@ export function buildCamera(e: CameraEntity): EntityNodes {
         persp.updateProjectionMatrix();
         helper.update();
       }
-      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 1.2);
+      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 0.7);
     },
     dispose: () => {
       helper.dispose();

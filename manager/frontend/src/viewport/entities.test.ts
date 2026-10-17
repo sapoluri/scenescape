@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { Euler, Object3D, Quaternion, Vector3 } from "three";
+import { Euler, Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
@@ -136,6 +136,30 @@ describe("buildCamera frustum alignment", () => {
       const camPos = new Vector3().setFromMatrixPosition(persp.matrixWorld);
       const frustumDir = camPoint.sub(camPos).normalize();
       expect(frustumDir.dot(rigDir)).toBeGreaterThan(1 - 1e-9);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("draws a unit frustum and a half-size camera body", () => {
+    const nodes = buildCamera(makeCamEntity());
+    try {
+      nodes.group.updateMatrixWorld(true);
+      const persp = nodes.group.getObjectByProperty(
+        "type",
+        "PerspectiveCamera",
+      ) as PerspectiveCamera;
+      // Legacy CustomCameraHelper: visual near 0.2 m, far 1 m.
+      expect(persp.near).toBeCloseTo(0.2);
+      expect(persp.far).toBeCloseTo(1);
+      const asset = nodes.gizmoTarget.getObjectByName("camera-asset");
+      expect(asset).toBeTruthy();
+      expect(asset!.scale.x).toBeCloseTo(0.5);
+      expect(asset!.scale.y).toBeCloseTo(0.5);
+      expect(asset!.scale.z).toBeCloseTo(0.5);
+      expect(
+        asset!.getObjectByProperty("type", "CameraHelper"),
+      ).toBeUndefined();
     } finally {
       nodes.dispose();
     }

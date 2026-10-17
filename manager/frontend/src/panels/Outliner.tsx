@@ -1,10 +1,14 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
 import { useViewportStore } from "../viewport/store";
-import type { ChildSceneEntity, ViewportEntity, ViewportEntityType } from "../viewport/types";
+import type {
+  ChildSceneEntity,
+  ViewportEntity,
+  ViewportEntityType,
+} from "../viewport/types";
 import "./Outliner.css";
 
 const GROUPS: {
@@ -15,8 +19,18 @@ const GROUPS: {
 }[] = [
   { type: "region", label: "Regions" },
   { type: "tripwire", label: "Tripwires" },
-  { type: "camera", label: "Cameras", addHref: "?ss=cam-create", addLabel: "Add camera" },
-  { type: "sensor", label: "Sensors", addHref: "?ss=sensor-create", addLabel: "Add sensor" },
+  {
+    type: "camera",
+    label: "Cameras",
+    addHref: "?ss=cam-create",
+    addLabel: "Add camera",
+  },
+  {
+    type: "sensor",
+    label: "Sensors",
+    addHref: "?ss=sensor-create",
+    addLabel: "Add sensor",
+  },
   { type: "mark", label: "Tracked objects" },
   {
     type: "child",
@@ -47,7 +61,9 @@ function readCollapsed(): Set<ViewportEntityType> {
     if (!Array.isArray(list)) {
       return new Set();
     }
-    return new Set(list.filter((t): t is ViewportEntityType => typeof t === "string"));
+    return new Set(
+      list.filter((t): t is ViewportEntityType => typeof t === "string"),
+    );
   } catch {
     return new Set();
   }
@@ -68,7 +84,10 @@ function ChildStatusBadge({ entity }: { entity: ChildSceneEntity }) {
   );
   if (entity.childType !== "remote" || !remoteId) {
     return (
-      <span className="ss-outliner-status ss-outliner-status--local" title="Local child">
+      <span
+        className="ss-outliner-status ss-outliner-status--local"
+        title="Local child"
+      >
         local
       </span>
     );
@@ -91,14 +110,28 @@ function ChildStatusBadge({ entity }: { entity: ChildSceneEntity }) {
   );
 }
 
-function OutlinerRow({ entity }: { entity: ViewportEntity }) {
+function OutlinerRow({
+  entity,
+  revealed,
+}: {
+  entity: ViewportEntity;
+  revealed: boolean;
+}) {
   const selectedId = useViewportStore((s) => s.selectedId);
   const select = useViewportStore((s) => s.select);
   const updateEntity = useViewportStore((s) => s.updateEntity);
   const selected = selectedId === entity.id;
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selected && revealed) {
+      rowRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [selected, revealed]);
 
   return (
     <div
+      ref={rowRef}
       role="option"
       aria-selected={selected}
       tabIndex={0}
@@ -114,7 +147,9 @@ function OutlinerRow({ entity }: { entity: ViewportEntity }) {
       <button
         type="button"
         className="ss-outliner-eye"
-        aria-label={entity.visible ? `Hide ${entity.name}` : `Show ${entity.name}`}
+        aria-label={
+          entity.visible ? `Hide ${entity.name}` : `Show ${entity.name}`
+        }
         aria-pressed={entity.visible}
         onClick={(ev) => {
           ev.stopPropagation();
@@ -180,7 +215,27 @@ export function Outliner({
   onPreviewOpenChange,
 }: OutlinerProps) {
   const entities = useViewportStore((s) => s.entities);
-  const [collapsed, setCollapsed] = useState<Set<ViewportEntityType>>(readCollapsed);
+  const selectedType = useViewportStore((s) => {
+    const id = s.selectedId;
+    return id ? s.entities[id]?.type : undefined;
+  });
+  const [collapsed, setCollapsed] =
+    useState<Set<ViewportEntityType>>(readCollapsed);
+
+  useEffect(() => {
+    if (!selectedType) {
+      return;
+    }
+    setCollapsed((prev) => {
+      if (!prev.has(selectedType)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(selectedType);
+      writeCollapsed(next);
+      return next;
+    });
+  }, [selectedType]);
 
   const toggleGroup = useCallback((type: ViewportEntityType) => {
     setCollapsed((prev) => {
@@ -268,7 +323,7 @@ export function Outliner({
               aria-label={label}
             >
               {items.map((e) => (
-                <OutlinerRow key={e.id} entity={e} />
+                <OutlinerRow key={e.id} entity={e} revealed={!isCollapsed} />
               ))}
             </div>
           </div>

@@ -42,6 +42,7 @@ describe("useViewportStore", () => {
       showTrails: true,
       showFrustums: true,
       activeTool: "live",
+      editFocus: 0,
     });
   });
 
@@ -95,7 +96,11 @@ describe("useViewportStore", () => {
       target: [0, 0, 0],
       color: "#0a84ff",
     });
-    s.upsertEntities([cam("cam-a", true), cam("cam-b", true), cam("cam-c", false)]);
+    s.upsertEntities([
+      cam("cam-a", true),
+      cam("cam-b", true),
+      cam("cam-c", false),
+    ]);
     s.setProjectCameraEnabled("cam-a", true);
     expect(useViewportStore.getState().projectCameraIds).toEqual(["cam-a"]);
     s.setProjectCameraEnabled("cam-b", true);
@@ -117,6 +122,24 @@ describe("useViewportStore", () => {
     expect(s.activeTool).toBe("live");
     s.setTool("move");
     expect(useViewportStore.getState().activeTool).toBe("move");
+  });
+
+  it("beginEditing selects the new item and returns to Live", () => {
+    const s = useViewportStore.getState();
+    s.setTool("camera");
+    s.beginEditing("draft-1");
+    expect(useViewportStore.getState()).toMatchObject({
+      selectedId: "draft-1",
+      activeTool: "live",
+      editFocus: 1,
+    });
+    s.setTool("region");
+    s.beginEditing("draft-2");
+    expect(useViewportStore.getState()).toMatchObject({
+      selectedId: "draft-2",
+      activeTool: "live",
+      editFocus: 2,
+    });
   });
 
   it("pairs Ortho with the top preset and Persp with persp", () => {

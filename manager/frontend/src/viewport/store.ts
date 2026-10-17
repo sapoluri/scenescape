@@ -90,6 +90,13 @@ interface ViewportStore extends ViewportUiState {
   clearEntities: () => void;
   select: (id: string | null) => void;
   setTool: (tool: ToolId) => void;
+  /**
+   * Bumped when a finished camera, region, or tripwire should open in the
+   * outliner with the properties split ready to edit.
+   */
+  editFocus: number;
+  /** Select `id`, return to the Live tool, and request the properties split. */
+  beginEditing: (id: string) => void;
   setViewPreset: (preset: ViewPreset) => void;
   setOrtho: (ortho: boolean) => void;
   /**
@@ -102,7 +109,9 @@ interface ViewportStore extends ViewportUiState {
   /** Toggle every posed camera's map projection (legacy "project all frames"). */
   setProjectAllCameras: (on: boolean) => void;
   setProjectOpacity: (opacity: number) => void;
-  toggleOverlay: (key: "showGrid" | "showLabels" | "showTrails" | "showFrustums") => void;
+  toggleOverlay: (
+    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums",
+  ) => void;
   /**
    * Snapshot the current structural state onto the undo stack. Call BEFORE
    * a tool mutation (creation finish, gizmo drag start, delete).
@@ -149,6 +158,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   entities: {},
   structVersion: 0,
   poseVersion: 0,
+  editFocus: 0,
   past: [],
   future: [],
   upsertEntities: (entities, opts) =>
@@ -230,6 +240,12 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   },
   select: (id) => set({ selectedId: id }),
   setTool: (activeTool) => set({ activeTool }),
+  beginEditing: (id) =>
+    set((s) => ({
+      selectedId: id,
+      activeTool: "live",
+      editFocus: s.editFocus + 1,
+    })),
   setViewPreset: (viewPreset) => set({ viewPreset }),
   /**
    * Ortho is the map-style / 2D editing view: always pairs with the top
@@ -279,7 +295,8 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
     set({
       projectOpacity: Math.min(1, Math.max(0, opacity)),
     }),
-  toggleOverlay: (key) => set((s) => ({ [key]: !s[key] }) as Partial<ViewportStore>),
+  toggleOverlay: (key) =>
+    set((s) => ({ [key]: !s[key] }) as Partial<ViewportStore>),
   commitHistory: () =>
     set((s) => ({
       past: [...s.past, structuralSnapshot(s.entities)].slice(-HISTORY_LIMIT),

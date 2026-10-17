@@ -138,10 +138,19 @@
   overflow: hidden;
 }
 
+.ss-viewport-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+}
+
 .ss-viewport-main,
 .ss-viewport-main-3d {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -287,6 +296,46 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 40%;
+}
+
+/* Left rail: the edit tools stack beside the 3D view. */
+.ss-viewport-tools.is-vertical {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-self: stretch;
+  width: max-content;
+  max-width: 8.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-bottom: none;
+  border-right: 1px solid var(--ss-border, var(--ss-card-border));
+  padding: 6px 4px;
+  gap: 6px;
+}
+
+.ss-viewport-tools.is-vertical .ss-viewport-bar-label {
+  text-align: center;
+}
+
+.ss-viewport-tools.is-vertical .ss-tools-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ss-viewport-tools.is-vertical .ss-viewport-bar-sep {
+  width: auto;
+  height: 1px;
+  align-self: stretch;
+}
+
+.ss-viewport-tools.is-vertical .ss-tool-hint {
+  display: none;
 }
 
 .ss-vlabel--entity {
