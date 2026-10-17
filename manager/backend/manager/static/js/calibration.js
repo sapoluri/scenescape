@@ -16,9 +16,10 @@ function isLegacyCalibratePage() {
 }
 
 /**
- * Lazy-load cameracalibrate.js (and its /static/assets/three.module.js).
- * Scene detail uses the Vite Three bundle; loading legacy Three on every
- * page that imports sscape.js causes "Multiple instances of Three.js".
+ * Lazy-load cameracalibrate.js (and /static/assets/three.module.js).
+ * That asset is the same Three revision as the Vite UI (see
+ * manager/Makefile THREEJS_VERSION). Still lazy so scene detail does not
+ * evaluate two module URLs and trip the dual-instance warning.
  */
 function ensureCameraCalibration() {
   if (camera_calibration) {

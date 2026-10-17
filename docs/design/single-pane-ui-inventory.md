@@ -304,7 +304,8 @@ Sheets (`src/sheets/`, e.g. `ChildSheet`) handle create/edit flows.
   (+ `templates/scene/scene_detail.html` extends it) loads
   `manager/backend/manager/static/js/scenescape3d.js` (736 lines, module).
   It imports `* as THREE` from `/static/assets/three.module.js` (vendored at
-  build time by `manager/Makefile` — not in git), plus OrbitControls,
+  build time by `manager/Makefile` from the same Three revision as the Vite
+  UI — `THREEJS_VERSION` / `frontend/package.json` — not in git), plus OrbitControls,
   GLTFLoader, lil-gui, Stats, `assetmanager.js`, `thing/managers/*`.
   Z-up world (`THREE.Object3D.DEFAULT_UP = (0,0,1)`), persp/ortho cameras,
   scene GLB + Asset3D GLB marks via `assetManager.plot()` on

@@ -11,7 +11,10 @@ CERTDOMAIN = scenescape.intel.com
 JSLIBDIR = backend/manager/static
 CURL_FLAGS = --connect-timeout 5 --max-time 120 --retry 5 --retry-delay 0
 FORCE_VAAPI ?= 0
-THREEJS_VERSION = 168
+# Keep in sync with manager/frontend/package.json "three" (major.minor).
+# Legacy calibrate JS loads /static/assets/three.module.js; the Vite UI
+# bundles the same revision from node_modules so both stay on one Three.
+THREEJS_VERSION = 185
 SECRETSDIR ?= ./secrets
 
 # Actual calculated OpenCV.js SHA256 sum as of 26.02.2026
@@ -54,6 +57,8 @@ clean-assets:
 	rm -rf $(JSLIBDIR)/assets $(JSLIBDIR)/bootstrap $(JSLIBDIR)/examples \
 	  $(JSLIBDIR)/bootstrap-4.6.1-dist.zip $(JSLIBDIR)/bootstrap-icons-1.3.0.zip
 
+# Paths under three/examples/. Fonts and draco_encoder are not shipped in the
+# npm package (r185+); keep existing static copies or fetch from CDN.
 define JSMEXAMPLES
 fonts/helvetiker_regular.typeface.json \
 jsm/controls/OrbitControls.js \
@@ -65,7 +70,6 @@ jsm/helpers/VertexNormalsHelper.js \
 jsm/helpers/ViewHelper.js \
 jsm/interactive/HTMLMesh.js \
 jsm/interactive/InteractiveGroup.js \
-jsm/libs/draco/draco_encoder.js \
 jsm/libs/fflate.module.js \
 jsm/libs/ktx-parse.module.js \
 jsm/libs/mikktspace.module.js \
@@ -105,19 +109,57 @@ endef
 
 jsm-examples: $(JSMEXAMPLES)
 
+.PHONY: sync-three
+# Refresh vendored Three + jsm examples (run after bumping THREEJS_VERSION).
+# Keeps examples/fonts when present — the npm package no longer ships fonts.
+# When node_modules is present, copy the whole jsm tree so relative imports
+# (GLTFLoader → libs/fflate, etc.) resolve without a CDN.
+sync-three:
+	rm -f $(JSLIBDIR)/assets/three.module.js $(JSLIBDIR)/assets/three.core.js \
+	  $(JSLIBDIR)/assets/ProjectedMaterial.module.js
+	rm -rf $(JSLIBDIR)/examples/jsm
+	$(MAKE) $(JSLIBDIR)/assets/three.module.js $(JSLIBDIR)/assets/ProjectedMaterial.module.js
+	@if [ -d frontend/node_modules/three/examples/jsm ]; then \
+	  mkdir -p $(JSLIBDIR)/examples; \
+	  cp -a frontend/node_modules/three/examples/jsm $(JSLIBDIR)/examples/; \
+	  find $(JSLIBDIR)/examples/jsm -name '*.js' -print0 | xargs -0 sed -i \
+	    -e "s,from 'three',from '/static/assets/three.module.js',g" \
+	    -e 's,from "three",from "/static/assets/three.module.js",g' \
+	    -e "s,import('three'),import('/static/assets/three.module.js'),g" \
+	    -e 's,import("three"),import("/static/assets/three.module.js"),g'; \
+	  echo "jsm ← frontend/node_modules/three/examples/jsm"; \
+	fi
+	$(MAKE) jsm-examples
+
 # Verification is inlined here (not $(verify-web-asset)) because $@ is the example's
 # relative path, not its output path under $(JSLIBDIR)/examples.
+# Prefer frontend/node_modules (exact UI revision). Fonts are not in the npm
+# package — keep an existing file, else CDN. Rewrite jsm imports to the static asset.
 $(JSMEXAMPLES):
 	$(eval RELPATH=$@)
-	if [ ! -f $(JSLIBDIR)/examples/$@ ] ; then \
+	$(eval OUT=$(JSLIBDIR)/examples/$@)
+	@mkdir -p $$(dirname $(OUT))
+	@if [ -f frontend/node_modules/three/examples/$(RELPATH) ]; then \
+	  cp -f frontend/node_modules/three/examples/$(RELPATH) $(OUT); \
+	elif [ -s $(OUT) ]; then \
+	  echo "keep existing $(OUT)"; \
+	else \
 	  URL=https://cdn.jsdelivr.net/npm/three@0.$(THREEJS_VERSION).0/examples/$(RELPATH) \
+	  && mkdir -p "$$(dirname "$(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt")" \
 	  && echo "$${URL}" >> $(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt \
-	  && curl -f $(CURL_FLAGS) --location --create-dirs --output $(JSLIBDIR)/examples/$@ \
-	  $${URL} \
-	  && sed -i -e "s,'three','/static/assets/three.module.js'," $(JSLIBDIR)/examples/$@ \
-	  && if [ ! -s $(JSLIBDIR)/examples/$@ ]; then echo "ERROR: $(JSLIBDIR)/examples/$@ is empty" && rm -f $(JSLIBDIR)/examples/$@ && exit 1; fi \
-	  && if head -c 200 $(JSLIBDIR)/examples/$@ | tr '[:upper:]' '[:lower:]' | grep -q '$(ERROR_BODY_PATTERN)'; then echo "ERROR: $(JSLIBDIR)/examples/$@ looks like an error page" && rm -f $(JSLIBDIR)/examples/$@ && exit 1; fi; \
+	  && curl -f $(CURL_FLAGS) --location --create-dirs --output $(OUT) $${URL} \
+	  && if [ ! -s $(OUT) ]; then echo "ERROR: $(OUT) is empty" && rm -f $(OUT) && exit 1; fi \
+	  && if head -c 200 $(OUT) | tr '[:upper:]' '[:lower:]' | grep -q '$(ERROR_BODY_PATTERN)'; then echo "ERROR: $(OUT) looks like an error page" && rm -f $(OUT) && exit 1; fi; \
 	fi
+	@case "$(RELPATH)" in \
+	  jsm/*) \
+	    sed -i \
+	      -e "s,from 'three',from '/static/assets/three.module.js',g" \
+	      -e 's,from "three",from "/static/assets/three.module.js",g' \
+	      -e "s,import('three'),import('/static/assets/three.module.js'),g" \
+	      -e 's,import("three"),import("/static/assets/three.module.js"),g' \
+	      $(OUT) ;; \
+	esac
 
 
 # Download Javascript libraries
@@ -132,6 +174,7 @@ jslibraries: \
   $(JSLIBDIR)/bootstrap/js/bootstrap.js                      \
   $(JSLIBDIR)/bootstrap/css/fonts/bootstrap-icons.woff       \
   $(JSLIBDIR)/assets/three.module.js                         \
+  $(JSLIBDIR)/assets/three.core.js                           \
   $(JSLIBDIR)/assets/ProjectedMaterial.module.js             \
   $(JSLIBDIR)/assets/opencv.js                               \
   $(JSLIBDIR)/assets/axios.min.js                            \
@@ -233,18 +276,54 @@ $(JSLIBDIR)/bootstrap/css/fonts/bootstrap-icons.woff: $(JSLIBDIR)/bootstrap-icon
 
 $(JSLIBDIR)/bootstrap/css: $(JSLIBDIR)/bootstrap/css/fonts/bootstrap-icons.woff
 
-$(JSLIBDIR)/assets/three.module.js:
-	URL=https://cdn.jsdelivr.net/npm/three@0.$(THREEJS_VERSION).0/build && PKG=$$(basename $@) \
+# r185+ splits the build: three.module.js imports ./three.core.js (same directory).
+$(JSLIBDIR)/assets/three.module.js: $(JSLIBDIR)/assets/three.core.js
+	@mkdir -p $(dir $@)
+	@if [ -f frontend/node_modules/three/build/three.module.js ]; then \
+	  cp -f frontend/node_modules/three/build/three.module.js $@; \
+	  echo "three.module.js ← frontend/node_modules/three (r$(THREEJS_VERSION))"; \
+	else \
+	  URL=https://cdn.jsdelivr.net/npm/three@0.$(THREEJS_VERSION).0/build && PKG=$$(basename $@) \
+	  && mkdir -p "$$(dirname "$(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt")" \
 	  && echo "$${URL}/$${PKG}" >> $(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt \
-	  && curl $(CURL_FLAGS) --location --create-dirs --output $@ $${URL}/$${PKG} \
-	  && $(verify-web-asset)
+	  && curl -f $(CURL_FLAGS) --location --create-dirs --output $@ $${URL}/$${PKG} \
+	  && $(verify-web-asset); \
+	fi
 
-$(JSLIBDIR)/assets/ProjectedMaterial.module.js:
-	URL=https://unpkg.com/three-projected-material/build && PKG=$$(basename $@) \
+$(JSLIBDIR)/assets/three.core.js:
+	@mkdir -p $(dir $@)
+	@if [ -f frontend/node_modules/three/build/three.core.js ]; then \
+	  cp -f frontend/node_modules/three/build/three.core.js $@; \
+	  echo "three.core.js ← frontend/node_modules/three (r$(THREEJS_VERSION))"; \
+	else \
+	  URL=https://cdn.jsdelivr.net/npm/three@0.$(THREEJS_VERSION).0/build && PKG=$$(basename $@) \
+	  && mkdir -p "$$(dirname "$(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt")" \
 	  && echo "$${URL}/$${PKG}" >> $(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt \
-	  && curl $(CURL_FLAGS) --location --create-dirs --output $@ $${URL}/$${PKG} \
-	  &&  sed "s,'three','/static/assets/three.module.js'," $@ > temp.js && mv temp.js $@ \
-	  && $(verify-web-asset)
+	  && curl -f $(CURL_FLAGS) --location --create-dirs --output $@ $${URL}/$${PKG} \
+	  && $(verify-web-asset); \
+	fi
+
+$(JSLIBDIR)/assets/ProjectedMaterial.module.js: $(JSLIBDIR)/assets/three.module.js
+	@mkdir -p $(dir $@)
+	@# Prefer the Vite-adapted copy so calibrate and the UI share one material.
+	@if [ -f frontend/src/viewport/projection/ProjectedMaterial.module.js ]; then \
+	  sed \
+	    -e "s,from 'three',from '/static/assets/three.module.js',g" \
+	    -e 's,from "three",from "/static/assets/three.module.js",g' \
+	    frontend/src/viewport/projection/ProjectedMaterial.module.js > $@; \
+	  echo "ProjectedMaterial.module.js ← frontend projection module"; \
+	else \
+	  URL=https://unpkg.com/three-projected-material/build && PKG=$$(basename $@) \
+	  && mkdir -p "$$(dirname "$(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt")" \
+	  && echo "$${URL}/$${PKG}" >> $(BUILD_DIR)/$(IMAGE)-downloaded-deps.txt \
+	  && curl -f $(CURL_FLAGS) --location --create-dirs --output $@ $${URL}/$${PKG} \
+	  && sed -i \
+	    -e "s,from 'three',from '/static/assets/three.module.js',g" \
+	    -e 's,from "three",from "/static/assets/three.module.js",g' \
+	    -e "s,'three','/static/assets/three.module.js',g" \
+	    $@ \
+	  && $(verify-web-asset); \
+	fi
 
 # Using CDN as the official https://docs.opencv.org/4.10.0/opencv.js return 403 and seem to require a headless browser to download
 $(JSLIBDIR)/assets/opencv.js:
