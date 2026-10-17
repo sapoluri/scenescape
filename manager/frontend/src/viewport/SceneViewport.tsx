@@ -21,7 +21,7 @@ import { attachMarkRenderer } from "./renderMarks";
 import { useLiveCameraProjection } from "./useLiveCameraProjection";
 import { useSceneMap } from "./useSceneMap";
 import { getViewportState, useViewportStore } from "./store";
-import { TOOLS, entityCanScale, toolDef } from "./tools";
+import { TOOLS, entityCanScale } from "./tools";
 import type { ToolId } from "./types";
 import { useViewportTools } from "./useViewportTools";
 import { ViewportMenuBar, ViewportPoweredBy } from "./ViewportMenuBar";
@@ -214,26 +214,24 @@ function ToolHeader({
       aria-label="Edit tools"
       aria-orientation="vertical"
     >
-      <span className="ss-viewport-bar-label">Tools</span>
       <div className="ss-tools-group" role="group" aria-label="Tools">
         {TOOLS.map((t) => {
           const disabled = t.id === "scale" && !scaleEnabled;
+          const tip = disabled
+            ? "Scale applies to regions and tripwires"
+            : `${t.label} (${t.shortcut})`;
           return (
             <button
               key={t.id}
               type="button"
               className={`ss-tool-btn${activeTool === t.id ? " on" : ""}`}
               onClick={() => pickTool(t.id)}
-              disabled={disabled}
-              title={
-                disabled
-                  ? "Scale applies to regions and tripwires"
-                  : `${t.label} (${t.shortcut}) — ${t.hint}`
-              }
+              aria-disabled={disabled}
+              aria-label={t.label}
+              data-tip={tip}
               aria-pressed={activeTool === t.id}
             >
               <i className={`bi ${t.icon}`} aria-hidden="true" />
-              <span className="ss-tool-label">{t.label}</span>
             </button>
           );
         })}
@@ -245,7 +243,7 @@ function ToolHeader({
           className="ss-tool-btn"
           disabled={!canUndo}
           onClick={undo}
-          title="Undo (Ctrl+Z)"
+          data-tip="Undo (Ctrl+Z)"
           aria-label="Undo"
         >
           <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
@@ -255,7 +253,7 @@ function ToolHeader({
           className="ss-tool-btn"
           disabled={!canRedo}
           onClick={redo}
-          title="Redo (Ctrl+Shift+Z)"
+          data-tip="Redo (Ctrl+Shift+Z)"
           aria-label="Redo"
         >
           <i className="bi bi-arrow-clockwise" aria-hidden="true" />
@@ -265,30 +263,22 @@ function ToolHeader({
       <button
         type="button"
         className={`ss-tool-btn ss-tool-save${dirty ? " is-dirty" : ""}`}
-        disabled={!dirty || saving || !authToken}
+        aria-disabled={!dirty || saving || !authToken}
         onClick={() => void onSaveAll()}
-        title={
-          dirty
-            ? `Save all unsaved cameras, sensors, regions, and tripwires (${entityDirtyCount} item${entityDirtyCount === 1 ? "" : "s"}${geometryDirty ? " + geometry" : ""}) ? Ctrl+S`
-            : "No unsaved changes"
+        aria-label={saving ? "Saving" : "Save all"}
+        data-tip={
+          saving
+            ? "Saving…"
+            : dirty
+              ? `Save all (${entityDirtyCount}${geometryDirty ? " + geometry" : ""})`
+              : "Save all"
         }
       >
-        <i className="bi bi-check-lg" aria-hidden="true" />
-        <span className="ss-tool-label">
-          {saving
-            ? "Saving?"
-            : dirty
-              ? `Save all${entityDirtyCount > 0 ? ` (${entityDirtyCount})` : ""}`
-              : "Save all"}
-        </span>
+        <i
+          className={`bi ${saving ? "bi-arrow-repeat" : "bi-save"}`}
+          aria-hidden="true"
+        />
       </button>
-      <span
-        className="ss-tool-hint"
-        title={toolDef(activeTool).hint}
-        aria-hidden="true"
-      >
-        {toolDef(activeTool).hint}
-      </span>
     </div>
   );
 }
