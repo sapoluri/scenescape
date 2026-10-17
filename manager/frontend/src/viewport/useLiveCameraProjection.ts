@@ -5,7 +5,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { refreshCameraStrip } from "../mqtt";
 import type { SceneCameraBootstrap } from "../scene/types";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
-import { getViewportState, useViewportStore } from "./store";
+import {
+  effectiveProjectOpacity,
+  getViewportState,
+  useViewportStore,
+} from "./store";
 import type { CameraEntity } from "./types";
 import type { ViewportWorld } from "./world";
 
@@ -43,7 +47,9 @@ export function useLiveCameraProjection(
   cameras: SceneCameraBootstrap[],
 ): void {
   const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
-  const projectOpacity = useViewportStore((s) => s.projectOpacity);
+  const projectOpacityById = useViewportStore((s) => s.projectOpacityById);
+  const projectAllActive = useViewportStore((s) => s.projectAllActive);
+  const projectAllOpacity = useViewportStore((s) => s.projectAllOpacity);
   const calibrating = useCalibrateStore((s) => s.active);
   const calibrateCameraId = useCalibrateStore((s) => s.cameraId);
   const entities = useViewportStore((s) => s.entities);
@@ -144,7 +150,9 @@ export function useLiveCameraProjection(
         })
         .then(() => {
           if (!cancelled && world.projectionPool) {
-            handle.setOpacity(getViewportState().projectOpacity);
+            handle.setOpacity(
+              effectiveProjectOpacity(getViewportState(), cam.id),
+            );
             handle.setVisible(true);
           }
         })
@@ -176,7 +184,10 @@ export function useLiveCameraProjection(
         keep.add(calibrateCameraId);
       }
       pool.sync(keep);
-      pool.setOpacityAll(getViewportState().projectOpacity);
+      const st = getViewportState();
+      for (const id of keep) {
+        pool.get(id)?.setOpacity(effectiveProjectOpacity(st, id));
+      }
       refreshCameraStrip();
       tick();
 
@@ -215,9 +226,25 @@ export function useLiveCameraProjection(
     if (!world?.projectionPool) {
       return;
     }
-    world.projectionPool.setOpacityAll(projectOpacity);
-    if (world.cameraProjection) {
-      world.cameraProjection.setOpacity(projectOpacity);
+    const pool = world.projectionPool;
+    const st = {
+      projectAllActive,
+      projectAllOpacity,
+      projectOpacityById,
+    };
+    for (const id of projectCameraIds) {
+      const op = effectiveProjectOpacity(st, id);
+      pool.get(id)?.setOpacity(op);
+      if (world.cameraProjection && id === calibrateCameraId) {
+        world.cameraProjection.setOpacity(op);
+      }
     }
-  }, [world, projectOpacity]);
+  }, [
+    world,
+    projectCameraIds,
+    projectOpacityById,
+    projectAllActive,
+    projectAllOpacity,
+    calibrateCameraId,
+  ]);
 }

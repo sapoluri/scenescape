@@ -311,42 +311,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.ss-live-preview .ss-camera-card-cal {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--ss-text-muted, #8e8e93);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.ss-live-preview .ss-camera-card-cal:hover:not(:disabled) {
-  background: rgba(10, 132, 255, 0.2);
-  color: #5eb2ff;
-}
-
-.ss-live-preview .ss-camera-card-cal.is-on {
-  background: var(--ss-brand);
-  color: var(--ss-on-brand, #fff);
-}
-
-.ss-live-preview .ss-camera-card-cal:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.ss-live-preview .ss-camera-card-cal--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ss-danger) 22%, transparent);
-  color: var(--ss-danger);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ss-live-pill.is-live .ss-live-dot {
     animation: none;

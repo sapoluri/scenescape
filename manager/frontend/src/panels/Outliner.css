@@ -148,17 +148,15 @@
 .ss-outliner-preview {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   flex: none;
-  padding: 2px 7px 2px 5px;
-  border-radius: 999px;
-  border: 1px solid var(--ss-border, rgba(120, 120, 128, 0.35));
-  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.12));
+  padding: 0;
+  border-radius: 4px;
+  border: none;
+  background: none;
   color: var(--ss-text-muted, #8e8e93);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   cursor: pointer;
   user-select: none;
 }
@@ -169,9 +167,8 @@
 }
 
 .ss-outliner-preview.is-on {
-  border-color: color-mix(in srgb, var(--ss-brand) 55%, transparent);
+  color: var(--ss-brand, var(--ss-accent, #0a84ff));
   background: var(--ss-accent-fill, var(--ss-brand-dim));
-  color: var(--ss-brand);
 }
 
 .ss-outliner-preview-input {
@@ -186,18 +183,85 @@
   border: 0;
 }
 
-.ss-outliner-preview-label {
-  line-height: 1;
-}
-
 .ss-outliner-preview .bi {
   font-size: 12px;
   line-height: 1;
 }
 
+.ss-outliner-project-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--ss-text-muted, #8a8f9e);
+  cursor: pointer;
+  font: inherit;
+}
+
+.ss-outliner-project-all:hover:not(:disabled) {
+  background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
+  color: var(--ss-accent, #0a84ff);
+}
+
+.ss-outliner-project-all.is-on {
+  color: var(--ss-brand, var(--ss-accent, #0a84ff));
+  background: var(--ss-accent-fill, var(--ss-brand-dim));
+}
+
+.ss-outliner-project-all:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Full-width strip under Cameras header — only while projecting. */
+.ss-outliner-overlay-bar {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px 6px 28px;
+}
+
+.ss-outliner-opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  font-size: 11px;
+  color: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-outliner-opacity .ss-viewport-bar-label {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ss-outliner-opacity input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  accent-color: var(--ss-accent, #0a84ff);
+}
+
+.ss-outliner-opacity .ss-cal-wizard-opacity-val {
+  flex: none;
+  min-width: 2.25rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ss-text, #f5f5f7);
+}
+
 .ss-outliner-add,
 .ss-outliner-edit,
-.ss-outliner-delete {
+.ss-outliner-delete,
+.ss-outliner-row-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -214,28 +278,47 @@
   font: inherit;
 }
 .ss-outliner-add:hover,
-.ss-outliner-edit:hover {
+.ss-outliner-edit:hover,
+.ss-outliner-row-action:hover:not(:disabled) {
   background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
   color: var(--ss-accent, #0a84ff);
 }
 
-/* Delete shows on row hover and when the row is selected. */
-.ss-outliner-delete {
+/* Row actions show on hover / selected; active Project stays visible. */
+.ss-outliner-delete,
+.ss-outliner-row-action {
   opacity: 0;
   pointer-events: none;
   transition: opacity 80ms ease;
 }
 .ss-outliner-row:hover .ss-outliner-delete,
 .ss-outliner-row.is-selected .ss-outliner-delete,
-.ss-outliner-row:focus-within .ss-outliner-delete {
+.ss-outliner-row:focus-within .ss-outliner-delete,
+.ss-outliner-row:hover .ss-outliner-row-action,
+.ss-outliner-row.is-selected .ss-outliner-row-action,
+.ss-outliner-row:focus-within .ss-outliner-row-action,
+.ss-outliner-row-action.is-on {
   opacity: 1;
   pointer-events: auto;
+}
+.ss-outliner-row-action.is-on {
+  color: var(--ss-brand, var(--ss-accent, #0a84ff));
+  background: var(--ss-accent-fill, var(--ss-brand-dim));
+}
+.ss-outliner-row-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ss-outliner-row:hover .ss-outliner-row-action:disabled,
+.ss-outliner-row.is-selected .ss-outliner-row-action:disabled {
+  opacity: 0.35;
 }
 .ss-outliner-delete:hover {
   background: color-mix(in srgb, #ff453a 18%, transparent);
   color: #ff453a;
 }
-.ss-outliner-delete:focus-visible {
+.ss-outliner-delete:focus-visible,
+.ss-outliner-row-action:focus-visible {
   opacity: 1;
   pointer-events: auto;
   outline: 2px solid var(--ss-accent, #0a84ff);

@@ -24,8 +24,50 @@ export interface ViewportUiState {
    * (legacy "project frame" / "project all frames"). Empty = off.
    */
   projectCameraIds: string[];
-  /** Map-projection overlay opacity 0–1 (legacy all-cameras opacity). */
-  projectOpacity: number;
+  /**
+   * Per-camera map-projection opacity 0–1 (Properties). Missing ids use
+   * {@link DEFAULT_PROJECT_OPACITY}. Used whenever Project-all is off.
+   */
+  projectOpacityById: Record<string, number>;
+  /**
+   * True while the Cameras “Project all” control is engaged. Live opacity then
+   * uses {@link projectAllOpacity} as an override; per-camera values are kept
+   * for when Project-all is turned off.
+   */
+  projectAllActive: boolean;
+  /** Shared overlay opacity while {@link projectAllActive} is true. */
+  projectAllOpacity: number;
+}
+
+export const DEFAULT_PROJECT_OPACITY = 0.8;
+
+export function projectOpacityOf(
+  byId: Record<string, number>,
+  cameraId: string,
+): number {
+  const v = byId[cameraId];
+  if (typeof v !== "number" || !Number.isFinite(v)) {
+    return DEFAULT_PROJECT_OPACITY;
+  }
+  return Math.min(1, Math.max(0, v));
+}
+
+function clampOpacity(opacity: number): number {
+  return Math.min(1, Math.max(0, opacity));
+}
+
+/** Opacity applied to a projector right now (Project-all override or per-cam). */
+export function effectiveProjectOpacity(
+  s: Pick<
+    ViewportUiState,
+    "projectAllActive" | "projectAllOpacity" | "projectOpacityById"
+  >,
+  cameraId: string,
+): number {
+  if (s.projectAllActive) {
+    return clampOpacity(s.projectAllOpacity);
+  }
+  return projectOpacityOf(s.projectOpacityById, cameraId);
 }
 
 interface HistorySnapshot {
@@ -122,7 +164,10 @@ interface ViewportStore extends ViewportUiState {
   setProjectCameraEnabled: (id: string, on: boolean) => void;
   /** Toggle every posed camera's map projection (legacy "project all frames"). */
   setProjectAllCameras: (on: boolean) => void;
-  setProjectOpacity: (opacity: number) => void;
+  /** Set stored per-camera opacity (Properties; applies when Project-all is off). */
+  setProjectOpacity: (cameraId: string, opacity: number) => void;
+  /** Set the Project-all overlay override (does not change per-camera values). */
+  setProjectAllOpacity: (opacity: number) => void;
   toggleOverlay: (
     key: "showGrid" | "showLabels" | "showTrails" | "showFrustums",
   ) => void;
@@ -145,7 +190,9 @@ const initialUi: ViewportUiState = {
   showFrustums: true,
   activeTool: "live",
   projectCameraIds: [],
-  projectOpacity: 0.8,
+  projectOpacityById: {},
+  projectAllActive: false,
+  projectAllOpacity: DEFAULT_PROJECT_OPACITY,
 };
 
 const HISTORY_LIMIT = 50;
@@ -329,28 +376,37 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   setProjectCamera: (id) =>
     set((s) => {
       if (id == null) {
-        return { projectCameraIds: [] };
+        return { projectCameraIds: [], projectAllActive: false };
       }
       if (s.projectCameraIds.includes(id)) {
-        return s;
+        return s.projectAllActive ? { projectAllActive: false } : s;
       }
-      return { projectCameraIds: [...s.projectCameraIds, id] };
+      return {
+        projectCameraIds: [...s.projectCameraIds, id],
+        projectAllActive: false,
+      };
     }),
   setProjectCameraEnabled: (id, on) =>
     set((s) => {
       const has = s.projectCameraIds.includes(id);
+      let projectCameraIds = s.projectCameraIds;
       if (on && !has) {
-        return { projectCameraIds: [...s.projectCameraIds, id] };
+        projectCameraIds = [...s.projectCameraIds, id];
+      } else if (!on && has) {
+        projectCameraIds = s.projectCameraIds.filter((x) => x !== id);
+      } else {
+        return s;
       }
-      if (!on && has) {
-        return { projectCameraIds: s.projectCameraIds.filter((x) => x !== id) };
-      }
-      return s;
+      // Leaving Project-all restores per-camera opacities for remaining ids.
+      return {
+        projectCameraIds,
+        projectAllActive: false,
+      };
     }),
   setProjectAllCameras: (on) =>
     set((s) => {
       if (!on) {
-        return { projectCameraIds: [] };
+        return { projectCameraIds: [], projectAllActive: false };
       }
       const ids = Object.values(s.entities)
         .filter(
@@ -358,12 +414,21 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
             e.type === "camera" && e.posed,
         )
         .map((e) => e.id);
-      return { projectCameraIds: ids };
+      return {
+        projectCameraIds: ids,
+        projectAllActive: true,
+        // Keep projectOpacityById intact — override is projectAllOpacity only.
+      };
     }),
-  setProjectOpacity: (opacity) =>
-    set({
-      projectOpacity: Math.min(1, Math.max(0, opacity)),
-    }),
+  setProjectOpacity: (cameraId, opacity) =>
+    set((s) => ({
+      projectOpacityById: {
+        ...s.projectOpacityById,
+        [cameraId]: clampOpacity(opacity),
+      },
+    })),
+  setProjectAllOpacity: (opacity) =>
+    set({ projectAllOpacity: clampOpacity(opacity) }),
   toggleOverlay: (key) =>
     set((s) => ({ [key]: !s[key] }) as Partial<ViewportStore>),
   commitHistory: () =>

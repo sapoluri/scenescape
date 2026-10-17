@@ -19,17 +19,21 @@ import type {
   SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import { enterCameraCalibrate } from "../viewport/calibrate";
 import {
   removeRegionFromModel,
   removeTripwireFromModel,
 } from "../viewport/geometrySync";
+import { ProjectionOpacitySlider } from "../viewport/ProjectionOpacitySlider";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
+  CameraEntity,
   ChildSceneEntity,
   ToolId,
   ViewportEntity,
   ViewportEntityType,
 } from "../viewport/types";
+import "../viewport/calibrate/CalibrateWizard.css";
 import "./Outliner.css";
 
 /** Scene-local create tools (same as the viewport toolbar). */
@@ -223,17 +227,26 @@ function OutlinerRow({
   revealed,
   deletable,
   onDelete,
+  cameraCard,
+  isSuperuser,
 }: {
   entity: ViewportEntity;
   revealed: boolean;
   deletable: boolean;
   onDelete: (entity: ViewportEntity) => void;
+  cameraCard?: SceneCameraBootstrap | null;
+  isSuperuser?: boolean;
 }) {
   const selectedId = useViewportStore((s) => s.selectedId);
   const select = useViewportStore((s) => s.select);
   const updateEntity = useViewportStore((s) => s.updateEntity);
+  const projecting = useViewportStore((s) =>
+    entity.type === "camera" ? s.projectCameraIds.includes(entity.id) : false,
+  );
   const selected = selectedId === entity.id;
   const rowRef = useRef<HTMLDivElement>(null);
+  const camera = entity.type === "camera" ? (entity as CameraEntity) : null;
+  const posed = Boolean(camera?.posed);
 
   useEffect(() => {
     if (selected && revealed) {
@@ -299,6 +312,47 @@ function OutlinerRow({
           <i className="bi bi-pencil" aria-hidden="true" />
         </a>
       ) : null}
+      {camera ? (
+        <button
+          type="button"
+          className={`ss-outliner-row-action${projecting ? " is-on" : ""}`}
+          disabled={!posed}
+          title={
+            posed
+              ? projecting
+                ? "Stop projecting onto the scene map"
+                : "Project live frame onto the scene map"
+              : "Calibrate this camera first — projection needs a pose"
+          }
+          aria-pressed={projecting}
+          aria-label={`Project ${entity.name}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            select(entity.id);
+            getViewportState().setProjectCameraEnabled(entity.id, !projecting);
+          }}
+        >
+          <i className="bi bi-cast" aria-hidden="true" />
+        </button>
+      ) : null}
+      {camera && isSuperuser && cameraCard ? (
+        <button
+          type="button"
+          className="ss-outliner-row-action"
+          title={`Calibrate ${entity.name}`}
+          aria-label={`Calibrate ${entity.name}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            enterCameraCalibrate({
+              cameraId: cameraCard.id,
+              sensorId: cameraCard.sensorId,
+              cameraName: cameraCard.name,
+            });
+          }}
+        >
+          <i className="bi bi-bullseye" aria-hidden="true" />
+        </button>
+      ) : null}
       {deletable ? (
         <button
           type="button"
@@ -346,11 +400,9 @@ export type OutlinerProps = {
  * with badge counts and visibility eye toggles. Selection syncs both ways
  * through the viewport store (viewport click, strip click, outliner click).
  *
- * Cameras section can host a Preview toggle that opens the dock Live glance
- * split (see SinglePaneView). Section + for regions/tripwires/cameras/sensors
- * arms the matching viewport tool (same as the toolbar); child + opens the
- * link-child sheet. Delete lives on rows (hover / selected); the keyboard
- * Delete key dispatches the same confirm flow.
+ * Cameras header: Preview, Project all, and +. Project-all Overlay (override)
+ * appears under the header while Project-all is on; per-camera opacity lives
+ * in Properties. Rows carry Project / Calibrate / Delete.
  */
 export function Outliner({
   isSuperuser = false,
@@ -367,10 +419,17 @@ export function Outliner({
 }: OutlinerProps) {
   const toast = useAppToast();
   const entities = useViewportStore((s) => s.entities);
+  const projectAllActive = useViewportStore((s) => s.projectAllActive);
   const selectedType = useViewportStore((s) => {
     const id = s.selectedId;
     return id ? s.entities[id]?.type : undefined;
   });
+  const posedCameraIds = cameras
+    .map((c) => c.id)
+    .filter((id) => {
+      const e = entities[id];
+      return e?.type === "camera" && e.posed;
+    });
   const [collapsed, setCollapsed] =
     useState<Set<ViewportEntityType>>(readCollapsed);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -575,8 +634,30 @@ export function Outliner({
                     className={`bi ${previewOpen ? "bi-camera-video-fill" : "bi-camera-video"}`}
                     aria-hidden="true"
                   />
-                  <span className="ss-outliner-preview-label">Preview</span>
                 </label>
+              ) : null}
+              {type === "camera" && items.length > 0 ? (
+                <button
+                  type="button"
+                  id="project-all-frames"
+                  className={`ss-outliner-project-all${projectAllActive ? " is-on" : ""}`}
+                  disabled={posedCameraIds.length === 0}
+                  title={
+                    posedCameraIds.length > 0
+                      ? projectAllActive
+                        ? "Stop projecting all cameras"
+                        : "Project all calibrated cameras onto the scene map"
+                      : "Calibrate cameras first — projection needs a pose"
+                  }
+                  aria-label="Project all cameras"
+                  aria-pressed={projectAllActive}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    getViewportState().setProjectAllCameras(!projectAllActive);
+                  }}
+                >
+                  <i className="bi bi-cast" aria-hidden="true" />
+                </button>
               ) : null}
               {showToolAdd && addTool ? (
                 <button
@@ -614,6 +695,14 @@ export function Outliner({
                 </a>
               ) : null}
             </div>
+            {type === "camera" && projectAllActive ? (
+              <div className="ss-outliner-overlay-bar">
+                <ProjectionOpacitySlider
+                  className="ss-outliner-opacity"
+                  projectAll
+                />
+              </div>
+            ) : null}
             <div
               id={bodyId}
               className="ss-outliner-group-body"
@@ -634,6 +723,12 @@ export function Outliner({
                     isSuperuser,
                   )}
                   onDelete={requestDelete}
+                  cameraCard={
+                    e.type === "camera"
+                      ? cameras.find((c) => c.id === e.id) ?? null
+                      : null
+                  }
+                  isSuperuser={isSuperuser}
                 />
               ))}
             </div>

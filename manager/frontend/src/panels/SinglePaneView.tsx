@@ -54,10 +54,12 @@ const DOCK_TABS: { id: DockTab; label: string }[] = [
 const DOCK_COLLAPSED_KEY = "ss-sp-dock-collapsed";
 /** Pixel height when the user has shrunk Properties; null = size to content. */
 const PROPS_HEIGHT_KEY = "ss-sp-props-height-px";
+/** Pixel height for the Preview overlay; null = CSS default fraction. */
+const PREVIEW_HEIGHT_KEY = "ss-sp-preview-height-px";
 
-function readPropsHeightPx(): number | null {
+function readHeightPx(key: string): number | null {
   try {
-    const n = Number(sessionStorage.getItem(PROPS_HEIGHT_KEY));
+    const n = Number(sessionStorage.getItem(key));
     if (Number.isFinite(n) && n >= 96) {
       return n;
     }
@@ -67,20 +69,36 @@ function readPropsHeightPx(): number | null {
   return null;
 }
 
-function writePropsHeightPx(px: number | null): void {
+function writeHeightPx(key: string, px: number | null): void {
   try {
     if (px == null) {
-      sessionStorage.removeItem(PROPS_HEIGHT_KEY);
+      sessionStorage.removeItem(key);
     } else {
-      sessionStorage.setItem(PROPS_HEIGHT_KEY, String(Math.round(px)));
+      sessionStorage.setItem(key, String(Math.round(px)));
     }
   } catch {
     /* private mode / quota */
   }
 }
 
-function clampPropsHeightPx(px: number, editorHeight: number): number {
-  const max = Math.max(96, editorHeight * 0.85);
+function readPropsHeightPx(): number | null {
+  return readHeightPx(PROPS_HEIGHT_KEY);
+}
+
+function writePropsHeightPx(px: number | null): void {
+  writeHeightPx(PROPS_HEIGHT_KEY, px);
+}
+
+function readPreviewHeightPx(): number | null {
+  return readHeightPx(PREVIEW_HEIGHT_KEY);
+}
+
+function writePreviewHeightPx(px: number | null): void {
+  writeHeightPx(PREVIEW_HEIGHT_KEY, px);
+}
+
+function clampOverlayHeightPx(px: number, hostHeight: number): number {
+  const max = Math.max(96, hostHeight * 0.85);
   return Math.min(max, Math.max(96, px));
 }
 
@@ -157,8 +175,16 @@ export function SinglePaneView({
   );
   const propsHeightRef = useRef(propsHeightPx);
   propsHeightRef.current = propsHeightPx;
+  const [previewHeightPx, setPreviewHeightPx] = useState<number | null>(
+    readPreviewHeightPx,
+  );
+  const previewHeightRef = useRef(previewHeightPx);
+  previewHeightRef.current = previewHeightPx;
   const editorRef = useRef<HTMLDivElement>(null);
-  const splitDrag = useRef<{ pointerId: number } | null>(null);
+  const dockMainRef = useRef<HTMLDivElement>(null);
+  const splitDrag = useRef<{ pointerId: number; kind: "props" | "preview" } | null>(
+    null,
+  );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewMaximized, setPreviewMaximized] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -230,37 +256,67 @@ export function SinglePaneView({
       return;
     }
     const rect = editor.getBoundingClientRect();
-    const px = clampPropsHeightPx(rect.bottom - clientY, rect.height);
+    const px = clampOverlayHeightPx(rect.bottom - clientY, rect.height);
     propsHeightRef.current = px;
     setPropsHeightPx(px);
   }, []);
 
-  const onSplitPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+  const applyPreviewHeight = useCallback((clientY: number) => {
+    const main = dockMainRef.current;
+    if (!main) {
+      return;
+    }
+    const rect = main.getBoundingClientRect();
+    const px = clampOverlayHeightPx(rect.bottom - clientY, rect.height);
+    previewHeightRef.current = px;
+    setPreviewHeightPx(px);
+  }, []);
+
+  const onPropsSplitPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
     if (ev.button !== 0) {
       return;
     }
     ev.preventDefault();
     ev.currentTarget.setPointerCapture(ev.pointerId);
-    splitDrag.current = { pointerId: ev.pointerId };
+    splitDrag.current = { pointerId: ev.pointerId, kind: "props" };
     applyPropsHeight(ev.clientY);
+  };
+
+  const onPreviewSplitPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+    if (ev.button !== 0) {
+      return;
+    }
+    ev.preventDefault();
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    splitDrag.current = { pointerId: ev.pointerId, kind: "preview" };
+    applyPreviewHeight(ev.clientY);
   };
 
   const onSplitPointerMove = (ev: ReactPointerEvent<HTMLDivElement>) => {
     if (splitDrag.current?.pointerId !== ev.pointerId) {
       return;
     }
-    applyPropsHeight(ev.clientY);
+    if (splitDrag.current.kind === "preview") {
+      applyPreviewHeight(ev.clientY);
+    } else {
+      applyPropsHeight(ev.clientY);
+    }
   };
 
   const onSplitPointerUp = (ev: ReactPointerEvent<HTMLDivElement>) => {
     if (splitDrag.current?.pointerId !== ev.pointerId) {
       return;
     }
+    const kind = splitDrag.current.kind;
     splitDrag.current = null;
-    writePropsHeightPx(propsHeightRef.current);
+    if (kind === "preview") {
+      writePreviewHeightPx(previewHeightRef.current);
+    } else {
+      writePropsHeightPx(propsHeightRef.current);
+    }
   };
 
-  const onSplitKeyDown = (ev: ReactKeyboardEvent<HTMLDivElement>) => {
+  const onPropsSplitKeyDown = (ev: ReactKeyboardEvent<HTMLDivElement>) => {
     if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") {
       return;
     }
@@ -271,10 +327,27 @@ export function SinglePaneView({
       propsHeightRef.current ??
       Math.min(editorHeight * 0.5, editorHeight * 0.85);
     const delta = ev.key === "ArrowUp" ? 24 : -24;
-    const px = clampPropsHeightPx(current + delta, editorHeight);
+    const px = clampOverlayHeightPx(current + delta, editorHeight);
     propsHeightRef.current = px;
     setPropsHeightPx(px);
     writePropsHeightPx(px);
+  };
+
+  const onPreviewSplitKeyDown = (ev: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") {
+      return;
+    }
+    ev.preventDefault();
+    const main = dockMainRef.current;
+    const hostHeight = main?.getBoundingClientRect().height ?? 0;
+    const current =
+      previewHeightRef.current ??
+      Math.min(hostHeight * 0.42, hostHeight * 0.85);
+    const delta = ev.key === "ArrowUp" ? 24 : -24;
+    const px = clampOverlayHeightPx(current + delta, hostHeight);
+    previewHeightRef.current = px;
+    setPreviewHeightPx(px);
+    writePreviewHeightPx(px);
   };
 
   const closePreview = useCallback(() => {
@@ -422,6 +495,7 @@ export function SinglePaneView({
           </div>
           <div
             id="ss-sp-dock-main"
+            ref={dockMainRef}
             className={[
               "ss-sp-dock-main",
               previewOpen ? "is-preview-split" : "",
@@ -488,11 +562,11 @@ export function SinglePaneView({
                     aria-valuemin={96}
                     aria-valuemax={85}
                     tabIndex={0}
-                    onPointerDown={onSplitPointerDown}
+                    onPointerDown={onPropsSplitPointerDown}
                     onPointerMove={onSplitPointerMove}
                     onPointerUp={onSplitPointerUp}
                     onPointerCancel={onSplitPointerUp}
-                    onKeyDown={onSplitKeyDown}
+                    onKeyDown={onPropsSplitKeyDown}
                   />
                   <div className="ss-sp-dock-props-head">
                     <span className="ss-sp-dock-props-title">Properties</span>
@@ -520,12 +594,42 @@ export function SinglePaneView({
               ) : null}
             </div>
             {previewOpen && cameras.length > 0 ? (
-              <div className="ss-sp-dock-glance">
+              <div
+                className={[
+                  "ss-sp-dock-glance",
+                  !previewMaximized && previewHeightPx != null
+                    ? "is-resized"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={
+                  !previewMaximized && previewHeightPx != null
+                    ? ({
+                        "--ss-preview-height": `${previewHeightPx}px`,
+                      } as CSSProperties)
+                    : undefined
+                }
+              >
+                {!previewMaximized ? (
+                  <div
+                    className="ss-sp-dock-split"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Resize camera preview"
+                    aria-valuemin={96}
+                    aria-valuemax={85}
+                    tabIndex={0}
+                    onPointerDown={onPreviewSplitPointerDown}
+                    onPointerMove={onSplitPointerMove}
+                    onPointerUp={onSplitPointerUp}
+                    onPointerCancel={onSplitPointerUp}
+                    onKeyDown={onPreviewSplitKeyDown}
+                  />
+                ) : null}
                 <LivePreviewPane
                   cameras={cameras}
                   cameraRates={cameraRates}
-                  authToken={authToken}
-                  isSuperuser={isSuperuser}
                   maximized={previewMaximized}
                   onMaximizedChange={setPreviewMaximized}
                 />

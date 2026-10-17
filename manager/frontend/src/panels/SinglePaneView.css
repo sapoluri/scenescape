@@ -190,6 +190,7 @@
 }
 
 .ss-sp-dock-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   width: var(--ss-sp-dock-width);
@@ -207,9 +208,8 @@
   overflow: hidden;
 }
 
-/* Outliner fills the editor. Properties overlays the bottom (content-sized
-   by default; the top handle lets the user shrink it). Preview sits under
-   the editor stack when open. */
+/* Outliner fills the editor. Properties and Preview overlay the bottom
+   (drag the top handle to resize; Maximize fills the dock for Preview). */
 .ss-sp-dock-editor {
   flex: 1 1 0;
   min-height: 0;
@@ -344,11 +344,30 @@
 }
 
 .ss-sp-dock-glance {
-  flex: 1.15 1 0;
-  min-height: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  height: var(--ss-preview-height, 42%);
+  max-height: 85%;
+  overflow: hidden;
+  background: var(--ss-panel-bg, #1e1e21);
   border-top: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.ss-sp-dock-glance.is-resized {
+  height: var(--ss-preview-height, 42%);
+  max-height: 85%;
+}
+
+.ss-sp-dock-glance > .ss-live-preview {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .ss-sp-dock-main.is-preview-maximized .ss-sp-dock-editor {
@@ -356,8 +375,10 @@
 }
 
 .ss-sp-dock-main.is-preview-maximized .ss-sp-dock-glance {
-  flex: 1 1 auto;
+  height: 100%;
+  max-height: none;
   border-top: 0;
+  box-shadow: none;
 }
 
 .ss-sp-dock-tabs {

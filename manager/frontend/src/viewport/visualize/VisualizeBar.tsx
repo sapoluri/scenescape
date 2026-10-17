@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import type { SceneCameraBootstrap } from "../../scene/types";
 import { enterCameraCalibrate } from "../calibrate";
+import { ProjectionOpacitySlider } from "../ProjectionOpacitySlider";
 import { getViewportState, useViewportStore } from "../store";
 import { enterCameraVisualize } from "./index";
 import { useVisualizeStore } from "./visualizeStore";
@@ -119,6 +120,9 @@ export function VisualizeBar({
         <i className="bi bi-cast" aria-hidden="true" />
         <span className="ss-tool-label">Project</span>
       </button>
+      {projecting && cameraId ? (
+        <ProjectionOpacitySlider cameraId={cameraId} />
+      ) : null}
       {isSuperuser ? (
         <button
           type="button"

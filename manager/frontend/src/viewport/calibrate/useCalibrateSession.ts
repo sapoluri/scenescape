@@ -14,7 +14,11 @@ import {
 import { parseCameraOptics } from "../../lib/cameraOptics";
 import { api } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
-import { getViewportState, useViewportStore } from "../store";
+import {
+  effectiveProjectOpacity,
+  getViewportState,
+  useViewportStore,
+} from "../store";
 import type { ViewportWorld } from "../world";
 import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
 import { calibrationPointColor, calibrationPointColorHex } from "./colors";
@@ -578,7 +582,7 @@ export function useCalibrateSession(
         return;
       }
       handle.updatePose(pose);
-      handle.setOpacity(getViewportState().projectOpacity);
+      handle.setOpacity(effectiveProjectOpacity(getViewportState(), cameraId));
       handle.setVisible(true);
     });
     let feedTimer: number | undefined;
@@ -591,7 +595,9 @@ export function useCalibrateSession(
           .updateFrame(feedImageUrl, { ...pose, reproject: false })
           .then(() => {
             if (!cancelled) {
-              handle.setOpacity(getViewportState().projectOpacity);
+              handle.setOpacity(
+                effectiveProjectOpacity(getViewportState(), cameraId),
+              );
               handle.setVisible(true);
             }
           })
@@ -608,7 +614,9 @@ export function useCalibrateSession(
   }, [active, world, previewPose, feedImageUrl, cameraId]);
 
   // Keep opacity slider live while calibrate owns the projector.
-  const projectOpacity = useViewportStore((s) => s.projectOpacity);
+  const projectOpacity = useViewportStore((s) =>
+    cameraId ? effectiveProjectOpacity(s, cameraId) : 0.8,
+  );
   useEffect(() => {
     if (!active || !world?.projectionPool || !cameraId) {
       return;

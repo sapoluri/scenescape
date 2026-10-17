@@ -8,7 +8,7 @@ vi.stubGlobal("document", { getElementById: () => null });
 vi.stubGlobal("window", { dispatchEvent: () => undefined });
 
 import { resetGeometryModel } from "../scene/map/geometryModel";
-import { useViewportStore } from "./store";
+import { effectiveProjectOpacity, useViewportStore } from "./store";
 import type { MarkEntity, RegionEntity } from "./types";
 
 const region = (id: string): RegionEntity => ({
@@ -165,13 +165,38 @@ describe("useViewportStore", () => {
       "cam-a",
       "cam-b",
     ]);
+    s.setProjectOpacity("cam-a", 0.4);
+    s.setProjectOpacity("cam-b", 0.9);
+    expect(useViewportStore.getState().projectOpacityById["cam-a"]).toBe(0.4);
+    expect(useViewportStore.getState().projectOpacityById["cam-b"]).toBe(0.9);
     s.setProjectAllCameras(true);
+    expect(useViewportStore.getState().projectAllActive).toBe(true);
     expect(useViewportStore.getState().projectCameraIds).toEqual([
       "cam-a",
       "cam-b",
     ]);
+    // Project-all override does not overwrite per-camera stored opacities.
+    s.setProjectAllOpacity(0.55);
+    expect(useViewportStore.getState().projectAllOpacity).toBe(0.55);
+    expect(useViewportStore.getState().projectOpacityById["cam-a"]).toBe(0.4);
+    expect(useViewportStore.getState().projectOpacityById["cam-b"]).toBe(0.9);
+    expect(
+      effectiveProjectOpacity(useViewportStore.getState(), "cam-a"),
+    ).toBe(0.55);
+    expect(
+      effectiveProjectOpacity(useViewportStore.getState(), "cam-b"),
+    ).toBe(0.55);
     s.setProjectAllCameras(false);
+    expect(useViewportStore.getState().projectAllActive).toBe(false);
     expect(useViewportStore.getState().projectCameraIds).toEqual([]);
+    expect(useViewportStore.getState().projectOpacityById["cam-a"]).toBe(0.4);
+    expect(useViewportStore.getState().projectOpacityById["cam-b"]).toBe(0.9);
+    expect(
+      effectiveProjectOpacity(useViewportStore.getState(), "cam-a"),
+    ).toBe(0.4);
+    expect(
+      effectiveProjectOpacity(useViewportStore.getState(), "cam-b"),
+    ).toBe(0.9);
   });
 
   it("sets the active tool", () => {

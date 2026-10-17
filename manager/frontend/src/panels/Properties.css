@@ -170,6 +170,43 @@
   opacity: 0.45;
 }
 
+/* Overlay slider under Project frame (Properties stays open when Preview is off). */
+.ss-prop-opacity-row {
+  display: block;
+}
+
+.ss-prop-opacity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  font-size: 12px;
+  color: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-prop-opacity .ss-viewport-bar-label {
+  flex: none;
+  width: auto;
+  font-size: 11.5px;
+  color: var(--ss-text-muted, #8e8e93);
+}
+
+.ss-prop-opacity input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  width: auto;
+  accent-color: var(--ss-accent, #0a84ff);
+}
+
+.ss-prop-opacity .ss-cal-wizard-opacity-val {
+  flex: none;
+  min-width: 2.25rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ss-text, #f5f5f7);
+}
+
 .ss-prop-switch-control {
   position: relative;
   flex: none;

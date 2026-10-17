@@ -46,6 +46,7 @@ import {
   markEntityPersistClean,
   usePersistStore,
 } from "../viewport/persistStore";
+import { ProjectionOpacitySlider } from "../viewport/ProjectionOpacitySlider";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
@@ -581,6 +582,7 @@ function CameraProps({
   const toast = useAppToast();
   const isDraft = e.id.startsWith("draft-");
   const projecting = useViewportStore((s) => s.projectCameraIds.includes(e.id));
+  const projectAllActive = useViewportStore((s) => s.projectAllActive);
   // Wizard toolbar owns Auto Calibrate + Save while this camera is calibrating.
   const calibrating = useCalibrateStore((s) => s.active && s.cameraId === e.id);
   const calOptics = useCalibrateStore((s) =>
@@ -938,6 +940,14 @@ function CameraProps({
           </span>
         </span>
       </label>
+      {projecting && !calibrating && !projectAllActive ? (
+        <div className="ss-prop-field ss-prop-opacity-row">
+          <ProjectionOpacitySlider
+            className="ss-prop-opacity"
+            cameraId={e.id}
+          />
+        </div>
+      ) : null}
       {!calibrating ? (
         <div className="ss-prop-actions">
           <SaveBar

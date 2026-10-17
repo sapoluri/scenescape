@@ -13,7 +13,8 @@ import {
 } from "../../lib/autocalibration";
 import { api, type RestError } from "../../lib/rest";
 import { restPoseToRigEuler } from "../entities";
-import { getViewportState, useViewportStore } from "../store";
+import { ProjectionOpacitySlider } from "../ProjectionOpacitySlider";
+import { getViewportState } from "../store";
 import { getCalibrateState, useCalibrateStore } from "./calibrateStore";
 import {
   pairsToTransforms,
@@ -63,7 +64,6 @@ export function CalibrateWizard({
   );
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
   const updatingPose = useCalibrateStore((s) => s.updatingPose);
-  const projectOpacity = useViewportStore((s) => s.projectOpacity);
 
   const canSave = pairCount >= 4 && dirty && !busy && Boolean(optics);
 
@@ -277,28 +277,7 @@ export function CalibrateWizard({
       <span className="ss-cal-wizard-step" title={stepLabel}>
         {stepLabel}
       </span>
-      <label
-        className="ss-cal-wizard-opacity"
-        title="Map projection opacity"
-      >
-        <span className="ss-viewport-bar-label">Overlay</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={Math.round(projectOpacity * 100)}
-          onChange={(ev) =>
-            getViewportState().setProjectOpacity(
-              Number(ev.target.value) / 100,
-            )
-          }
-          aria-label="Projection opacity"
-        />
-        <span className="ss-cal-wizard-opacity-val">
-          {Math.round(projectOpacity * 100)}%
-        </span>
-      </label>
+      <ProjectionOpacitySlider cameraId={cameraId || undefined} />
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <button
         type="button"
