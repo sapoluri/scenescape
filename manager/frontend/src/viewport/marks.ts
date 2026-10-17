@@ -15,9 +15,14 @@ import type { MarkEntity } from "./types";
  * the 3D viewport needs no new plumbing (ADR-19: no new window.ss* bridges).
  * Marks are stored as MarkEntity rows in the zustand scene-graph store; the
  * three.js layer reconciles meshes imperatively.
+ *
+ * Clearing matches marks.js / liveMarks: IDs absent from the current
+ * regulated frame are removed immediately. A short TTL prune remains as a
+ * safety net when MQTT goes silent without an empty frame.
  */
 
 export const MARK_ID_PREFIX = "mark:";
+/** Backup clear when regulated frames stop arriving entirely. */
 const STALE_AFTER_MS = 5000;
 const PRUNE_INTERVAL_MS = 2000;
 const MIN_MOVE_M = 0.05;
@@ -102,6 +107,76 @@ interface SeenMark {
 }
 
 /**
+ * Frame-diff: store keys in `seen` that are not present in this MQTT frame.
+ * Presence is by object id (even if translation fails to parse), matching
+ * marks.js so a bad sample does not drop an active track.
+ */
+export function markKeysLeftScene(
+  seenKeys: Iterable<string>,
+  objects: SceneObjectMark[],
+): string[] {
+  const present = new Set<string>();
+  for (const m of objects) {
+    if (m == null || m.id === undefined || m.id === null) {
+      continue;
+    }
+    present.add(markKey(m.id));
+  }
+  const gone: string[] = [];
+  for (const id of seenKeys) {
+    if (!present.has(id)) {
+      gone.push(id);
+    }
+  }
+  return gone;
+}
+
+/**
+ * Build MarkEntity rows for one regulated frame and update `seen` in place.
+ */
+export function buildMarkEntities(
+  objects: SceneObjectMark[],
+  seen: Map<string, SeenMark>,
+  colors: Record<string, string>,
+  now: number,
+): MarkEntity[] {
+  const entities: MarkEntity[] = [];
+  for (const m of objects) {
+    if (m == null || m.id === undefined || m.id === null) {
+      continue;
+    }
+    const pos = parseMarkPosition(m.translation);
+    if (!pos) {
+      continue;
+    }
+    const [x, y] = pos;
+    const id = markKey(m.id);
+    const className =
+      (typeof m.type === "string" && m.type) ||
+      (m.tag_id !== undefined ? String(m.tag_id) : String(m.id));
+    const prev = seen.get(id);
+    const heading = prev
+      ? deriveHeading(prev.x, prev.y, x, y, prev.heading)
+      : Number.NaN;
+    const dx = prev ? x - prev.x : 0;
+    const dy = prev ? y - prev.y : 0;
+    seen.set(id, { x, y, heading, lastSeen: now });
+    entities.push({
+      id,
+      type: "mark",
+      name: markLabel(className, m.id),
+      visible: true,
+      className,
+      color: colors[className] ?? DEFAULT_MARK_COLOR,
+      position: [x, y, 0],
+      heading,
+      speed: Math.hypot(dx, dy),
+    });
+  }
+  return entities;
+}
+
+/**
  * Subscribe to live marks and mirror them into the viewport store.
  * Safe to mount once per scene; unmounting removes this scene's marks.
  */
@@ -122,38 +197,18 @@ export function useViewportMarks({ assetMarkColors }: MarkHookOptions): void {
       }
       const now = Date.now();
       const colors = colorsRef.current ?? {};
-      const entities: MarkEntity[] = [];
-      for (const m of objects) {
-        const pos = parseMarkPosition(m.translation);
-        if (!pos) {
-          continue;
-        }
-        const [x, y] = pos;
-        const id = markKey(m.id);
-        const className =
-          (typeof m.type === "string" && m.type) ||
-          (m.tag_id !== undefined ? String(m.tag_id) : String(m.id));
-        const prev = seen.get(id);
-        const heading = prev
-          ? deriveHeading(prev.x, prev.y, x, y, prev.heading)
-          : Number.NaN;
-        const dx = prev ? x - prev.x : 0;
-        const dy = prev ? y - prev.y : 0;
-        seen.set(id, { x, y, heading, lastSeen: now });
-        entities.push({
-          id,
-          type: "mark",
-          name: markLabel(className, m.id),
-          visible: true,
-          className,
-          color: colors[className] ?? DEFAULT_MARK_COLOR,
-          position: [x, y, 0],
-          heading,
-          speed: Math.hypot(dx, dy),
-        });
+
+      // Frame-diff clear + upsert in one store write (marks.js semantics).
+      const gone = markKeysLeftScene(seen.keys(), objects);
+      for (const id of gone) {
+        seen.delete(id);
       }
-      if (entities.length > 0) {
-        getViewportState().upsertEntities(entities, { fromMarks: true });
+      const entities = buildMarkEntities(objects, seen, colors, now);
+      if (gone.length > 0 || entities.length > 0) {
+        getViewportState().upsertEntities(entities, {
+          fromMarks: true,
+          removeIds: gone,
+        });
       }
     };
 
@@ -166,8 +221,8 @@ export function useViewportMarks({ assetMarkColors }: MarkHookOptions): void {
           seen.delete(id);
         }
       }
-      for (const id of stale) {
-        getViewportState().removeEntity(id);
+      if (stale.length > 0) {
+        getViewportState().removeEntities(stale, { fromMarks: true });
       }
     };
     const pruneTimer = window.setInterval(prune, PRUNE_INTERVAL_MS);

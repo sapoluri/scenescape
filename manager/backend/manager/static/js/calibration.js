@@ -1,19 +1,46 @@
-// SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+// SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 "use strict";
 
 import { APP_NAME, IMAGE_CALIBRATE } from "/static/js/constants.js";
-import { ConvergedCameraCalibration } from "/static/js/cameracalibrate.js";
 
 var calibration_strategy;
 let camera_calibration;
+/** @type {Promise<object> | null} */
+let cameraCalibrationPromise = null;
 const AUTOCALIB_PROXY_BASE = "/api/v1/autocalibration";
 
-// Initialize after DOM is ready
+function isLegacyCalibratePage() {
+  return window.location.href.includes("/cam/calibrate/");
+}
+
+/**
+ * Lazy-load cameracalibrate.js (and its /static/assets/three.module.js).
+ * Scene detail uses the Vite Three bundle; loading legacy Three on every
+ * page that imports sscape.js causes "Multiple instances of Three.js".
+ */
+function ensureCameraCalibration() {
+  if (camera_calibration) {
+    return Promise.resolve(camera_calibration);
+  }
+  if (!cameraCalibrationPromise) {
+    cameraCalibrationPromise = import("/static/js/cameracalibrate.js").then(
+      ({ ConvergedCameraCalibration }) => {
+        camera_calibration = new ConvergedCameraCalibration();
+        window.camera_calibration = camera_calibration;
+        return camera_calibration;
+      },
+    );
+  }
+  return cameraCalibrationPromise;
+}
+
+// Only instantiate the legacy Three viewport on the calibrate page.
 document.addEventListener("DOMContentLoaded", function () {
-  camera_calibration = new ConvergedCameraCalibration();
-  window.camera_calibration = camera_calibration;
+  if (isLegacyCalibratePage()) {
+    void ensureCameraCalibration();
+  }
 });
 
 async function startCameraCalibration(cameraUID, image, intrinsics) {
@@ -206,7 +233,8 @@ function parseTransformList(raw) {
   return text.split(",");
 }
 
-function initializeCalibrationSettings() {
+async function initializeCalibrationSettings() {
+  await ensureCameraCalibration();
   if ($(".cameraCal").length) {
     camera_calibration.initializeCamCanvas(
       $("#camera_img_canvas")[0],
@@ -261,7 +289,8 @@ function initializeCalibrationSettings() {
   }
 }
 
-function updateCalibrationView(msg) {
+async function updateCalibrationView(msg) {
+  await ensureCameraCalibration();
   const image = "data:image/jpeg;base64," + msg.image;
   const cameraMatrix = [
     [$("#id_intrinsics_fx").val(), 0, $("#id_intrinsics_cx").val()],
@@ -279,7 +308,8 @@ function updateCalibrationView(msg) {
   $("#snapshot").trigger("click");
 }
 
-function handleAutoCalibrationPose(msg) {
+async function handleAutoCalibrationPose(msg) {
+  await ensureCameraCalibration();
   if (msg.status == "success") {
     camera_calibration.clearCalibrationPoints();
     camera_calibration.addAutoCalibrationPoints(msg);
@@ -295,7 +325,8 @@ function handleAutoCalibrationPose(msg) {
   document.getElementById("top_save").disabled = false;
 }
 
-function setMqttForCalibration(client) {
+async function setMqttForCalibration(client) {
+  await ensureCameraCalibration();
   camera_calibration.setMqttClient(
     client,
     APP_NAME + IMAGE_CALIBRATE + $("#sensor_id").val(),

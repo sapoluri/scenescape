@@ -30,6 +30,18 @@ const region = (id: string): RegionEntity => ({
   bufferSize: 0,
 });
 
+const mark = (id: string): MarkEntity => ({
+  id,
+  type: "mark",
+  name: id,
+  visible: true,
+  className: "person",
+  color: "#ff0000",
+  position: [1, 2, 0],
+  heading: 0,
+  speed: 0,
+});
+
 describe("useViewportStore", () => {
   beforeEach(() => {
     useViewportStore.getState().clearEntities();
@@ -64,11 +76,56 @@ describe("useViewportStore", () => {
     expect(after.selectedId).toBeNull();
   });
 
+  it("batch-removes entities without a struct bump for marks", () => {
+    const s = useViewportStore.getState();
+    s.upsertEntities([region("a")]);
+    s.upsertEntities([mark("m1"), mark("m2")], { fromMarks: true });
+    const before = useViewportStore.getState().structVersion;
+    s.removeEntities(["m1", "m2"], { fromMarks: true });
+    const after = useViewportStore.getState();
+    expect(after.entities["m1"]).toBeUndefined();
+    expect(after.entities["m2"]).toBeUndefined();
+    expect(after.entities["a"]).toBeDefined();
+    expect(after.structVersion).toBe(before);
+  });
+
+  it("clears and upserts marks in one write", () => {
+    const s = useViewportStore.getState();
+    s.upsertEntities([mark("m1"), mark("m2")], { fromMarks: true });
+    const before = useViewportStore.getState().structVersion;
+    let notifications = 0;
+    const unsub = useViewportStore.subscribe(() => {
+      notifications += 1;
+    });
+    s.upsertEntities([mark("m3")], {
+      fromMarks: true,
+      removeIds: ["m1", "m2"],
+    });
+    unsub();
+    const after = useViewportStore.getState();
+    expect(after.entities["m1"]).toBeUndefined();
+    expect(after.entities["m2"]).toBeUndefined();
+    expect(after.entities["m3"]).toBeDefined();
+    expect(after.structVersion).toBe(before);
+    expect(notifications).toBe(1);
+  });
+
   it("removes entities by type", () => {
     const s = useViewportStore.getState();
     s.upsertEntities([region("a"), region("b")]);
     s.removeEntitiesByType("region");
     expect(Object.keys(useViewportStore.getState().entities)).toHaveLength(0);
+  });
+
+  it("does not bump structVersion when clearing marks by type", () => {
+    const s = useViewportStore.getState();
+    s.upsertEntities([mark("m1"), region("a")]);
+    const before = useViewportStore.getState().structVersion;
+    s.removeEntitiesByType("mark");
+    const after = useViewportStore.getState();
+    expect(after.entities["m1"]).toBeUndefined();
+    expect(after.entities["a"]).toBeDefined();
+    expect(after.structVersion).toBe(before);
   });
 
   it("toggles overlays", () => {
@@ -185,18 +242,6 @@ describe("history (undo/redo)", () => {
   beforeEach(() => {
     resetGeometryModel();
     useViewportStore.getState().clearEntities();
-  });
-
-  const mark = (id: string): MarkEntity => ({
-    id,
-    type: "mark",
-    name: id,
-    visible: true,
-    className: "person",
-    color: "#ff0000",
-    position: [1, 2, 0],
-    heading: 0,
-    speed: 0,
   });
 
   it("undoes and redoes a region creation", () => {

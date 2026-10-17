@@ -5,7 +5,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { loadUiBootstrap } from "./lib/uiBootstrap";
 import { ensureSceneDetailDom } from "./lib/ensureSceneDetailDom";
-import { sceneMapBitmapUrl } from "./lib/sceneMapBitmap";
 import { SceneDetailApp } from "./scene/SceneDetailApp";
 import type { SceneDetailBootstrap } from "./scene/types";
 import "./tokens/tokens.css";
@@ -28,10 +27,10 @@ async function main(): Promise<void> {
   if (!bootstrap || !rootEl) {
     return;
   }
-  /* Prefer React map before sscape.js document.ready reads the flag. */
-  window.ssUseReactMap = Boolean(sceneMapBitmapUrl(bootstrap.scene));
-  window.ssReactOwnsMqtt = Boolean(window.ssUseReactMap);
-  window.ssReactOwnsCameraStrip = Boolean(window.ssUseReactMap);
+  /* Single-pane owns MQTT / strip / marks regardless of map bitmap. */
+  window.ssUseReactMap = true;
+  window.ssReactOwnsMqtt = true;
+  window.ssReactOwnsCameraStrip = true;
   ensureSceneDetailDom(bootstrap);
   document.documentElement.classList.add("ss-scene-workspace");
   document.body.classList.add("ss-scene-workspace");

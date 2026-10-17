@@ -3,8 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildMarkEntities,
   colorFromTrackId,
   deriveHeading,
+  markKeysLeftScene,
   markLabel,
   parseMarkPosition,
   trackIdFromMarkKey,
@@ -62,5 +64,49 @@ describe("trackIdFromMarkKey", () => {
   it("strips the mark: prefix", () => {
     expect(trackIdFromMarkKey("mark:a1b2c3d4")).toBe("a1b2c3d4");
     expect(trackIdFromMarkKey("a1b2c3d4")).toBe("a1b2c3d4");
+  });
+});
+
+describe("markKeysLeftScene", () => {
+  it("returns store keys omitted from the current frame", () => {
+    expect(
+      markKeysLeftScene(
+        ["mark:a", "mark:b", "mark:c"],
+        [{ id: "b", translation: [1, 2] }],
+      ),
+    ).toEqual(["mark:a", "mark:c"]);
+  });
+
+  it("clears all when the frame is empty", () => {
+    expect(markKeysLeftScene(["mark:a", "mark:b"], [])).toEqual([
+      "mark:a",
+      "mark:b",
+    ]);
+  });
+
+  it("keeps an id present even when translation is missing", () => {
+    expect(
+      markKeysLeftScene(["mark:a"], [{ id: "a" }]),
+    ).toEqual([]);
+  });
+});
+
+describe("buildMarkEntities", () => {
+  it("upserts positions and records seen state", () => {
+    const seen = new Map();
+    const entities = buildMarkEntities(
+      [{ id: "t1", type: "person", translation: [1, 2, 0] }],
+      seen,
+      { person: "#ff0000" },
+      1000,
+    );
+    expect(entities).toHaveLength(1);
+    expect(entities[0]).toMatchObject({
+      id: "mark:t1",
+      className: "person",
+      color: "#ff0000",
+      position: [1, 2, 0],
+    });
+    expect(seen.get("mark:t1")?.lastSeen).toBe(1000);
   });
 });

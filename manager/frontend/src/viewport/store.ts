@@ -84,14 +84,22 @@ interface ViewportStore extends ViewportUiState {
   poseVersion: number;
   past: HistorySnapshot[];
   future: HistorySnapshot[];
-  /** Insert or replace entities by id. */
+  /**
+   * Insert or replace entities by id. Optional `removeIds` apply in the same
+   * write (one subscribe) — used by live marks for frame-diff clear + upsert.
+   */
   upsertEntities: (
     entities: ViewportEntity[],
-    opts?: { fromMarks?: boolean },
+    opts?: { fromMarks?: boolean; removeIds?: string[] },
   ) => void;
   /** Partial update of one entity. */
   updateEntity: (id: string, patch: Partial<ViewportEntity>) => void;
   removeEntity: (id: string) => void;
+  /** Batch remove by id. `fromMarks` skips structVersion (live track churn). */
+  removeEntities: (
+    ids: string[],
+    opts?: { fromMarks?: boolean },
+  ) => void;
   removeEntitiesByType: (type: ViewportEntity["type"]) => void;
   clearEntities: () => void;
   select: (id: string | null) => void;
@@ -169,12 +177,40 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   future: [],
   upsertEntities: (entities, opts) =>
     set((s) => {
+      const removeIds = opts?.removeIds;
+      if (
+        entities.length === 0 &&
+        (!removeIds || removeIds.length === 0)
+      ) {
+        return s;
+      }
       const next = { ...s.entities };
+      let selectedId = s.selectedId;
+      let projectCameraIds = s.projectCameraIds;
+      if (removeIds?.length) {
+        const removed = new Set<string>();
+        for (const id of removeIds) {
+          if (!(id in next)) {
+            continue;
+          }
+          delete next[id];
+          removed.add(id);
+          getPersistState().dropBaseline(id);
+        }
+        if (removed.size > 0) {
+          if (selectedId && removed.has(selectedId)) {
+            selectedId = null;
+          }
+          projectCameraIds = projectCameraIds.filter((x) => !removed.has(x));
+        }
+      }
       for (const e of entities) {
         next[e.id] = e;
       }
       return {
         entities: next,
+        selectedId,
+        projectCameraIds,
         structVersion: opts?.fromMarks ? s.structVersion : s.structVersion + 1,
       };
     }),
@@ -195,19 +231,33 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
           : { structVersion: s.structVersion + 1 }),
       };
     }),
-  removeEntity: (id) =>
+  removeEntity: (id) => get().removeEntities([id]),
+  removeEntities: (ids, opts) =>
     set((s) => {
-      if (!(id in s.entities)) {
+      if (ids.length === 0) {
         return s;
       }
       const next = { ...s.entities };
-      delete next[id];
-      getPersistState().dropBaseline(id);
+      const removed = new Set<string>();
+      for (const id of ids) {
+        if (!(id in next)) {
+          continue;
+        }
+        delete next[id];
+        removed.add(id);
+        getPersistState().dropBaseline(id);
+      }
+      if (removed.size === 0) {
+        return s;
+      }
       return {
         entities: next,
-        selectedId: s.selectedId === id ? null : s.selectedId,
-        projectCameraIds: s.projectCameraIds.filter((x) => x !== id),
-        structVersion: s.structVersion + 1,
+        selectedId:
+          s.selectedId && removed.has(s.selectedId) ? null : s.selectedId,
+        projectCameraIds: s.projectCameraIds.filter((x) => !removed.has(x)),
+        structVersion: opts?.fromMarks
+          ? s.structVersion
+          : s.structVersion + 1,
       };
     }),
   removeEntitiesByType: (type) =>
@@ -226,11 +276,16 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
         }
         next[id] = e;
       }
+      if (removedIds.size === 0) {
+        return s;
+      }
       return {
         entities: next,
         selectedId: removedSelected ? null : s.selectedId,
         projectCameraIds: s.projectCameraIds.filter((x) => !removedIds.has(x)),
-        structVersion: s.structVersion + 1,
+        // Live marks are not structural scene graph — avoid mesh rebuilds.
+        structVersion:
+          type === "mark" ? s.structVersion : s.structVersion + 1,
       };
     }),
   clearEntities: () => {

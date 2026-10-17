@@ -9,7 +9,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { loadUiBootstrap } from "./lib/uiBootstrap";
 import { ensureSceneDetailDom } from "./lib/ensureSceneDetailDom";
-import { sceneMapBitmapUrl } from "./lib/sceneMapBitmap";
 import { AppChrome } from "./chrome/AppChrome";
 import type { ChromeBootstrap } from "./chrome/types";
 import {
@@ -129,9 +128,10 @@ async function mountPage(): Promise<void> {
     detailRoot.id = "ss-scene-detail-root";
     detailRoot.className = "ss-scene-detail-root";
     spaRoot.appendChild(detailRoot);
-    window.ssUseReactMap = Boolean(sceneMapBitmapUrl(bootstrap.scene));
-    window.ssReactOwnsMqtt = Boolean(window.ssUseReactMap);
-    window.ssReactOwnsCameraStrip = Boolean(window.ssUseReactMap);
+    /* Single-pane owns MQTT / strip / marks regardless of map bitmap. */
+    window.ssUseReactMap = true;
+    window.ssReactOwnsMqtt = true;
+    window.ssReactOwnsCameraStrip = true;
     ensureSceneDetailDom(bootstrap);
     window.ssRefreshSceneId?.();
     document.documentElement.classList.add("ss-scene-workspace");

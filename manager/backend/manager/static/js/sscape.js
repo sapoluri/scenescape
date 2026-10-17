@@ -188,13 +188,14 @@ function schedulePlot(objects) {
     plotRafId = null;
     var objs = pendingPlotObjects;
     pendingPlotObjects = null;
-    // React map owns live marks; Snap keeps child overlays only.
+    // Always notify React (3D viewport / Telemetry). Snap plot only when
+    // the legacy 2D map still owns the canvas — not gated on map bitmap.
+    window.dispatchEvent(
+      new CustomEvent("ss-scene-objects", {
+        detail: { objects: objs || [] },
+      }),
+    );
     if (window.ssUseReactMap) {
-      window.dispatchEvent(
-        new CustomEvent("ss-scene-objects", {
-          detail: { objects: objs || [] },
-        }),
-      );
       return;
     }
     plot(
