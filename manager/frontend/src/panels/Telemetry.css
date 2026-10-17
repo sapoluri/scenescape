@@ -58,6 +58,102 @@
   color: var(--ss-text-muted);
 }
 
+.tl-mqtt-toggle {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tl-mqtt-toggle:hover {
+  background: var(--ss-hover-bg, var(--ss-elevated));
+}
+
+.tl-mqtt-toggle.is-open {
+  border-color: var(--ss-accent, #0a84ff);
+  background: var(--ss-accent-fill, rgba(10, 132, 255, 0.18));
+}
+
+.tl-mqtt-toggle:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: 2px;
+}
+
+.tl-broker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ss-card-border);
+  border-radius: var(--ss-radius, 8px);
+  background: var(--ss-elevated, var(--ss-card-bg));
+  flex: none;
+}
+
+.tl-broker-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tl-broker-label {
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tl-broker-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  color: var(--ss-text);
+  background: none;
+  padding: 0;
+}
+
+.tl-broker-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--ss-text-muted);
+  cursor: pointer;
+  flex: none;
+}
+
+.tl-broker-copy:hover {
+  background: var(--ss-hover-bg);
+  color: var(--ss-accent, #0a84ff);
+}
+
+.tl-broker-copy:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: 1px;
+}
+
+.tl-broker-note {
+  margin: 2px 0 0;
+  color: var(--ss-text-muted);
+  font-size: var(--ss-type-workspace-meta, 0.6875rem);
+  line-height: 1.4;
+}
+
+.tl-broker-note strong {
+  color: var(--ss-text);
+  font-weight: 600;
+}
+
 .tl-classes {
   display: flex;
   flex-wrap: wrap;

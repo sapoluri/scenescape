@@ -134,6 +134,8 @@ export interface SinglePaneViewProps {
   assetMarkColors?: Record<string, string>;
   isSuperuser?: boolean;
   mqttConnected?: boolean | null;
+  /** Bootstrap WSS broker URL for Telemetry connect details. */
+  wssConnection?: string;
   sceneChrome?: SceneChromeActions | null;
   /** Bump when a camera/sensor is created via sheet so the Open gallery reloads. */
   directoryRefreshToken?: number;
@@ -165,6 +167,7 @@ export function SinglePaneView({
   assetMarkColors,
   isSuperuser = false,
   mqttConnected = null,
+  wssConnection = "",
   sceneChrome = null,
   directoryRefreshToken = 0,
 }: SinglePaneViewProps) {
@@ -540,7 +543,12 @@ export function SinglePaneView({
                       onPreviewOpenChange={setPreview}
                     />
                   )}
-                  {dockTab === "telemetry" && <Telemetry sceneId={sceneId} />}
+                  {dockTab === "telemetry" && (
+                    <Telemetry
+                      sceneId={sceneId}
+                      wssConnection={wssConnection}
+                    />
+                  )}
                 </div>
               </div>
               {propertiesOpen ? (

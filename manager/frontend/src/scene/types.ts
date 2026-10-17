@@ -84,6 +84,11 @@ export type SceneDetailBootstrap = {
   }[];
   authToken: string;
   isSuperuser: boolean;
+  /**
+   * Host IP/name for MQTT/WSS connect hints (not loopback when avoidable).
+   * From request Host, SCENESCAPE_ALLOWED_HOSTS, or default-route IP.
+   */
+  brokerHost?: string;
   /** True when Manager runs in Kubernetes; advanced camera pipeline fields apply. */
   isKubernetes: boolean;
   appVersion: string | null;

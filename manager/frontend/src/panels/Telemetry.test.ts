@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MarkEntity } from "../viewport/types";
 import {
+  brokerConnectDetails,
   capTelemetryEvents,
   diffTelemetryBatch,
   MAX_TELEMETRY_EVENTS,
+  mqttNativeUrl,
+  sceneDataTopic,
   summarizeMarks,
   type TelemetryEvent,
 } from "./Telemetry";
@@ -147,5 +150,39 @@ describe("summarizeMarks", () => {
 
   it("returns an empty list when there are no marks", () => {
     expect(summarizeMarks([])).toEqual([]);
+  });
+});
+
+describe("broker connect helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds the regulated scene topic", () => {
+    expect(sceneDataTopic("abc")).toBe("scenescape/regulated/scene/abc");
+    expect(sceneDataTopic("")).toBe("scenescape/regulated/scene/");
+  });
+
+  it("builds the native MQTT URL on 1883", () => {
+    expect(mqttNativeUrl("broker.example")).toBe("mqtt://broker.example:1883");
+    expect(mqttNativeUrl("  ")).toBe("mqtt://localhost:1883");
+  });
+
+  it("assembles websocket, mqtt, and topic for display", () => {
+    vi.stubGlobal("window", {
+      location: {
+        hostname: "scene.local",
+        port: "",
+        protocol: "https:",
+      },
+    });
+    const details = brokerConnectDetails(
+      "wss://localhost/mqtt",
+      "scene-1",
+      "scene.local",
+    );
+    expect(details.websocketUrl).toBe("wss://scene.local/mqtt");
+    expect(details.mqttUrl).toBe("mqtt://scene.local:1883");
+    expect(details.topic).toBe("scenescape/regulated/scene/scene-1");
   });
 });

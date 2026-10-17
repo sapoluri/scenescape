@@ -1,19 +1,60 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useAppToast } from "../components/ToastProvider";
+import { rewriteBrokerUrl } from "../mqtt/client";
+import { copyTextToClipboard } from "../scene/editors/copyText";
 import { useMqttConnected } from "../scene/useLiveChrome";
 import { useViewportMarksList } from "../viewport/marks";
 import type { MarkEntity } from "../viewport/types";
 import "./Telemetry.css";
 
 /**
- * Telemetry pane: MQTT connection chip, live tracked-object summary, and a
- * capped event feed of track appearances/disappearances.
+ * Telemetry pane: MQTT connection chip (toggles broker connect details),
+ * live tracked-object summary, and a capped event feed of track
+ * appearances/disappearances.
  *
  * Live data comes from the viewport scene-graph store (fed by the frozen
  * `ss-scene-objects` event in `viewport/marks.ts`) — no new plumbing.
  */
+
+/** Regulated scene topic clients subscribe to for live detections. */
+export function sceneDataTopic(sceneId: string): string {
+  return sceneId
+    ? `scenescape/regulated/scene/${sceneId}`
+    : "scenescape/regulated/scene/";
+}
+
+/** Native MQTT URL for external clients (port 1883). */
+export function mqttNativeUrl(hostname: string): string {
+  const host = hostname.trim() || "localhost";
+  return `mqtt://${host}:1883`;
+}
+
+export type BrokerConnectDetails = {
+  websocketUrl: string;
+  mqttUrl: string;
+  topic: string;
+};
+
+/**
+ * Display values for the Telemetry broker panel. WebSocket URL matches the
+ * UI client (`rewriteBrokerUrl`); MQTT is hostname:1883 for native clients.
+ */
+export function brokerConnectDetails(
+  wssConnection: string,
+  sceneId: string,
+  hostname: string = typeof window !== "undefined"
+    ? window.location.hostname
+    : "localhost",
+): BrokerConnectDetails {
+  return {
+    websocketUrl: rewriteBrokerUrl(wssConnection || "wss://localhost/mqtt"),
+    mqttUrl: mqttNativeUrl(hostname),
+    topic: sceneDataTopic(sceneId),
+  };
+}
 
 export const MAX_TELEMETRY_EVENTS = 200;
 
@@ -167,27 +208,115 @@ export function useTelemetryFeed(sceneId: string): TelemetryEvent[] {
   return events;
 }
 
-function MqttChip({ connected }: { connected: boolean }): React.JSX.Element {
+function MqttChip({
+  connected,
+  expanded,
+  controlsId,
+  onToggle,
+}: {
+  connected: boolean;
+  expanded: boolean;
+  controlsId: string;
+  onToggle: () => void;
+}): React.JSX.Element {
   return (
-    <span
-      className={`tl-chip tl-mqtt${connected ? " is-ok" : " is-bad"}`}
-      role="status"
-      aria-label={connected ? "MQTT connected" : "MQTT disconnected"}
-      title={connected ? "MQTT connected" : "MQTT disconnected — live data paused"}
+    <button
+      type="button"
+      className={`tl-chip tl-mqtt tl-mqtt-toggle${connected ? " is-ok" : " is-bad"}${expanded ? " is-open" : ""}`}
+      aria-expanded={expanded}
+      aria-controls={controlsId}
+      title={
+        expanded
+          ? "Hide broker connection details"
+          : connected
+            ? "MQTT connected — show broker details"
+            : "MQTT disconnected — show broker details"
+      }
+      onClick={onToggle}
     >
       <span className="tl-dot" aria-hidden="true" />
       {connected ? "MQTT" : "MQTT off"}
-    </span>
+    </button>
   );
 }
 
-export function Telemetry({ sceneId }: { sceneId: string }): React.JSX.Element {
+function BrokerCopyRow({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  onCopy: (text: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="tl-broker-row">
+      <span className="tl-broker-label">{label}</span>
+      <code className="tl-broker-value" title={value}>
+        {value}
+      </code>
+      <button
+        type="button"
+        className="tl-broker-copy"
+        title={`Copy ${label}`}
+        aria-label={`Copy ${label}`}
+        onClick={() => onCopy(value)}
+      >
+        <i className="bi bi-clipboard" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function BrokerPanel({
+  id,
+  details,
+}: {
+  id: string;
+  details: BrokerConnectDetails;
+}): React.JSX.Element {
+  const toast = useAppToast();
+  const copy = (text: string) => {
+    void copyTextToClipboard(text, toast.show);
+  };
+  return (
+    <div className="tl-broker" id={id} role="region" aria-label="Broker connection">
+      <BrokerCopyRow
+        label="WebSocket"
+        value={details.websocketUrl}
+        onCopy={copy}
+      />
+      <BrokerCopyRow label="MQTT" value={details.mqttUrl} onCopy={copy} />
+      <BrokerCopyRow label="Topic" value={details.topic} onCopy={copy} />
+      <p className="tl-broker-note">
+        Forward port <strong>1883</strong> in the deployment config if you need
+        native MQTT clients. Browser and proxy clients use the WebSocket URL
+        (typically via 443/80).
+      </p>
+    </div>
+  );
+}
+
+export function Telemetry({
+  sceneId,
+  wssConnection = "",
+}: {
+  sceneId: string;
+  /** Bootstrap WSS URL; rewritten for display to match the live client. */
+  wssConnection?: string;
+}): React.JSX.Element {
   const connected = useMqttConnected();
   const marks = useViewportMarksList();
   const events = useTelemetryFeed(sceneId);
   const summary = summarizeMarks(marks);
   const feedRef = useRef<HTMLOListElement>(null);
   const [hovering, setHovering] = useState(false);
+  const [brokerOpen, setBrokerOpen] = useState(false);
+  const brokerPanelId = useId();
+  const details = useMemo(
+    () => brokerConnectDetails(wssConnection, sceneId),
+    [wssConnection, sceneId],
+  );
 
   // Newest entries land on top; keep the top in view unless the user is
   // reading (hover pauses auto-scroll).
@@ -197,16 +326,38 @@ export function Telemetry({ sceneId }: { sceneId: string }): React.JSX.Element {
     }
   }, [events, hovering]);
 
+  useEffect(() => {
+    if (!brokerOpen) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setBrokerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [brokerOpen]);
+
   return (
     <section className="tl-pane" aria-label="Telemetry">
       <div className="tl-head">
-        <MqttChip connected={connected} />
+        <MqttChip
+          connected={connected}
+          expanded={brokerOpen}
+          controlsId={brokerPanelId}
+          onToggle={() => setBrokerOpen((v) => !v)}
+        />
         <span className="tl-now" aria-live="polite">
           {marks.length === 0
             ? "no live objects"
             : `${marks.length} object${marks.length === 1 ? "" : "s"} now`}
         </span>
       </div>
+
+      {brokerOpen ? (
+        <BrokerPanel id={brokerPanelId} details={details} />
+      ) : null}
 
       {summary.length > 0 && (
         <div className="tl-classes" aria-label="Live objects by class">
@@ -228,7 +379,7 @@ export function Telemetry({ sceneId }: { sceneId: string }): React.JSX.Element {
           <p>No telemetry yet.</p>
           <p className="tl-empty-hint">
             Track appearances and disappearances stream here while the MQTT
-            client is connected.
+            client is connected. Click the MQTT chip for broker URLs.
           </p>
         </div>
       ) : (

@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import socket
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
@@ -13,6 +15,52 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from manager.models import Asset3D, Cam, Scene, SingletonSensor
+
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]", ""})
+
+
+def _is_loopback_host(host: str) -> bool:
+  return (host or "").strip().lower() in _LOOPBACK_HOSTS
+
+
+def _is_ip_literal(host: str) -> bool:
+  try:
+    ipaddress.ip_address(host.strip().strip("[]"))
+    return True
+  except ValueError:
+    return False
+
+
+def advertise_broker_host(request) -> str:
+  """
+  Host IP (or name) for MQTT/WSS connect hints in Telemetry.
+
+  Prefer the request Host when it is not loopback; otherwise the first IP in
+  ALLOWED_HOSTS (from SCENESCAPE_ALLOWED_HOSTS), then the default-route IP.
+  """
+  host = (request.get_host() or "").split(":")[0].strip()
+  if host and not _is_loopback_host(host):
+    return host.strip("[]")
+
+  for candidate in getattr(settings, "ALLOWED_HOSTS", []) or []:
+    if not isinstance(candidate, str) or _is_loopback_host(candidate):
+      continue
+    if candidate in ("*", "."):
+      continue
+    if _is_ip_literal(candidate):
+      return candidate.strip("[]")
+
+  try:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.connect(("8.8.8.8", 80))
+    ip = sock.getsockname()[0]
+    sock.close()
+    if ip and not _is_loopback_host(ip):
+      return ip
+  except OSError:
+    pass
+
+  return host or "localhost"
 
 
 def user_auth_token(user) -> str:
@@ -242,6 +290,7 @@ def build_scene_detail_bootstrap(request, scene_id) -> dict:
     },
     "authToken": user_auth_token(request.user),
     "isSuperuser": request.user.is_superuser,
+    "brokerHost": advertise_broker_host(request),
     "isKubernetes": bool(settings.KUBERNETES_SERVICE_HOST),
     "appVersion": getattr(settings, "APP_VERSION_NUMBER", None),
     "appGitCommit": getattr(settings, "APP_GIT_COMMIT", None),

@@ -120,6 +120,7 @@ function SceneDetailInner({ bootstrap }: Props) {
           authToken={bootstrap.authToken}
           isSuperuser={isSuperuser}
           mqttConnected={mqttConnected}
+          wssConnection={scene.wssConnection || ""}
           sceneChrome={{
             sceneName: scene.name,
             isSuperuser,

@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 
 from manager.models import Cam, ChildScene, Scene, SingletonSensor
 from manager.services.ui_bootstrap import (
+  advertise_broker_host,
   build_chrome_bootstrap,
   build_models_directory_bootstrap,
   build_scene_detail_bootstrap,
@@ -122,6 +123,20 @@ class SceneBootstrapIdentityTests(TestCase):
       scene=self.parent,
       type="generic",
     )
+
+  @override_settings(ALLOWED_HOSTS=["10.0.0.5", "testserver", "localhost"])
+  def test_broker_host_prefers_request_ip(self):
+    request = self.factory.get("/", HTTP_HOST="10.0.0.5")
+    request.user = self.user
+    self.assertEqual(advertise_broker_host(request), "10.0.0.5")
+    payload = build_scene_detail_bootstrap(request, self.parent.id)
+    self.assertEqual(payload["brokerHost"], "10.0.0.5")
+
+  @override_settings(ALLOWED_HOSTS=["localhost", "192.168.1.50", "testserver"])
+  def test_broker_host_uses_allowed_hosts_ip_when_loopback(self):
+    request = self.factory.get("/", HTTP_HOST="localhost")
+    request.user = self.user
+    self.assertEqual(advertise_broker_host(request), "192.168.1.50")
 
   def test_child_id_is_scene_uuid_not_link_pk(self):
     request = self.factory.get("/")
