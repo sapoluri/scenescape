@@ -11,6 +11,7 @@ import {
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
+  MapEntity,
   RegionEntity,
   SensorEntity,
   TripwireEntity,
@@ -76,9 +77,29 @@ export function entityPersistKey(e: ViewportEntity): string {
         color: e.color,
         points: e.points,
       });
+    case "map":
+      return JSON.stringify({
+        name: e.name,
+        position: e.position,
+        rotation: e.rotation,
+        scale: e.scale,
+      });
     default:
       return e.id;
   }
+}
+
+/** Persist scene map GLB TRS (same fields as Scene Manage → Pose). */
+export async function persistMapEntity(
+  authToken: string,
+  sceneId: string,
+  e: MapEntity,
+): Promise<void> {
+  await api.updateSceneJson(authToken, sceneId, {
+    mesh_translation: e.position,
+    mesh_rotation: e.rotation,
+    mesh_scale: e.scale,
+  });
 }
 
 export async function persistCameraEntity(
@@ -294,6 +315,10 @@ export async function saveAllDirtyEntities(args: {
           boot.sensorId,
           e,
         );
+        markEntityPersistClean(e.id);
+        saved += 1;
+      } else if (e.type === "map") {
+        await persistMapEntity(args.authToken, args.sceneId, e);
         markEntityPersistClean(e.id);
         saved += 1;
       } else if (e.type === "region") {

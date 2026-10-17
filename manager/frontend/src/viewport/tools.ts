@@ -91,11 +91,15 @@ export const CREATION_TOOLS: ToolId[] = [
   "measure",
 ];
 
-/** Regions and tripwires are the only entities the scale gizmo can edit. */
+/** Entities the scale gizmo can edit (planar geometry + scene map GLB). */
 export function entityCanScale(
   entity: { type: ViewportEntityType } | null | undefined,
 ): boolean {
-  return entity?.type === "region" || entity?.type === "tripwire";
+  return (
+    entity?.type === "region" ||
+    entity?.type === "tripwire" ||
+    entity?.type === "map"
+  );
 }
 
 export function toolDef(id: ToolId): ToolDef {

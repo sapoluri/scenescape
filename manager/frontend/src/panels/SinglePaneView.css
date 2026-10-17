@@ -11,12 +11,14 @@
   background: var(--ss-viewport-bg, var(--ss-surface));
 }
 
-/* Full-bleed app + options bars; Outliner dock starts below these. */
+/* Full-bleed app + options bars; Outliner dock starts below these.
+   position+z-index so Open/Help menus stack above the floating tool rail. */
 .ss-sp-chrome {
+  position: relative;
   flex: none;
   width: 100%;
   min-width: 0;
-  z-index: 30;
+  z-index: 50;
 }
 
 .ss-sp-body {
@@ -205,31 +207,28 @@
   overflow: hidden;
 }
 
-/* Outliner (or Telemetry) on top. Properties rises from below when something
-   is selected. Preview, when open, sits under that stack. */
+/* Outliner fills the editor. Properties overlays the bottom (content-sized
+   by default; the top handle lets the user shrink it). Preview sits under
+   the editor stack when open. */
 .ss-sp-dock-editor {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .ss-sp-dock-tabs-pane {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.ss-sp-dock-main:not(.is-preview-split):not(.is-props-split)
-  .ss-sp-dock-tabs-pane {
-  flex: 1 1 auto;
-}
-
 .ss-sp-dock-split {
   flex: none;
   height: 6px;
-  margin: -1px 0;
+  margin: 0;
   cursor: row-resize;
   touch-action: none;
   position: relative;
@@ -259,27 +258,80 @@
 }
 
 .ss-sp-dock-props {
-  flex: 1 1 0;
-  min-height: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
   display: flex;
   flex-direction: column;
+  max-height: 85%;
+  height: auto;
   overflow: hidden;
   background: var(--ss-panel-bg, #1e1e21);
+  border-top: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.28);
   animation: ss-props-rise 180ms ease;
+}
+
+.ss-sp-dock-props.is-resized {
+  height: var(--ss-props-height, 40%);
+  max-height: 85%;
 }
 
 .ss-sp-dock-props-head {
   flex: none;
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
   border-bottom: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
   font-size: 12px;
   font-weight: 600;
   color: var(--ss-text, #f5f5f7);
 }
 
-.ss-sp-dock-props > .ss-props {
+.ss-sp-dock-props-title {
   flex: 1;
+  min-width: 0;
+}
+
+.ss-sp-dock-props-close {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ss-text-muted, #8e8e93);
+  cursor: pointer;
+}
+
+.ss-sp-dock-props-close:hover {
+  color: var(--ss-text, #f5f5f7);
+  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.18));
+}
+
+.ss-sp-dock-props-close:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: -2px;
+}
+
+.ss-sp-dock-props-close .bi {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.ss-sp-dock-props > .ss-props {
+  flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
 }
 
 @keyframes ss-props-rise {

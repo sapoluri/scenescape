@@ -142,6 +142,30 @@ describe("useViewportStore", () => {
     });
   });
 
+  it("select returns to Live when the selection changes", () => {
+    const s = useViewportStore.getState();
+    s.setTool("move");
+    s.select("cam-a");
+    expect(useViewportStore.getState()).toMatchObject({
+      selectedId: "cam-a",
+      activeTool: "live",
+    });
+    s.setTool("rotate");
+    s.select("cam-a");
+    expect(useViewportStore.getState().activeTool).toBe("rotate");
+    s.select("cam-b");
+    expect(useViewportStore.getState()).toMatchObject({
+      selectedId: "cam-b",
+      activeTool: "live",
+    });
+    s.setTool("move");
+    s.select(null);
+    expect(useViewportStore.getState()).toMatchObject({
+      selectedId: null,
+      activeTool: "live",
+    });
+  });
+
   it("pairs Ortho with the top preset and Persp with persp", () => {
     const s = useViewportStore.getState();
     s.setOrtho(true);

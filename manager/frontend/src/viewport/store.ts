@@ -47,6 +47,9 @@ const CAMERA_POSE_KEYS = new Set([
 /** Sensor fields that only translate the existing node (no rebuild). */
 const SENSOR_POSE_KEYS = new Set(["position"]);
 
+/** Scene map GLB TRS (no mesh rebuild). */
+const MAP_POSE_KEYS = new Set(["position", "rotation", "scale"]);
+
 function isPoseOnlyPatch(
   prev: ViewportEntity,
   patch: Partial<ViewportEntity>,
@@ -60,6 +63,9 @@ function isPoseOnlyPatch(
   }
   if (prev.type === "sensor") {
     return keys.every((k) => SENSOR_POSE_KEYS.has(k));
+  }
+  if (prev.type === "map") {
+    return keys.every((k) => MAP_POSE_KEYS.has(k));
   }
   return false;
 }
@@ -238,7 +244,15 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       future: [],
     }));
   },
-  select: (id) => set({ selectedId: id }),
+  select: (id) =>
+    set((s) => {
+      // Changing selection (including deselect) returns to Live. Same-id
+      // reselect keeps the current transform tool so gizmo mode persists.
+      if (id === s.selectedId) {
+        return { selectedId: id };
+      }
+      return { selectedId: id, activeTool: "live" };
+    }),
   setTool: (activeTool) => set({ activeTool }),
   beginEditing: (id) =>
     set((s) => ({

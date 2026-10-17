@@ -8,16 +8,8 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useAppToast } from "../components/ToastProvider";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
-import type { SceneChildBootstrap } from "../scene/types";
-import {
-  frameToBase64,
-  humanAutocalibMessage,
-  resolveAutocalibAvailability,
-  startCameraAutocalibration,
-} from "../lib/autocalibration";
 import {
   fovFromFy,
   fyFromFov,
@@ -27,12 +19,18 @@ import {
 import {
   entityPersistKey,
   persistCameraEntity,
+  persistMapEntity,
   persistRegionEntity,
   persistSensorEntity,
   persistTripwireEntity,
+  remapGeometryEntityIds,
 } from "../lib/entityPersist";
 import { api, type RestError } from "../lib/rest";
-import { parseDeleteTarget, restDeleteTarget } from "../lib/restDelete";
+import {
+  cameraCardFromRest,
+  upsertCameraCard,
+} from "../lib/sceneEntityCards";
+import type { SceneCameraBootstrap, SceneChildBootstrap } from "../scene/types";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import type { CameraOptics } from "../viewport/calibrate/types";
@@ -49,6 +47,7 @@ import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
   ChildSceneEntity,
+  MapEntity,
   MarkEntity,
   RegionEntity,
   SensorAreaMode,
@@ -400,44 +399,26 @@ function TripwireProps({ e }: { e: TripwireEntity }) {
   );
 }
 
-function frameSrcForSensor(sensorId: string): string | null {
-  const imgs = document.querySelectorAll<HTMLImageElement>(
-    `img[data-ss-card-sensor="${CSS.escape(sensorId)}"]`,
-  );
-  for (const img of imgs) {
-    const src = img.currentSrc || img.getAttribute("src") || "";
-    if (!src || src.includes("offline.png")) {
-      continue;
-    }
-    if (img.naturalWidth > 0 || src.startsWith("data:image")) {
-      return src;
-    }
-  }
-  return null;
-}
-
 function CameraProps({
   e,
   sensorId,
   sceneId,
   calibrateHref,
-  deleteUrl,
   authToken,
-  sceneHomeHref,
   onCalibrate,
+  onCamerasChange,
 }: {
   e: CameraEntity;
   sensorId?: string;
   sceneId?: string;
   calibrateHref?: string;
-  deleteUrl?: string | null;
   authToken?: string;
-  sceneHomeHref?: string;
   onCalibrate?: () => void;
+  onCamerasChange?: Dispatch<SetStateAction<SceneCameraBootstrap[]>>;
 }) {
   const toast = useAppToast();
+  const isDraft = e.id.startsWith("draft-");
   const projecting = useViewportStore((s) => s.projectCameraIds.includes(e.id));
-  const projectOpacity = useViewportStore((s) => s.projectOpacity);
   // Wizard toolbar owns Auto Calibrate + Save while this camera is calibrating.
   const calibrating = useCalibrateStore((s) => s.active && s.cameraId === e.id);
   const calOptics = useCalibrateStore((s) =>
@@ -453,17 +434,18 @@ function CameraProps({
   const dirty = poseDirty || opticsDirty;
   const [saveBusy, setSaveBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
-  const [autoBusy, setAutoBusy] = useState(false);
-  const [autoReady, setAutoReady] = useState(false);
-  const [autoTitle, setAutoTitle] = useState(
-    "Checking auto-calibration service…",
-  );
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
-    if (!sensorId || !authToken) {
+    if (!authToken) {
       setOptics(null);
       setOpticsBaseline(null);
+      return;
+    }
+    // Draft cameras have no server row yet — seed default optics locally.
+    if (!sensorId || isDraft) {
+      const o = parseCameraOptics({}, e.name);
+      setOptics(o);
+      setOpticsBaseline(opticsPersistKey(o));
       return;
     }
     let cancelled = false;
@@ -487,7 +469,7 @@ function CameraProps({
     return () => {
       cancelled = true;
     };
-  }, [sensorId, authToken, e.name, e.id]);
+  }, [sensorId, authToken, e.name, e.id, isDraft]);
 
   // Live fx/fy (and friends) from in-viewport calibrate (≥6 pairs).
   useEffect(() => {
@@ -496,34 +478,13 @@ function CameraProps({
     }
     setOptics(calOptics);
   }, [calibrating, calOptics]);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!sceneId) {
-        setAutoReady(false);
-        setAutoTitle("Auto Calibrate system not available for this scene");
-        return;
-      }
-      const avail = await resolveAutocalibAvailability(sceneId, authToken);
-      if (cancelled) {
-        return;
-      }
-      setAutoReady(avail.ready);
-      setAutoTitle(avail.title);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sensorId, sceneId, authToken]);
 
   const patch = (p: Partial<CameraEntity>) =>
     getViewportState().updateEntity(e.id, p);
   const setPos = (i: number, v: number) => {
     const position: [number, number, number] = [...e.position];
     position[i] = roundDigits(v, 3);
-    patch({ position });
+    patch({ position, posed: true });
   };
   const setRot = (i: number, v: number) => {
     const rotation: [number, number, number] = [...e.rotation];
@@ -559,7 +520,7 @@ function CameraProps({
   };
 
   const onSave = async () => {
-    if (!dirty || saveBusy || !sensorId || !authToken || !sceneId) {
+    if (!dirty || saveBusy || !authToken || !sceneId) {
       return;
     }
     setSaveBusy(true);
@@ -568,19 +529,77 @@ function CameraProps({
       if (!cur || cur.type !== "camera") {
         return;
       }
-      await persistCameraEntity(
-        authToken,
-        sceneId,
-        sensorId,
-        cur,
-        optics ?? undefined,
-      );
       const restRotation = restPoseToRigEuler(cur.rotation);
-      getViewportState().updateEntity(e.id, {
+      let persistId = e.id;
+      let persistSensorId = sensorId;
+
+      if (isDraft || !persistSensorId) {
+        const base =
+          cur.name.trim().replace(/\s+/g, "_") ||
+          `camera_${Date.now().toString(36)}`;
+        let sensor_id = base;
+        const existing = new Set(
+          Object.values(getViewportState().entities)
+            .filter((x) => x.type === "camera" && x.id !== e.id)
+            .map((x) => x.id),
+        );
+        let n = 2;
+        while (existing.has(sensor_id)) {
+          sensor_id = `${base}_${n}`;
+          n += 1;
+        }
+        const payload: Record<string, unknown> = {
+          name: cur.name,
+          sensor_id,
+          scene: sceneId,
+          transform_type: "euler",
+          translation: cur.position,
+          rotation: restRotation,
+          scale: [1, 1, 1],
+        };
+        if (optics) {
+          payload.intrinsics = {
+            fx: optics.fx,
+            fy: optics.fy,
+            cx: optics.cx,
+            cy: optics.cy,
+          };
+          payload.distortion = {
+            k1: optics.k1,
+            k2: optics.k2,
+            p1: optics.p1,
+            p2: optics.p2,
+            k3: optics.k3,
+          };
+          payload.resolution = {
+            width: optics.width,
+            height: optics.height,
+          };
+        }
+        const created = await api.createCamera(authToken, payload);
+        const card = cameraCardFromRest(created);
+        if (!card) {
+          throw new Error("Camera create returned no id");
+        }
+        remapGeometryEntityIds({ [e.id]: card.id });
+        onCamerasChange?.((prev) => upsertCameraCard(prev, card));
+        persistId = card.id;
+        persistSensorId = card.sensorId;
+      } else {
+        await persistCameraEntity(
+          authToken,
+          sceneId,
+          persistSensorId,
+          cur,
+          optics ?? undefined,
+        );
+      }
+
+      getViewportState().updateEntity(persistId, {
         restRotation,
         posed: true,
       });
-      markEntityPersistClean(e.id);
+      markEntityPersistClean(persistId);
       if (optics) {
         setOpticsBaseline(opticsPersistKey(optics));
       }
@@ -594,131 +613,54 @@ function CameraProps({
     }
   };
 
-  const onAutoCalibrate = async () => {
-    if (!sensorId || !authToken || autoBusy) {
-      return;
-    }
-    const src = frameSrcForSensor(sensorId);
-    if (!src) {
-      toast.show("Enable Live View and wait for a camera frame first", "bad");
-      return;
-    }
-    setAutoBusy(true);
-    try {
-      const row = (await api.getCamera(authToken, sensorId)) ?? {};
-      const intr = (row.intrinsics as Record<string, number>) || {};
-      const fx = Number(intr.fx) || 905;
-      const fy = Number(intr.fy) || fx;
-      const cx = Number(intr.cx) || 640;
-      const cy = Number(intr.cy) || 360;
-      const image = await frameToBase64(src);
-      const result = await startCameraAutocalibration(sensorId, image, [
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0, 0, 1],
-      ]);
-      if (result.status === "error") {
-        toast.show(
-          humanAutocalibMessage(result, "Auto calibrate failed"),
-          "bad",
-        );
-      } else {
-        toast.show("Auto calibrate started", "ok");
-      }
-    } catch (err) {
-      toast.show((err as Error).message || "Auto calibrate failed", "bad");
-    } finally {
-      setAutoBusy(false);
-    }
-  };
-
-  const onDelete = async () => {
-    if (!deleteUrl || !authToken) {
-      return;
-    }
-    setDeleteBusy(true);
-    try {
-      const path = deleteUrl.startsWith("http")
-        ? new URL(deleteUrl).pathname
-        : deleteUrl;
-      const m = path.match(/\/cam\/delete\/([^/]+)\/?$/);
-      if (!m) {
-        throw new Error("Unrecognized camera delete URL");
-      }
-      await restDeleteTarget(authToken, {
-        kind: "camera",
-        uid: decodeURIComponent(m[1]),
-      });
-      getViewportState().removeEntity(e.id);
-      toast.show(`Deleted ${e.name}`, "ok");
-      setConfirmDelete(false);
-      if (sceneHomeHref) {
-        window.location.assign(sceneHomeHref);
-      } else {
-        window.location.reload();
-      }
-    } catch (err) {
-      toast.show((err as RestError).message || "Delete failed", "bad");
-      setDeleteBusy(false);
-    }
-  };
+  const projectOn = calibrating || projecting;
+  const projectDisabled = calibrating || !e.posed;
 
   return (
     <>
       <NameRow entity={e} />
       <span className="ss-prop-section">Position</span>
-      {e.posed ? (
-        <div className="ss-prop-grid3">
-          <NumField
-            label="X"
-            value={e.position[0]}
-            digits={3}
-            onCommit={(v) => setPos(0, v)}
-          />
-          <NumField
-            label="Y"
-            value={e.position[1]}
-            digits={3}
-            onCommit={(v) => setPos(1, v)}
-          />
-          <NumField
-            label="Z"
-            value={e.position[2]}
-            digits={3}
-            onCommit={(v) => setPos(2, v)}
-          />
-        </div>
-      ) : (
-        <p className="ss-prop-hint">
-          Unset. The preview ring is not a saved pose. Calibrate to set X, Y,
-          and Z.
-        </p>
-      )}
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.position[0]}
+          digits={3}
+          onCommit={(v) => setPos(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.position[1]}
+          digits={3}
+          onCommit={(v) => setPos(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.position[2]}
+          digits={3}
+          onCommit={(v) => setPos(2, v)}
+        />
+      </div>
       <span className="ss-prop-section">Rotation (°)</span>
-      {e.posed ? (
-        <div className="ss-prop-grid3">
-          <NumField
-            label="X"
-            value={e.rotation[0]}
-            digits={2}
-            onCommit={(v) => setRot(0, v)}
-          />
-          <NumField
-            label="Y"
-            value={e.rotation[1]}
-            digits={2}
-            onCommit={(v) => setRot(1, v)}
-          />
-          <NumField
-            label="Z"
-            value={e.rotation[2]}
-            digits={2}
-            onCommit={(v) => setRot(2, v)}
-          />
-        </div>
-      ) : (
-        <p className="ss-prop-hint">Unset until the camera is calibrated.</p>
-      )}
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.rotation[0]}
+          digits={2}
+          onCommit={(v) => setRot(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.rotation[1]}
+          digits={2}
+          onCommit={(v) => setRot(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.rotation[2]}
+          digits={2}
+          onCommit={(v) => setRot(2, v)}
+        />
+      </div>
       <NumField
         label="FOV (°)"
         value={e.fov}
@@ -802,7 +744,7 @@ function CameraProps({
       ) : null}
       <ReadField label="Pose" value={e.posed ? "Calibrated" : "Unset"} />
       <label
-        className={`ss-prop-check${e.posed || calibrating ? "" : " is-disabled"}`}
+        className={`ss-prop-switch${projectDisabled ? " is-disabled" : ""}`}
         title={
           calibrating
             ? "Projection stays on while calibrating"
@@ -811,112 +753,65 @@ function CameraProps({
               : "Calibrate this camera first — projection needs a pose"
         }
       >
-        <input
-          type="checkbox"
-          checked={calibrating || projecting}
-          disabled={calibrating || !e.posed}
-          onChange={(ev) =>
-            getViewportState().setProjectCameraEnabled(e.id, ev.target.checked)
-          }
-        />
-        <span>Project frame</span>
-      </label>
-      {/* While calibrating, opacity lives on the wizard toolbar only. */}
-      {!calibrating && e.posed && projecting ? (
-        <label className="ss-prop-field">
-          <span className="ss-prop-label">Opacity</span>
+        <span className="ss-prop-label">Project frame</span>
+        <span
+          className={`ss-prop-switch-control${projectOn ? " is-on" : ""}`}
+        >
           <input
-            type="range"
-            className="ss-prop-range"
-            min={0}
-            max={100}
-            step={1}
-            value={Math.round(projectOpacity * 100)}
+            type="checkbox"
+            className="ss-prop-switch-input"
+            role="switch"
+            checked={projectOn}
+            disabled={projectDisabled}
+            aria-checked={projectOn}
             onChange={(ev) =>
-              getViewportState().setProjectOpacity(
-                Number(ev.target.value) / 100,
+              getViewportState().setProjectCameraEnabled(
+                e.id,
+                ev.target.checked,
               )
             }
           />
-          <span className="ss-prop-value">
-            {Math.round(projectOpacity * 100)}%
+          <span className="ss-prop-switch-track" aria-hidden="true">
+            <span className="ss-prop-switch-thumb" />
           </span>
-        </label>
-      ) : null}
+        </span>
+      </label>
       {!calibrating ? (
-        <SaveBar
-          dirty={dirty}
-          busy={saveBusy}
-          savedFlash={savedFlash}
-          canPersist={Boolean(sensorId && authToken && sceneId)}
-          onSave={() => void onSave()}
-          disabledTitle="Camera is not linked to the server yet"
-        />
+        <div className="ss-prop-actions">
+          <SaveBar
+            dirty={dirty}
+            busy={saveBusy}
+            savedFlash={savedFlash}
+            canPersist={Boolean(authToken && sceneId && (sensorId || isDraft))}
+            onSave={() => void onSave()}
+            disabledTitle="Sign in and open a scene to save this camera"
+          />
+          {onCalibrate || calibrateHref ? (
+            onCalibrate ? (
+              <button
+                type="button"
+                className="ss-prop-calibrate"
+                onClick={onCalibrate}
+              >
+                <i className="bi bi-bullseye" aria-hidden="true" />
+                <span>Calibrate</span>
+              </button>
+            ) : (
+              <a href={calibrateHref} className="ss-prop-calibrate">
+                <i className="bi bi-bullseye" aria-hidden="true" />
+                <span>Calibrate</span>
+              </a>
+            )
+          ) : null}
+        </div>
       ) : null}
-      <div className="ss-prop-actions">
-        {!calibrating && (onCalibrate || calibrateHref) ? (
-          onCalibrate ? (
-            <button
-              type="button"
-              className="ss-prop-calibrate"
-              onClick={onCalibrate}
-            >
-              <i className="bi bi-bullseye" aria-hidden="true" />
-              <span>Calibrate</span>
-            </button>
-          ) : (
-            <a href={calibrateHref} className="ss-prop-calibrate">
-              <i className="bi bi-bullseye" aria-hidden="true" />
-              <span>Calibrate</span>
-            </a>
-          )
-        ) : null}
-        {!calibrating && sensorId && authToken ? (
-          <button
-            type="button"
-            className="ss-prop-calibrate"
-            disabled={!autoReady || autoBusy}
-            title={autoTitle}
-            onClick={() => void onAutoCalibrate()}
-          >
-            <i className="bi bi-lightning" aria-hidden="true" />
-            <span>{autoBusy ? "Starting…" : "Auto Calibrate"}</span>
-          </button>
-        ) : null}
-        {deleteUrl && authToken ? (
-          <button
-            type="button"
-            className="ss-prop-danger"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <i className="bi bi-trash" aria-hidden="true" />
-            <span>Delete</span>
-          </button>
-        ) : null}
-      </div>
       <p className="ss-prop-hint">
         {calibrating
           ? "Use the toolbar to Auto Calibrate or Save point correspondences. Edit pose and optics here; they apply after Save."
-          : "Save writes pose, FOV/fy, intrinsics, and distortion. FOV is a convenience view of fy; fx/fy drive solve and projection. Calibrate opens the point-pair split; Auto Calibrate needs the service and a live frame."}
+          : isDraft
+            ? "Save creates this camera on the server with the current pose. Frames are not required. Delete from the Outliner."
+            : "Save writes pose, FOV/fy, intrinsics, and distortion. Calibrate opens the point-pair wizard (Auto Calibrate is on the wizard toolbar). Delete from the Outliner."}
       </p>
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Delete camera?"
-        confirmLabel="Delete"
-        danger
-        busy={deleteBusy}
-        onConfirm={() => void onDelete()}
-        onCancel={() => {
-          if (!deleteBusy) {
-            setConfirmDelete(false);
-          }
-        }}
-      >
-        <p>
-          Are you sure you want to delete <strong>{e.name}</strong>?
-        </p>
-        <p>This action cannot be undone.</p>
-      </ConfirmDialog>
     </>
   );
 }
@@ -1096,24 +991,16 @@ function MarkProps({ e }: { e: MarkEntity }) {
 function ChildProps({
   e,
   boot,
-  authToken,
   isSuperuser,
-  onChildrenChange,
 }: {
   e: ChildSceneEntity;
   boot?: SceneChildBootstrap;
-  authToken: string;
   isSuperuser: boolean;
-  onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
 }) {
-  const toast = useAppToast();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
   const remoteId = e.remoteChildId || boot?.remoteChildId;
   const statusEntry = useChildStatusStore((s) =>
     remoteId ? s.byRemoteId[remoteId] : undefined,
   );
-  const deleteUrl = isSuperuser ? e.deleteUrl || boot?.deleteUrl : null;
   const detailUrl = e.detailUrl || boot?.detailUrl;
   const editHref = e.editHref || boot?.editHref;
   const childType = e.childType || boot?.childType || "local";
@@ -1128,29 +1015,6 @@ function ChildProps({
           : statusEntry?.status === "error"
             ? statusEntry.message || "Error"
             : "Unknown";
-
-  const onDelete = async () => {
-    if (!deleteUrl || !authToken) {
-      return;
-    }
-    setDeleteBusy(true);
-    try {
-      const target = parseDeleteTarget(deleteUrl);
-      if (!target) {
-        throw new Error("Unrecognized child delete URL");
-      }
-      await restDeleteTarget(authToken, target);
-      getViewportState().removeEntity(e.id);
-      onChildrenChange?.((prev) =>
-        prev.filter((c) => c.id !== e.id && c.restUid !== e.restUid),
-      );
-      toast.show(`Unlinked ${e.name}`, "ok");
-      setConfirmDelete(false);
-    } catch (err) {
-      toast.show((err as RestError).message || "Delete failed", "bad");
-      setDeleteBusy(false);
-    }
-  };
 
   return (
     <>
@@ -1185,39 +1049,150 @@ function ChildProps({
             <span>Edit link</span>
           </a>
         ) : null}
-        {deleteUrl && authToken ? (
-          <button
-            type="button"
-            className="ss-prop-danger"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <i className="bi bi-trash" aria-hidden="true" />
-            <span>Unlink</span>
-          </button>
-        ) : null}
       </div>
       <p className="ss-prop-hint">
         Pose editing stays in the child placement workspace. Use Edit link to
-        change transform or connection settings.
+        change transform or connection settings. Unlink from the Outliner.
       </p>
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Unlink child scene?"
-        confirmLabel="Unlink"
-        danger
-        busy={deleteBusy}
-        onConfirm={() => void onDelete()}
-        onCancel={() => {
-          if (!deleteBusy) {
-            setConfirmDelete(false);
-          }
-        }}
-      >
-        <p>
-          Are you sure you want to unlink <strong>{e.name}</strong> from this
-          scene?
-        </p>
-      </ConfirmDialog>
+    </>
+  );
+}
+
+function MapProps({
+  e,
+  sceneId,
+  authToken,
+}: {
+  e: MapEntity;
+  sceneId?: string;
+  authToken?: string;
+}) {
+  const toast = useAppToast();
+  const dirty = useEntityDirty(e);
+  const [busy, setBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const patch = (p: Partial<MapEntity>) =>
+    getViewportState().updateEntity(e.id, p);
+
+  const setPos = (i: number, v: number) => {
+    const position: [number, number, number] = [...e.position];
+    position[i] = roundDigits(v, 3);
+    patch({ position });
+  };
+  const setRot = (i: number, v: number) => {
+    const rotation: [number, number, number] = [...e.rotation];
+    rotation[i] = roundDigits(v, 2);
+    patch({ rotation });
+  };
+  const setScale = (i: number, v: number) => {
+    const scale: [number, number, number] = [...e.scale];
+    scale[i] = roundDigits(Math.max(1e-6, v), 4);
+    patch({ scale });
+  };
+
+  const onSave = async () => {
+    if (!dirty || busy || !authToken || !sceneId) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const cur = getViewportState().entities[e.id];
+      if (!cur || cur.type !== "map") {
+        return;
+      }
+      await persistMapEntity(authToken, sceneId, cur);
+      markEntityPersistClean(e.id);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1500);
+      toast.show("Scene map pose saved", "ok");
+    } catch (err) {
+      toast.show((err as RestError).message || "Save failed", "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <NameRow entity={e} />
+      <span className="ss-prop-section">Position</span>
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.position[0]}
+          digits={3}
+          onCommit={(v) => setPos(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.position[1]}
+          digits={3}
+          onCommit={(v) => setPos(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.position[2]}
+          digits={3}
+          onCommit={(v) => setPos(2, v)}
+        />
+      </div>
+      <span className="ss-prop-section">Rotation (°)</span>
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.rotation[0]}
+          digits={2}
+          onCommit={(v) => setRot(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.rotation[1]}
+          digits={2}
+          onCommit={(v) => setRot(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.rotation[2]}
+          digits={2}
+          onCommit={(v) => setRot(2, v)}
+        />
+      </div>
+      <span className="ss-prop-section">Scale</span>
+      <div className="ss-prop-grid3">
+        <NumField
+          label="X"
+          value={e.scale[0]}
+          digits={4}
+          onCommit={(v) => setScale(0, v)}
+        />
+        <NumField
+          label="Y"
+          value={e.scale[1]}
+          digits={4}
+          onCommit={(v) => setScale(1, v)}
+        />
+        <NumField
+          label="Z"
+          value={e.scale[2]}
+          digits={4}
+          onCommit={(v) => setScale(2, v)}
+        />
+      </div>
+      <div className="ss-prop-actions">
+        <SaveBar
+          dirty={dirty}
+          busy={busy}
+          savedFlash={savedFlash}
+          canPersist={Boolean(authToken && sceneId)}
+          onSave={() => void onSave()}
+          disabledTitle="Sign in and open a scene to save the map pose"
+        />
+      </div>
+      <p className="ss-prop-hint">
+        Use Move / Rotate / Scale on the left toolbar (or W / E / R) to transform
+        the uploaded GLB. Save writes mesh pose to the scene.
+      </p>
     </>
   );
 }
@@ -1225,6 +1200,7 @@ function ChildProps({
 function EmptyProps({ sceneName }: { sceneName: string }) {
   const entities = useViewportStore((s) => s.entities);
   const counts = {
+    map: 0,
     region: 0,
     tripwire: 0,
     camera: 0,
@@ -1240,6 +1216,7 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
   return (
     <>
       <ReadField label="Scene" value={sceneName} />
+      <ReadField label="Scene map" value={counts.map ? "GLB" : "—"} />
       <ReadField label="Regions" value={String(counts.region)} />
       <ReadField label="Tripwires" value={String(counts.tripwire)} />
       <ReadField label="Cameras" value={String(counts.camera)} />
@@ -1265,19 +1242,13 @@ export function Properties({
   cameras = [],
   sensors = [],
   children = [],
-  onChildrenChange,
+  onCamerasChange,
   authToken = "",
   isSuperuser = false,
 }: {
   sceneName: string;
   sceneId?: string;
-  cameras?: {
-    id: string;
-    sensorId: string;
-    name: string;
-    calibrateHref: string;
-    deleteUrl?: string | null;
-  }[];
+  cameras?: SceneCameraBootstrap[];
   sensors?: {
     id: string;
     sensorId: string;
@@ -1286,7 +1257,7 @@ export function Properties({
     deleteUrl?: string | null;
   }[];
   children?: SceneChildBootstrap[];
-  onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
+  onCamerasChange?: Dispatch<SetStateAction<SceneCameraBootstrap[]>>;
   authToken?: string;
   isSuperuser?: boolean;
 }) {
@@ -1307,6 +1278,9 @@ export function Properties({
   return (
     <div className="ss-props">
       {!e && <EmptyProps sceneName={sceneName} />}
+      {e?.type === "map" && (
+        <MapProps e={e} sceneId={sceneId} authToken={authToken} />
+      )}
       {e?.type === "region" && <RegionProps e={e} />}
       {e?.type === "tripwire" && <TripwireProps e={e} />}
       {e?.type === "camera" && (
@@ -1315,9 +1289,8 @@ export function Properties({
           sensorId={camBoot?.sensorId}
           sceneId={sceneId}
           calibrateHref={camBoot?.calibrateHref}
-          deleteUrl={isSuperuser ? camBoot?.deleteUrl : null}
           authToken={authToken}
-          sceneHomeHref={sceneId ? `/${sceneId}/` : undefined}
+          onCamerasChange={onCamerasChange}
           onCalibrate={
             camBoot
               ? () =>
@@ -1340,13 +1313,7 @@ export function Properties({
       )}
       {e?.type === "mark" && <MarkProps e={e} />}
       {e?.type === "child" && (
-        <ChildProps
-          e={e}
-          boot={childBoot}
-          authToken={authToken}
-          isSuperuser={isSuperuser}
-          onChildrenChange={onChildrenChange}
-        />
+        <ChildProps e={e} boot={childBoot} isSuperuser={isSuperuser} />
       )}
     </div>
   );

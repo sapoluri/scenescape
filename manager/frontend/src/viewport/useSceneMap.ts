@@ -11,9 +11,12 @@ import {
   type SceneGeometrySpec,
 } from "../placement/sceneGeometry";
 import { IDENTITY_POSE } from "../placement/placementTypes";
+import { getPersistState } from "./persistStore";
 import { createProjectionPool } from "./projection/projectionPool";
 import type { ProjectionPool } from "./projection/projectionPool";
 import { getViewportState } from "./store";
+import type { MapEntity } from "./types";
+import { SCENE_MAP_ENTITY_ID } from "./types";
 import type { ViewportWorld } from "./world";
 
 export type SceneMapProps = {
@@ -64,7 +67,33 @@ export function useSceneMap(
           }
         });
       }
+      world.sceneMesh = null;
+      // Drop the Outliner singleton when the mesh goes away.
+      if (getViewportState().entities[SCENE_MAP_ENTITY_ID]) {
+        getViewportState().removeEntity(SCENE_MAP_ENTITY_ID);
+      }
       readyRef.current = false;
+    };
+
+    const seedMapEntity = (spec: SceneGeometrySpec) => {
+      if (!spec.isGlb) {
+        if (getViewportState().entities[SCENE_MAP_ENTITY_ID]) {
+          getViewportState().removeEntity(SCENE_MAP_ENTITY_ID);
+        }
+        return;
+      }
+      const pose = spec.meshPose;
+      const entity: MapEntity = {
+        id: SCENE_MAP_ENTITY_ID,
+        type: "map",
+        name: spec.name?.trim() ? `${spec.name} map` : "Scene map",
+        visible: true,
+        position: [...pose.translation] as [number, number, number],
+        rotation: [...pose.rotation] as [number, number, number],
+        scale: [...pose.scale] as [number, number, number],
+      };
+      getViewportState().upsertEntities([entity]);
+      getPersistState().captureBaselines([entity.id]);
     };
 
     const frameOrbit = () => {
@@ -157,6 +186,7 @@ export function useSceneMap(
         } catch (err) {
           console.warn("Camera projection layer unavailable", err);
         }
+        seedMapEntity(spec);
         frameOrbit();
         readyRef.current = true;
       } catch (err) {
@@ -167,7 +197,6 @@ export function useSceneMap(
     return () => {
       cancelled = true;
       clearMap();
-      world.sceneMesh = null;
     };
   }, [
     world,

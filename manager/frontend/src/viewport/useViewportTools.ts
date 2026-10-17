@@ -18,15 +18,18 @@ import {
   Vector3,
 } from "three";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
-import { addTripwireCurtain, lookAtOriginEuler } from "./entities";
+import {
+  addTripwireCurtain,
+  lookAtOriginEuler,
+  restPoseToRigEuler,
+} from "./entities";
 import {
   bboxOf,
   centroidOf,
-  removeRegionFromModel,
-  removeTripwireFromModel,
   writeRegionToModel,
   writeTripwireToModel,
 } from "./geometrySync";
+import { scenePoseFromObject } from "../placement/poseThree";
 import { getViewportState, useViewportStore } from "./store";
 import { CREATION_TOOLS, entityCanScale } from "./tools";
 import type {
@@ -36,6 +39,7 @@ import type {
   ToolId,
   TripwireEntity,
 } from "./types";
+import { SCENE_MAP_ENTITY_ID } from "./types";
 import type { ViewportWorld } from "./world";
 
 /**
@@ -107,6 +111,16 @@ function pickEntity(world: ViewportWorld, ev: PointerEvent): string | null {
         return id;
       }
       o = (o as { parent?: object }).parent ?? null;
+    }
+  }
+  // Scene map GLB lives on mapRoot, not entityRoot.
+  if (world.sceneMesh) {
+    const mapHits = raycaster.intersectObject(world.sceneMesh, true);
+    if (mapHits.length > 0) {
+      const map = getViewportState().entities[SCENE_MAP_ENTITY_ID];
+      if (map?.type === "map" && map.visible !== false) {
+        return SCENE_MAP_ENTITY_ID;
+      }
     }
   }
   return null;
@@ -422,7 +436,13 @@ export function useViewportTools(world: ViewportWorld | null): void {
       };
       s.commitHistory();
       s.upsertEntities([entity]);
-      s.beginEditing(id);
+      // Stay on Move so the gizmo remains available for pose editing.
+      // Region/tripwire/sensor creation still uses beginEditing → Live.
+      useViewportStore.setState((state) => ({
+        selectedId: id,
+        activeTool: "move",
+        editFocus: state.editFocus + 1,
+      }));
     };
 
     const placeSensor = (pt: [number, number]) => {
@@ -659,7 +679,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
         (tool === "rotate" &&
           (entity.type === "region" ||
             entity.type === "tripwire" ||
-            entity.type === "camera")) ||
+            entity.type === "camera" ||
+            entity.type === "map")) ||
         (tool === "scale" && entityCanScale(entity)));
 
     // Left-drag orbits/pans for navigation tools. During floor drawing
@@ -857,10 +878,12 @@ function bakeTransform(world: ViewportWorld, id: string, tool: ToolId): void {
   if (!e || !nodes) {
     return;
   }
-  world.gizmo.detach();
   const pivot = nodes.gizmoTarget;
 
   if (e.type === "region" || e.type === "tripwire") {
+    // Detach before struct rebuild — pose-only camera/sensor bakes keep the
+    // gizmo attached so transform mode persists across drags.
+    world.gizmo.detach();
     const [cx, cy] = centroidOf(e.points);
     let newPoints: [number, number][];
     if (tool === "move") {
@@ -921,15 +944,21 @@ function bakeTransform(world: ViewportWorld, id: string, tool: ToolId): void {
     if (tool === "move") {
       s.updateEntity(id, {
         position: [pivot.position.x, pivot.position.y, pivot.position.z],
+        posed: true,
       });
     } else if (tool === "rotate") {
       const eu = new Euler().setFromQuaternion(pivot.quaternion, "XYZ");
+      const rotation: [number, number, number] = [
+        r2d(eu.x),
+        r2d(eu.y),
+        r2d(eu.z),
+      ];
       s.updateEntity(id, {
-        rotation: [r2d(eu.x), r2d(eu.y), r2d(eu.z)],
+        rotation,
+        restRotation: restPoseToRigEuler(rotation),
+        posed: true,
       });
     }
-    // Visual-only in Phase 1.2; calibrated pose persistence ships with the
-    // Phase 2.3 calibration wizard (REST camera PUT, dirty-gated).
     return;
   }
 
@@ -937,31 +966,47 @@ function bakeTransform(world: ViewportWorld, id: string, tool: ToolId): void {
     s.updateEntity(id, {
       position: [pivot.position.x, pivot.position.y, pivot.position.z],
     });
+    return;
+  }
+
+  if (e.type === "map") {
+    try {
+      const pose = scenePoseFromObject(pivot);
+      s.updateEntity(id, {
+        position: pose.translation,
+        rotation: pose.rotation,
+        scale: pose.scale,
+      });
+    } catch {
+      /* degenerate matrix — leave entity unchanged */
+    }
   }
 }
 
-/** Delete the selection (regions/tripwires also leave the geometry model). */
+/**
+ * Ask the Outliner (or any listener) to run the shared delete confirm flow.
+ * Keyboard Delete/Backspace and Outliner row trash use the same path.
+ */
+function requestEntityDelete(id: string): void {
+  window.dispatchEvent(
+    new CustomEvent("ss-request-entity-delete", { detail: { id } }),
+  );
+}
+
+/** Delete key: open the shared delete flow for the current selection. */
 function deleteSelection(): void {
-  const s = getViewportState();
-  const id = s.selectedId;
+  const id = getViewportState().selectedId;
   if (!id) {
     return;
   }
-  const e = s.entities[id];
+  const e = getViewportState().entities[id];
   if (!e) {
     return;
   }
-  const isTempMarker = id.startsWith("draft-");
-  if (e.type !== "region" && e.type !== "tripwire" && !isTempMarker) {
+  if (e.type === "mark") {
     return;
   }
-  s.commitHistory();
-  if (e.type === "region") {
-    removeRegionFromModel(id);
-  } else if (e.type === "tripwire") {
-    removeTripwireFromModel(id);
-  }
-  s.removeEntity(id);
+  requestEntityDelete(id);
 }
 
 function disposeGroup(root: Group): void {

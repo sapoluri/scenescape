@@ -45,6 +45,64 @@ function isLivePreview(img: HTMLImageElement | null): boolean {
 }
 
 /**
+ * Off-screen JPEG hosts + `#live-view` so Project frame can pull MQTT frames
+ * without opening the Preview dock pane (Properties stays open).
+ */
+export function ProjectionFeedHost({
+  cameras,
+  active,
+}: {
+  cameras: SceneCameraBootstrap[];
+  active: boolean;
+}) {
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    refreshCameraStrip();
+    const t1 = window.setTimeout(refreshCameraStrip, 400);
+    const t2 = window.setTimeout(refreshCameraStrip, 1200);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [active, cameras]);
+
+  if (!active || cameras.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="ss-projection-feed" aria-hidden="true">
+      <input
+        type="checkbox"
+        id="live-view"
+        className="ss-live-preview-live-contract"
+        checked
+        readOnly
+        tabIndex={-1}
+      />
+      {cameras.map((cam) => (
+        <span
+          key={cam.id}
+          className="snapshot-image"
+          data-topic={cam.cmdTopic}
+          data-topic-name={`scenescape/cmd/camera/${cam.name}`}
+        >
+          <img
+            id={`projection-feed-${cam.sensorId}`}
+            data-ss-card-sensor={cam.sensorId}
+            data-ss-card-name={cam.name}
+            className="display-none"
+            alt=""
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Multi-camera Live glance pane for the single-pane right dock (bottom half).
  *
  * Mounted while Outliner Preview is on. `#live-view` is a hidden hard-contract

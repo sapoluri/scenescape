@@ -109,6 +109,8 @@ function SceneDetailInner({ bootstrap }: Props) {
           cameras={cameras}
           sensors={sensors}
           children={children}
+          onCamerasChange={setCameras}
+          onSensorsChange={setSensors}
           onChildrenChange={setChildren}
           cameraRates={cameraRates}
           authToken={bootstrap.authToken}

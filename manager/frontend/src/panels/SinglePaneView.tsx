@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -21,7 +22,7 @@ import type {
   SceneSensorBootstrap,
 } from "../scene/types";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
-import { useViewportStore } from "../viewport/store";
+import { getViewportState, useViewportStore } from "../viewport/store";
 import { SceneViewport } from "../viewport/SceneViewport";
 import { ViewportMenuBar } from "../viewport/ViewportMenuBar";
 import {
@@ -33,7 +34,7 @@ import {
   type OpenAdminListKind,
 } from "./OpenAdminListDialog";
 import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
-import { LivePreviewPane } from "./LivePreviewPane";
+import { LivePreviewPane, ProjectionFeedHost } from "./LivePreviewPane";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
 import { Telemetry } from "./Telemetry";
@@ -50,35 +51,36 @@ const DOCK_TABS: { id: DockTab; label: string }[] = [
 ];
 
 const DOCK_COLLAPSED_KEY = "ss-sp-dock-collapsed";
-const PROPS_RATIO_KEY = "ss-sp-props-ratio";
-const PROPS_RATIO_DEFAULT = 0.42;
+/** Pixel height when the user has shrunk Properties; null = size to content. */
+const PROPS_HEIGHT_KEY = "ss-sp-props-height-px";
 
-function readPropsRatio(): number {
+function readPropsHeightPx(): number | null {
   try {
-    const n = Number(sessionStorage.getItem(PROPS_RATIO_KEY));
-    if (Number.isFinite(n) && n > 0.15 && n < 0.85) {
+    const n = Number(sessionStorage.getItem(PROPS_HEIGHT_KEY));
+    if (Number.isFinite(n) && n >= 96) {
       return n;
     }
   } catch {
     /* private mode / quota */
   }
-  return PROPS_RATIO_DEFAULT;
+  return null;
 }
 
-function writePropsRatio(ratio: number): void {
+function writePropsHeightPx(px: number | null): void {
   try {
-    sessionStorage.setItem(PROPS_RATIO_KEY, String(ratio));
+    if (px == null) {
+      sessionStorage.removeItem(PROPS_HEIGHT_KEY);
+    } else {
+      sessionStorage.setItem(PROPS_HEIGHT_KEY, String(Math.round(px)));
+    }
   } catch {
     /* private mode / quota */
   }
 }
 
-function clampPropsRatio(ratio: number, height: number): number {
-  if (height <= 0) {
-    return Math.min(0.85, Math.max(0.15, ratio));
-  }
-  const min = Math.min(0.4, 96 / height);
-  return Math.min(1 - min, Math.max(min, ratio));
+function clampPropsHeightPx(px: number, editorHeight: number): number {
+  const max = Math.max(96, editorHeight * 0.85);
+  return Math.min(max, Math.max(96, px));
 }
 
 function readDockCollapsed(): boolean {
@@ -105,6 +107,8 @@ export interface SinglePaneViewProps {
   cameras: SceneCameraBootstrap[];
   sensors: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
+  onCamerasChange?: Dispatch<SetStateAction<SceneCameraBootstrap[]>>;
+  onSensorsChange?: Dispatch<SetStateAction<SceneSensorBootstrap[]>>;
   onChildrenChange?: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
   cameraRates?: Record<string, string>;
   authToken: string;
@@ -119,10 +123,10 @@ export interface SinglePaneViewProps {
  * a docked right panel (Outliner / Telemetry), a left Object Library drawer
  * (B), and the ⌘O Open Scene gallery dialog.
  *
- * Selecting an entity opens Properties as a bottom split of the dock, the
- * same way Preview opens the live glance. The split between Outliner and
- * Properties can be dragged. Outliner Cameras → Preview adds the glance
- * under that stack. Maximize fills the dock; close via Outliner Preview.
+ * Selecting an entity opens Properties as a content-sized overlay on top of
+ * the Outliner (drag the top handle to shrink). Outliner Cameras → Preview
+ * opens the live glance instead — Properties and Preview are mutually
+ * exclusive. Maximize fills the dock; close Preview via the Outliner toggle.
  */
 export function SinglePaneView({
   sceneId,
@@ -132,6 +136,8 @@ export function SinglePaneView({
   cameras,
   sensors,
   children = [],
+  onCamerasChange,
+  onSensorsChange,
   onChildrenChange,
   cameraRates = {},
   authToken,
@@ -142,9 +148,11 @@ export function SinglePaneView({
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
-  const [propsRatio, setPropsRatio] = useState(readPropsRatio);
-  const propsRatioRef = useRef(propsRatio);
-  propsRatioRef.current = propsRatio;
+  const [propsHeightPx, setPropsHeightPx] = useState<number | null>(
+    readPropsHeightPx,
+  );
+  const propsHeightRef = useRef(propsHeightPx);
+  propsHeightRef.current = propsHeightPx;
   const editorRef = useRef<HTMLDivElement>(null);
   const splitDrag = useRef<{ pointerId: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -173,7 +181,8 @@ export function SinglePaneView({
   const projectCameraIds = useViewportStore((s) => s.projectCameraIds);
   const selectedId = useViewportStore((s) => s.selectedId);
   const editFocus = useViewportStore((s) => s.editFocus);
-  const propertiesOpen = selectedId != null;
+  // Properties and Preview share the dock bottom — never both at once.
+  const propertiesOpen = selectedId != null && !previewOpen;
 
   useOpenSceneHotkey(() => {
     setAdminListKind(null);
@@ -191,20 +200,29 @@ export function SinglePaneView({
     }
     setDockTab("outliner");
     setCollapsed(false);
+    // Creating / focusing an entity prefers Properties over Preview.
+    setPreviewOpen(false);
+    setPreviewMaximized(false);
   }, [editFocus, setCollapsed]);
 
-  const applySplitRatio = useCallback((clientY: number) => {
+  // Selecting an entity closes Preview so Properties can open.
+  useEffect(() => {
+    if (selectedId == null) {
+      return;
+    }
+    setPreviewOpen(false);
+    setPreviewMaximized(false);
+  }, [selectedId]);
+
+  const applyPropsHeight = useCallback((clientY: number) => {
     const editor = editorRef.current;
     if (!editor) {
       return;
     }
     const rect = editor.getBoundingClientRect();
-    const ratio = clampPropsRatio(
-      (rect.bottom - clientY) / rect.height,
-      rect.height,
-    );
-    propsRatioRef.current = ratio;
-    setPropsRatio(ratio);
+    const px = clampPropsHeightPx(rect.bottom - clientY, rect.height);
+    propsHeightRef.current = px;
+    setPropsHeightPx(px);
   }, []);
 
   const onSplitPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
@@ -214,14 +232,14 @@ export function SinglePaneView({
     ev.preventDefault();
     ev.currentTarget.setPointerCapture(ev.pointerId);
     splitDrag.current = { pointerId: ev.pointerId };
-    applySplitRatio(ev.clientY);
+    applyPropsHeight(ev.clientY);
   };
 
   const onSplitPointerMove = (ev: ReactPointerEvent<HTMLDivElement>) => {
     if (splitDrag.current?.pointerId !== ev.pointerId) {
       return;
     }
-    applySplitRatio(ev.clientY);
+    applyPropsHeight(ev.clientY);
   };
 
   const onSplitPointerUp = (ev: ReactPointerEvent<HTMLDivElement>) => {
@@ -229,7 +247,7 @@ export function SinglePaneView({
       return;
     }
     splitDrag.current = null;
-    writePropsRatio(propsRatioRef.current);
+    writePropsHeightPx(propsHeightRef.current);
   };
 
   const onSplitKeyDown = (ev: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -238,12 +256,15 @@ export function SinglePaneView({
     }
     ev.preventDefault();
     const editor = editorRef.current;
-    const height = editor?.getBoundingClientRect().height ?? 0;
-    const delta = ev.key === "ArrowUp" ? 0.04 : -0.04;
-    const ratio = clampPropsRatio(propsRatioRef.current + delta, height);
-    propsRatioRef.current = ratio;
-    setPropsRatio(ratio);
-    writePropsRatio(ratio);
+    const editorHeight = editor?.getBoundingClientRect().height ?? 0;
+    const current =
+      propsHeightRef.current ??
+      Math.min(editorHeight * 0.5, editorHeight * 0.85);
+    const delta = ev.key === "ArrowUp" ? 24 : -24;
+    const px = clampPropsHeightPx(current + delta, editorHeight);
+    propsHeightRef.current = px;
+    setPropsHeightPx(px);
+    writePropsHeightPx(px);
   };
 
   const closePreview = useCallback(() => {
@@ -256,21 +277,14 @@ export function SinglePaneView({
       setPreviewOpen(open);
       if (open) {
         setCollapsed(false);
+        // Clear selection so Properties does not share the dock with Preview.
+        getViewportState().select(null);
       } else {
         setPreviewMaximized(false);
       }
     },
     [setCollapsed],
   );
-
-  // Projection needs JPEG frames — open Preview (and Live View) with it.
-  useEffect(() => {
-    if (projectCameraIds.length === 0 || cameras.length === 0) {
-      return;
-    }
-    setPreviewOpen(true);
-    setCollapsed(false);
-  }, [projectCameraIds, cameras.length, setCollapsed]);
 
   // Drop Preview if the scene loses all cameras.
   useEffect(() => {
@@ -401,20 +415,12 @@ export function SinglePaneView({
               "ss-sp-dock-main",
               previewOpen ? "is-preview-split" : "",
               previewOpen && previewMaximized ? "is-preview-maximized" : "",
-              propertiesOpen ? "is-props-split" : "",
             ]
               .filter(Boolean)
               .join(" ")}
           >
             <div className="ss-sp-dock-editor" ref={editorRef}>
-              <div
-                className="ss-sp-dock-tabs-pane"
-                style={
-                  propertiesOpen && !(previewOpen && previewMaximized)
-                    ? { flex: `${1 - propsRatio} 1 0` }
-                    : undefined
-                }
-              >
+              <div className="ss-sp-dock-tabs-pane">
                 <div
                   className="ss-sp-dock-tabs"
                   role="tablist"
@@ -437,6 +443,13 @@ export function SinglePaneView({
                   {dockTab === "outliner" && (
                     <Outliner
                       isSuperuser={isSuperuser}
+                      authToken={authToken}
+                      cameras={cameras}
+                      sensors={sensors}
+                      children={children}
+                      onCamerasChange={onCamerasChange}
+                      onSensorsChange={onSensorsChange}
+                      onChildrenChange={onChildrenChange}
                       showPreviewToggle={cameras.length > 0}
                       previewOpen={previewOpen}
                       onPreviewOpenChange={setPreview}
@@ -446,15 +459,23 @@ export function SinglePaneView({
                 </div>
               </div>
               {propertiesOpen ? (
-                <>
+                <div
+                  className={`ss-sp-dock-props${propsHeightPx != null ? " is-resized" : ""}`}
+                  style={
+                    propsHeightPx != null
+                      ? ({
+                          "--ss-props-height": `${propsHeightPx}px`,
+                        } as CSSProperties)
+                      : undefined
+                  }
+                >
                   <div
                     className="ss-sp-dock-split"
                     role="separator"
                     aria-orientation="horizontal"
-                    aria-label="Resize outliner and properties"
-                    aria-valuemin={15}
+                    aria-label="Resize properties panel"
+                    aria-valuemin={96}
                     aria-valuemax={85}
-                    aria-valuenow={Math.round(propsRatio * 100)}
                     tabIndex={0}
                     onPointerDown={onSplitPointerDown}
                     onPointerMove={onSplitPointerMove}
@@ -462,23 +483,29 @@ export function SinglePaneView({
                     onPointerCancel={onSplitPointerUp}
                     onKeyDown={onSplitKeyDown}
                   />
-                  <div
-                    className="ss-sp-dock-props"
-                    style={{ flex: `${propsRatio} 1 0` }}
-                  >
-                    <div className="ss-sp-dock-props-head">Properties</div>
-                    <Properties
-                      sceneName={sceneName}
-                      sceneId={sceneId}
-                      cameras={cameras}
-                      sensors={sensors}
-                      children={children}
-                      onChildrenChange={onChildrenChange}
-                      authToken={authToken}
-                      isSuperuser={isSuperuser}
-                    />
+                  <div className="ss-sp-dock-props-head">
+                    <span className="ss-sp-dock-props-title">Properties</span>
+                    <button
+                      type="button"
+                      className="ss-sp-dock-props-close"
+                      title="Close properties (Esc)"
+                      aria-label="Close properties"
+                      onClick={() => getViewportState().select(null)}
+                    >
+                      <i className="bi bi-x-lg" aria-hidden="true" />
+                    </button>
                   </div>
-                </>
+                  <Properties
+                    sceneName={sceneName}
+                    sceneId={sceneId}
+                    cameras={cameras}
+                    sensors={sensors}
+                    children={children}
+                    onCamerasChange={onCamerasChange}
+                    authToken={authToken}
+                    isSuperuser={isSuperuser}
+                  />
+                </div>
               ) : null}
             </div>
             {previewOpen && cameras.length > 0 ? (
@@ -493,6 +520,15 @@ export function SinglePaneView({
                 />
               </div>
             ) : null}
+            {/* JPEG hosts for Project frame when Preview pane is closed. */}
+            <ProjectionFeedHost
+              cameras={cameras}
+              active={
+                !previewOpen &&
+                projectCameraIds.length > 0 &&
+                cameras.length > 0
+              }
+            />
           </div>
         </aside>
       </div>

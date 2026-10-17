@@ -16,7 +16,8 @@ export type ViewportEntityType =
   | "camera"
   | "sensor"
   | "mark"
-  | "child";
+  | "child"
+  | "map";
 
 export interface ViewportEntityBase {
   id: string;
@@ -123,13 +124,29 @@ export interface ChildSceneEntity extends ViewportEntityBase {
   deleteUrl: string | null;
 }
 
+/**
+ * Singleton scene map GLB. Pose matches REST `mesh_translation` /
+ * `mesh_rotation` / `mesh_scale` (Scene Manage → Pose).
+ */
+export interface MapEntity extends ViewportEntityBase {
+  type: "map";
+  position: [number, number, number];
+  /** Euler degrees XYZ (Z-up), matching SceneEulerPose. */
+  rotation: [number, number, number];
+  scale: [number, number, number];
+}
+
 export type ViewportEntity =
   | RegionEntity
   | TripwireEntity
   | CameraEntity
   | SensorEntity
   | MarkEntity
-  | ChildSceneEntity;
+  | ChildSceneEntity
+  | MapEntity;
+
+/** Stable viewport id for the scene map GLB singleton. */
+export const SCENE_MAP_ENTITY_ID = "scene-map";
 
 export type ViewPreset = "persp" | "top" | "front" | "side";
 

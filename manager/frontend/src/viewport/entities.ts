@@ -3,6 +3,7 @@
 
 import { useEffect } from "react";
 import {
+  Box3,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
@@ -36,6 +37,7 @@ import {
   Vector3,
 } from "three";
 import { api } from "../lib/rest";
+import { applyScenePoseToObject } from "../placement/poseThree";
 import { subscribeGeometry } from "../scene/map/geometryModel";
 import type {
   SceneCameraBootstrap,
@@ -54,6 +56,7 @@ import { getViewportState, useViewportStore } from "./store";
 import type {
   CameraEntity,
   ChildSceneEntity,
+  MapEntity,
   RegionEntity,
   SensorEntity,
   TripwireEntity,
@@ -862,6 +865,49 @@ export function buildChild(e: ChildSceneEntity): EntityNodes {
   };
 }
 
+/**
+ * Proxy nodes for the scene map GLB. The mesh lives on `world.mapRoot`;
+ * gizmoTarget points at that mesh so TransformControls edit its TRS.
+ */
+export function createMapNodes(mesh: Object3D, e: MapEntity): EntityNodes {
+  const group = new Group();
+  group.name = "map-entity-proxy";
+  group.userData.entityId = e.id;
+  const labelPos = new Vector3();
+  const box = new Box3();
+  const syncLabel = () => {
+    box.setFromObject(mesh);
+    if (!box.isEmpty()) {
+      box.getCenter(labelPos);
+    } else {
+      labelPos.copy(mesh.position);
+    }
+  };
+  syncLabel();
+  return {
+    group,
+    gizmoTarget: mesh,
+    labelPos,
+    setSelected: () => {
+      /* selection chrome is the gizmo */
+    },
+    applyPose: (ent) => {
+      if (ent.type !== "map") {
+        return;
+      }
+      applyScenePoseToObject(mesh, {
+        translation: ent.position,
+        rotation: ent.rotation,
+        scale: ent.scale,
+      });
+      syncLabel();
+    },
+    dispose: () => {
+      /* never dispose the scene mesh */
+    },
+  };
+}
+
 function buildEntityNodes(e: ViewportEntity): EntityNodes | null {
   switch (e.type) {
     case "region":
@@ -874,6 +920,8 @@ function buildEntityNodes(e: ViewportEntity): EntityNodes | null {
       return buildSensor(e);
     case "child":
       return buildChild(e);
+    case "map":
+      return null; // registered against world.sceneMesh in reconcile
     default:
       return null; // marks render via attachMarkRenderer
   }
@@ -1299,7 +1347,9 @@ export function useViewportEntities(
 
     const clearNodes = () => {
       for (const [, nodes] of world.entityNodes) {
-        world.entityRoot.remove(nodes.group);
+        if (nodes.group.parent === world.entityRoot) {
+          world.entityRoot.remove(nodes.group);
+        }
         nodes.dispose();
       }
       world.entityNodes.clear();
@@ -1309,10 +1359,46 @@ export function useViewportEntities(
       labelEls.clear();
     };
 
+    const reconcileMap = (e: MapEntity, selectedId: string | null) => {
+      const mesh = world.sceneMesh;
+      if (!mesh) {
+        return false;
+      }
+      mesh.visible = e.visible !== false;
+      let nodes = world.entityNodes.get(e.id);
+      if (!nodes || nodes.gizmoTarget !== mesh) {
+        const prev = world.entityNodes.get(e.id);
+        if (prev) {
+          if (prev.group.parent === world.entityRoot) {
+            world.entityRoot.remove(prev.group);
+          }
+          prev.dispose();
+        }
+        nodes = createMapNodes(mesh, e);
+        world.entityNodes.set(e.id, nodes);
+      }
+      nodes.setSelected(e.id === selectedId);
+      if (e.visible !== false) {
+        nodes.applyPose?.(e);
+        ensureLabel(e.id, e.name, nodes.labelPos);
+      } else {
+        const entry = labelEls.get(e.id);
+        entry?.el.remove();
+        labelEls.delete(e.id);
+      }
+      return true;
+    };
+
     const reconcile = () => {
       const { entities, selectedId, showFrustums } = getViewportState();
       const seen = new Set<string>();
       for (const e of Object.values(entities)) {
+        if (e.type === "map") {
+          if (reconcileMap(e, selectedId)) {
+            seen.add(e.id);
+          }
+          continue;
+        }
         if (e.visible === false) {
           continue;
         }
@@ -1323,7 +1409,9 @@ export function useViewportEntities(
         seen.add(e.id);
         const prev = world.entityNodes.get(e.id);
         if (prev) {
-          world.entityRoot.remove(prev.group);
+          if (prev.group.parent === world.entityRoot) {
+            world.entityRoot.remove(prev.group);
+          }
           prev.dispose();
         }
         world.entityRoot.add(nodes.group);
@@ -1334,7 +1422,9 @@ export function useViewportEntities(
       }
       for (const [id, nodes] of world.entityNodes) {
         if (!seen.has(id)) {
-          world.entityRoot.remove(nodes.group);
+          if (nodes.group.parent === world.entityRoot) {
+            world.entityRoot.remove(nodes.group);
+          }
           nodes.dispose();
           world.entityNodes.delete(id);
           const entry = labelEls.get(id);

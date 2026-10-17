@@ -6,7 +6,13 @@ import { entityPersistKey } from "../lib/entityPersist";
 import { getViewportState } from "./store";
 import type { ViewportEntity } from "./types";
 
-const PERSISTABLE = new Set(["camera", "sensor", "region", "tripwire"]);
+const PERSISTABLE = new Set([
+  "camera",
+  "sensor",
+  "region",
+  "tripwire",
+  "map",
+]);
 
 function isPersistable(e: ViewportEntity): boolean {
   return PERSISTABLE.has(e.type);

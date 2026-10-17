@@ -196,7 +196,8 @@
 }
 
 .ss-outliner-add,
-.ss-outliner-edit {
+.ss-outliner-edit,
+.ss-outliner-delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -206,11 +207,39 @@
   color: var(--ss-text-muted, #8a8f9e);
   text-decoration: none;
   flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 .ss-outliner-add:hover,
 .ss-outliner-edit:hover {
   background: var(--ss-hover-bg, rgba(127, 140, 160, 0.18));
   color: var(--ss-accent, #0a84ff);
+}
+
+/* Delete shows on row hover and when the row is selected. */
+.ss-outliner-delete {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+.ss-outliner-row:hover .ss-outliner-delete,
+.ss-outliner-row.is-selected .ss-outliner-delete,
+.ss-outliner-row:focus-within .ss-outliner-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ss-outliner-delete:hover {
+  background: color-mix(in srgb, #ff453a 18%, transparent);
+  color: #ff453a;
+}
+.ss-outliner-delete:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: -2px;
 }
 
 .ss-outliner-status {

@@ -305,12 +305,13 @@
   max-width: 40%;
 }
 
-/* Floating icon rail over the 3D view (Blender-style). */
+/* Floating icon rail over the 3D view (Blender-style).
+   Keep below `.ss-sp-chrome` / menubar menus (z-index 50). */
 .ss-viewport-tools.is-vertical {
   position: absolute;
   left: 12px;
   top: 12px;
-  z-index: 30;
+  z-index: 10;
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: center;
