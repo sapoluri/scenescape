@@ -7,6 +7,7 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  DoubleSide,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -49,8 +50,13 @@ import type { ViewportWorld } from "./world";
  */
 
 const TRAIL_POINTS = 40;
-/** Half-width of the trail ribbon in meters (thicker than a 1px GL line). */
-const TRAIL_HALF_WIDTH_M = 0.04;
+/**
+ * Square tube half-extents (meters). A flat XY ribbon disappears when the
+ * camera looks along the floor; a small 3D tube stays visible from top and
+ * side views.
+ */
+const TRAIL_HALF_WIDTH_M = 0.02;
+const TRAIL_HALF_HEIGHT_M = 0.02;
 const LABEL_Z_FALLBACK = 1.6;
 const INDICATOR_GAP = 0.5;
 const LABEL_GAP = 1.2;
@@ -257,20 +263,25 @@ function createTrailRibbon(trackColor: string): Mesh {
   const material = new MeshBasicMaterial({
     color: trackColor,
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.85,
     depthWrite: false,
-    side: 2, // DoubleSide
+    // Stay readable over the map GLB from every orbit angle.
+    depthTest: false,
+    side: DoubleSide,
   });
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
+  mesh.renderOrder = 6;
   mesh.visible = false;
   mesh.name = "trail";
   return mesh;
 }
 
 /**
- * Rebuild the trail ribbon mesh from world-space samples (newest first).
- * Written in local coords relative to the mark origin.
+ * Rebuild a square-tube trail from world-space samples (newest first).
+ * Written in local coords relative to the mark origin. Four verts per sample
+ * (left/right × bottom/top) so the path is visible from top-down and side
+ * perspectives — a flat XY ribbon is invisible when edge-on.
  */
 function writeTrailRibbon(
   mesh: Mesh,
@@ -283,8 +294,10 @@ function writeTrailRibbon(
     mesh.visible = false;
     return;
   }
-  const verts = new Float32Array(n * 2 * 3);
-  const indices = new Uint16Array((n - 1) * 6);
+  // 4 corners per sample: 0 LB, 1 RB, 2 RT, 3 LT
+  const verts = new Float32Array(n * 4 * 3);
+  // 4 sides × 2 tris × 3 indices per segment
+  const indices = new Uint16Array((n - 1) * 24);
   for (let i = 0; i < n; i++) {
     const p = pts[i];
     const lx = p.x - originX;
@@ -302,32 +315,49 @@ function writeTrailRibbon(
     const len = Math.hypot(dx, dy) || 1;
     const nx = (-dy / len) * TRAIL_HALF_WIDTH_M;
     const ny = (dx / len) * TRAIL_HALF_WIDTH_M;
-    const left = i * 2;
-    const right = left + 1;
-    verts[left * 3] = lx + nx;
-    verts[left * 3 + 1] = ly + ny;
-    verts[left * 3 + 2] = lz;
-    verts[right * 3] = lx - nx;
-    verts[right * 3 + 1] = ly - ny;
-    verts[right * 3 + 2] = lz;
+    const hz = TRAIL_HALF_HEIGHT_M;
+    const base = i * 4;
+    // left-bottom
+    verts[base * 3] = lx + nx;
+    verts[base * 3 + 1] = ly + ny;
+    verts[base * 3 + 2] = lz - hz;
+    // right-bottom
+    verts[(base + 1) * 3] = lx - nx;
+    verts[(base + 1) * 3 + 1] = ly - ny;
+    verts[(base + 1) * 3 + 2] = lz - hz;
+    // right-top
+    verts[(base + 2) * 3] = lx - nx;
+    verts[(base + 2) * 3 + 1] = ly - ny;
+    verts[(base + 2) * 3 + 2] = lz + hz;
+    // left-top
+    verts[(base + 3) * 3] = lx + nx;
+    verts[(base + 3) * 3 + 1] = ly + ny;
+    verts[(base + 3) * 3 + 2] = lz + hz;
     if (i > 0) {
-      const a = (i - 1) * 2;
-      const b = a + 1;
-      const c = left;
-      const d = right;
-      const base = (i - 1) * 6;
-      indices[base] = a;
-      indices[base + 1] = b;
-      indices[base + 2] = c;
-      indices[base + 3] = b;
-      indices[base + 4] = d;
-      indices[base + 5] = c;
+      const prev = (i - 1) * 4;
+      const cur = base;
+      let o = (i - 1) * 24;
+      const quad = (a: number, b: number, c: number, d: number) => {
+        indices[o++] = a;
+        indices[o++] = b;
+        indices[o++] = c;
+        indices[o++] = a;
+        indices[o++] = c;
+        indices[o++] = d;
+      };
+      // bottom, right, top, left
+      quad(prev, prev + 1, cur + 1, cur);
+      quad(prev + 1, prev + 2, cur + 2, cur + 1);
+      quad(prev + 2, prev + 3, cur + 3, cur + 2);
+      quad(prev + 3, prev, cur, cur + 3);
     }
   }
   const geometry = mesh.geometry;
   geometry.setAttribute("position", new BufferAttribute(verts, 3));
   geometry.setIndex(new BufferAttribute(indices, 1));
+  geometry.attributes.position.needsUpdate = true;
   geometry.computeBoundingSphere();
+  geometry.computeBoundingBox();
   mesh.visible = true;
 }
 
@@ -427,7 +457,8 @@ export function attachMarkRenderer(
     // mark group (outside yaw), so write local coords (world − mark origin).
     const last = pts[0];
     if (!last || Math.hypot(last.x - x, last.y - y) > 0.05) {
-      pts.unshift(new Vector3(x, y, 0.08));
+      // Center the tube above the floor so the bottom face does not z-fight.
+      pts.unshift(new Vector3(x, y, TRAIL_HALF_HEIGHT_M + 0.02));
       if (pts.length > TRAIL_POINTS) {
         pts.pop();
       }
