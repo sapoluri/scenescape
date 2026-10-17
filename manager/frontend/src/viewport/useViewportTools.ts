@@ -201,10 +201,24 @@ export function useViewportTools(world: ViewportWorld | null): void {
   const draftRef = useRef<Draft | null>(null);
   const finishDraftRef = useRef<(() => void) | null>(null);
   const measureRef = useRef<{
+    /** First floor point (set on first click). */
     a: [number, number] | null;
+    /** Locked end after the second click; null while rubber-banding. */
+    b: [number, number] | null;
+    /** Live cursor end while drawing (like tripwire draft.cursor). */
+    cursor: [number, number] | null;
+    done: boolean;
     visuals: Group | null;
     label: HTMLDivElement | null;
-  }>({ a: null, visuals: null, label: null });
+  }>({
+    a: null,
+    b: null,
+    cursor: null,
+    done: false,
+    visuals: null,
+    label: null,
+  });
+  const clearMeasureRef = useRef<() => void>(() => undefined);
   const downRef = useRef<{
     x: number;
     y: number;
@@ -235,12 +249,18 @@ export function useViewportTools(world: ViewportWorld | null): void {
       if (m.visuals) {
         world.scene.remove(m.visuals);
         disposeGroup(m.visuals);
-        m.visuals = null;
       }
       m.label?.remove();
-      m.label = null;
-      m.a = null;
+      measureRef.current = {
+        a: null,
+        b: null,
+        cursor: null,
+        done: false,
+        visuals: null,
+        label: null,
+      };
     };
+    clearMeasureRef.current = clearMeasure;
 
     const refreshPreview = () => {
       const draft = draftRef.current;
@@ -467,49 +487,91 @@ export function useViewportTools(world: ViewportWorld | null): void {
       s.select(id);
     };
 
-    const measureClick = (pt: [number, number]) => {
-      const m = measureRef.current;
-      if (!m.a) {
-        m.a = pt;
-        return;
-      }
-      const [ax, ay] = m.a;
-      const [bx, by] = pt;
-      const dist = Math.hypot(bx - ax, by - ay);
-      clearMeasure();
-      const g = new Group();
-      const line = new Line(
-        new BufferGeometry().setFromPoints([
-          new Vector3(ax, ay, 0.1),
-          new Vector3(bx, by, 0.1),
-        ]),
-        new LineBasicMaterial({ color: 0x0a84ff }),
-      );
-      g.add(line);
-      for (const [x, y] of [
-        [ax, ay],
-        [bx, by],
-      ] as [number, number][]) {
-        const s = new Mesh(
-          new SphereGeometry(0.12, 10, 8),
-          new MeshBasicMaterial({ color: 0x0a84ff }),
-        );
-        s.position.set(x, y, 0.1);
-        g.add(s);
-      }
-      world.scene.add(g);
-      const label = document.createElement("div");
-      label.className = "ss-vlabel ss-vlabel--measure";
+    const placeMeasureLabel = (
+      label: HTMLDivElement,
+      ax: number,
+      ay: number,
+      bx: number,
+      by: number,
+      dist: number,
+    ) => {
       label.textContent = `${dist.toFixed(2)} m`;
-      world.labelLayer.appendChild(label);
-      // Project once (static overlay, not per-frame).
       const v = new Vector3((ax + bx) / 2, (ay + by) / 2, 0.4).project(
         world.getActiveCamera(),
       );
       const w = world.host.clientWidth;
       const h = world.host.clientHeight;
       label.style.transform = `translate(-50%, -100%) translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px)`;
-      measureRef.current = { a: null, visuals: g, label };
+    };
+
+    /** Rebuild measure mesh + label from a → (b | cursor). */
+    const refreshMeasure = () => {
+      const m = measureRef.current;
+      if (!m.a) {
+        return;
+      }
+      const [ax, ay] = m.a;
+      const end = m.done && m.b ? m.b : (m.cursor ?? m.a);
+      const [bx, by] = end;
+      const dist = Math.hypot(bx - ax, by - ay);
+
+      if (m.visuals) {
+        world.scene.remove(m.visuals);
+        disposeGroup(m.visuals);
+      }
+      const g = new Group();
+      const mat = new MeshBasicMaterial({ color: 0x0a84ff });
+      const startDot = new Mesh(new SphereGeometry(0.12, 10, 8), mat);
+      startDot.position.set(ax, ay, 0.1);
+      g.add(startDot);
+      if (dist > POINT_EPS) {
+        g.add(
+          new Line(
+            new BufferGeometry().setFromPoints([
+              new Vector3(ax, ay, 0.1),
+              new Vector3(bx, by, 0.1),
+            ]),
+            new LineBasicMaterial({ color: 0x0a84ff }),
+          ),
+        );
+        const endDot = new Mesh(
+          new SphereGeometry(0.12, 10, 8),
+          mat.clone(),
+        );
+        endDot.position.set(bx, by, 0.1);
+        g.add(endDot);
+      }
+      world.scene.add(g);
+      m.visuals = g;
+
+      if (!m.label) {
+        const label = document.createElement("div");
+        label.className = "ss-vlabel ss-vlabel--measure";
+        world.labelLayer.appendChild(label);
+        m.label = label;
+      }
+      placeMeasureLabel(m.label, ax, ay, bx, by, dist);
+    };
+
+    const measureClick = (pt: [number, number]) => {
+      const m = measureRef.current;
+      // Finished segment: next click starts a new measurement.
+      if (m.done) {
+        clearMeasure();
+      }
+      const cur = measureRef.current;
+      if (!cur.a) {
+        cur.a = pt;
+        cur.cursor = pt;
+        cur.b = null;
+        cur.done = false;
+        refreshMeasure();
+        return;
+      }
+      cur.b = pt;
+      cur.cursor = pt;
+      cur.done = true;
+      refreshMeasure();
     };
 
     const onPointerDown = (ev: PointerEvent) => {
@@ -571,13 +633,16 @@ export function useViewportTools(world: ViewportWorld | null): void {
 
     const onPointerMove = (ev: PointerEvent) => {
       const draft = draftRef.current;
-      if (!draft) {
-        return;
-      }
       const pt = floorPoint(world, ev);
-      if (pt) {
+      if (draft && pt) {
         draft.cursor = pt;
         refreshPreview();
+      }
+      // Rubber-band the open measure segment (tripwire-style).
+      const m = measureRef.current;
+      if (m.a && !m.done && pt) {
+        m.cursor = pt;
+        refreshMeasure();
       }
     };
 
@@ -659,6 +724,13 @@ export function useViewportTools(world: ViewportWorld | null): void {
   });
   // Calibrate uses double-click to add points; left-drag must still orbit.
   const calActive = useCalibrateStore((s) => s.active);
+
+  // Leaving Measure dismisses the overlay (Esc / Delete also clear).
+  useEffect(() => {
+    if (activeTool !== "measure") {
+      clearMeasureRef.current();
+    }
+  }, [activeTool]);
 
   useEffect(() => {
     if (!world) {
@@ -826,14 +898,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
           world.scene.remove(draft.preview);
           disposeGroup(draft.preview);
           draftRef.current = null;
-        } else if (measureRef.current.visuals || measureRef.current.a) {
-          const m = measureRef.current;
-          if (m.visuals) {
-            world.scene.remove(m.visuals);
-            disposeGroup(m.visuals);
-          }
-          m.label?.remove();
-          measureRef.current = { a: null, visuals: null, label: null };
+        } else if (
+          measureRef.current.a ||
+          measureRef.current.visuals ||
+          measureRef.current.done
+        ) {
+          clearMeasureRef.current();
         } else {
           s.select(null);
         }
@@ -844,6 +914,14 @@ export function useViewportTools(world: ViewportWorld | null): void {
         return;
       }
       if (key === "delete" || key === "backspace") {
+        if (
+          measureRef.current.a ||
+          measureRef.current.visuals ||
+          measureRef.current.done
+        ) {
+          clearMeasureRef.current();
+          return;
+        }
         deleteSelection();
         return;
       }
@@ -861,6 +939,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
           world.scene.remove(draft.preview);
           disposeGroup(draft.preview);
           draftRef.current = null;
+        }
+        if (tool !== "measure") {
+          clearMeasureRef.current();
         }
         s.setTool(tool);
       }

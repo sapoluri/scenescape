@@ -75,7 +75,7 @@ export const TOOLS: ToolDef[] = [
     label: "Measure",
     icon: "bi-rulers",
     shortcut: "M",
-    hint: "Click two floor points to measure distance (Esc clears)",
+    hint: "Click start, drag to extend, click end · Esc clears",
   },
 ];
 
