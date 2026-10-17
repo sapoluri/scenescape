@@ -50,6 +50,8 @@ type Props = {
   onChildrenChange: Dispatch<SetStateAction<SceneChildBootstrap[]>>;
   mapUrl?: string | null;
   mapScale?: number | null;
+  /** Bump Open Cameras / Sensors gallery after REST create/edit. */
+  onDirectoryChanged?: (kind: "cameras" | "sensors") => void;
 };
 
 const WORKSPACE_ACTIONS = new Set([
@@ -85,6 +87,7 @@ export function SceneWorkspaceSheets({
   onChildrenChange,
   mapUrl = null,
   mapScale = null,
+  onDirectoryChanged,
 }: Props) {
   const { sheet, open, close } = useSheetFromQuery();
 
@@ -178,8 +181,9 @@ export function SceneWorkspaceSheets({
         }
         return upsertCameraCard(prev, card, prevSensorId);
       });
+      onDirectoryChanged?.("cameras");
     },
-    [onCamerasChange, sceneId, sheet.action, sheet.id],
+    [onCamerasChange, onDirectoryChanged, sceneId, sheet.action, sheet.id],
   );
 
   const onSensorSaved = useCallback(
@@ -211,8 +215,9 @@ export function SceneWorkspaceSheets({
         }
         return upsertSensorCard(prev, card, prevSensorId);
       });
+      onDirectoryChanged?.("sensors");
     },
-    [onSensorsChange, sceneId, sheet.action, sheet.id],
+    [onSensorsChange, onDirectoryChanged, sceneId, sheet.action, sheet.id],
   );
 
   const onChildSaved = useCallback(

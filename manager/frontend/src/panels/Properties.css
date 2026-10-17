@@ -46,7 +46,13 @@
   text-align: left;
 }
 
+.ss-prop-color-control {
+  position: relative;
+  flex: none;
+}
+
 .ss-prop-color {
+  display: block;
   width: 44px;
   height: 26px;
   padding: 0;
@@ -54,6 +60,60 @@
   border-radius: 6px;
   background: none;
   cursor: pointer;
+}
+
+/* Portaled to body; top/right set in JS so it stays on-screen left of the dock. */
+.ss-prop-color-popover {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ss-border, rgba(120, 120, 128, 0.35));
+  background: var(--ss-surface, var(--ss-card-bg, #1c1c1e));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.ss-prop-color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.ss-prop-color-chip {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid var(--ss-border, rgba(120, 120, 128, 0.35));
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+}
+
+.ss-prop-color-chip.is-selected,
+.ss-prop-color-chip:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: 1px;
+}
+
+.ss-prop-color-hex {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ss-prop-color-hex-label {
+  color: var(--ss-text-muted, #8e8e93);
+  font-size: 11px;
+  flex: none;
+}
+
+.ss-prop-color-hex-input {
+  width: 100%;
+  text-align: left;
+  font-family: var(--ss-font-mono, ui-monospace, monospace);
+  font-size: 12px;
 }
 
 .ss-prop-section {

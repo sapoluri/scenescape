@@ -117,6 +117,8 @@ export interface SinglePaneViewProps {
   isSuperuser?: boolean;
   mqttConnected?: boolean | null;
   sceneChrome?: SceneChromeActions | null;
+  /** Bump when a camera/sensor is created via sheet so the Open gallery reloads. */
+  directoryRefreshToken?: number;
 }
 
 /**
@@ -146,6 +148,7 @@ export function SinglePaneView({
   isSuperuser = false,
   mqttConnected = null,
   sceneChrome = null,
+  directoryRefreshToken = 0,
 }: SinglePaneViewProps) {
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
@@ -177,6 +180,8 @@ export function SinglePaneView({
     null,
   );
   const [adminListRefresh, setAdminListRefresh] = useState(0);
+  // Parent token (sheet create/edit) + local bumps (dialog close) both reload.
+  const directoryRefresh = directoryRefreshToken + adminListRefresh;
   const [replayMode, setReplayMode] = useState(false);
   const calibrating = useCalibrateStore((s) => s.active);
   const visualizing = useVisualizeStore((s) => s.active);
@@ -579,7 +584,7 @@ export function SinglePaneView({
           setAdminListKind(null);
           setAdminListRefresh((n) => n + 1);
         }}
-        refreshToken={adminListRefresh}
+        refreshToken={directoryRefresh}
       />
     </div>
   );

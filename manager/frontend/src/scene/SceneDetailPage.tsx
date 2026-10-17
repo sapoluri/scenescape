@@ -30,6 +30,10 @@ function SceneDetailInner({ bootstrap }: Props) {
   const [sensors, setSensors] = useState(bootstrap.sensors || []);
   const [children, setChildren] = useState(bootstrap.children || []);
   const [sceneRate, setSceneRate] = useState("--");
+  const [directoryRefresh, setDirectoryRefresh] = useState(0);
+  const onDirectoryChanged = useCallback((_kind: "cameras" | "sensors") => {
+    setDirectoryRefresh((n) => n + 1);
+  }, []);
 
   useSceneMqtt({
     sceneId: scene.id,
@@ -126,6 +130,7 @@ function SceneDetailInner({ bootstrap }: Props) {
               setSceneDeleteOpen(true);
             },
           }}
+          directoryRefreshToken={directoryRefresh}
         />
       </div>
       <GeometryBootstrap
@@ -146,6 +151,7 @@ function SceneDetailInner({ bootstrap }: Props) {
         onChildrenChange={setChildren}
         mapUrl={scene.mapUrl}
         mapScale={scene.scale}
+        onDirectoryChanged={onDirectoryChanged}
       />
       <ConfirmDialog
         open={sceneDeleteOpen}

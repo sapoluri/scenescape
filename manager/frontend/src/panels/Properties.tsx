@@ -3,11 +3,14 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { useAppToast } from "../components/ToastProvider";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
 import {
@@ -206,6 +209,26 @@ function NameRow({
   );
 }
 
+/** Preset swatches for region / tripwire / sensor color (no OS picker). */
+const PROP_COLOR_PRESETS = [
+  "#30d158",
+  "#ff9f0a",
+  "#0a84ff",
+  "#bf5af2",
+  "#ff453a",
+  "#64d2ff",
+  "#ffd60a",
+  "#ac8e68",
+  "#8e8e93",
+  "#f5f5f7",
+] as const;
+
+function normalizeHexColor(raw: string): string | null {
+  const t = raw.trim();
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(t);
+  return m ? `#${m[1].toLowerCase()}` : null;
+}
+
 function ColorRow({
   entity,
   onColor,
@@ -213,21 +236,160 @@ function ColorRow({
   entity: ViewportEntity & { color: string };
   onColor?: (color: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [hexDraft, setHexDraft] = useState(entity.color);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
+  const rootRef = useRef<HTMLDivElement>(null);
+  const swatchRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHexDraft(entity.color);
+  }, [entity.color]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    const place = () => {
+      const swatch = swatchRef.current;
+      if (!swatch) {
+        return;
+      }
+      const r = swatch.getBoundingClientRect();
+      const width = 196;
+      const height = popoverRef.current?.offsetHeight || 168;
+      const pad = 8;
+      let top = r.bottom + 6;
+      if (top + height > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - height - 6);
+      }
+      // Prefer flush with the swatch’s right edge; clamp into the viewport.
+      let right = window.innerWidth - r.right;
+      right = Math.min(right, window.innerWidth - width - pad);
+      right = Math.max(pad, right);
+      setPopoverStyle({ top, right, width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onPointer = (ev: PointerEvent) => {
+      const t = ev.target as Node;
+      if (rootRef.current?.contains(t) || popoverRef.current?.contains(t)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const apply = (color: string) => {
+    getViewportState().updateEntity(entity.id, { color });
+    onColor?.(color);
+    setHexDraft(color);
+  };
+
+  const current = normalizeHexColor(entity.color) || entity.color;
+
+  const popover =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={popoverRef}
+            className="ss-prop-color-popover"
+            role="dialog"
+            aria-label="Choose color"
+            style={popoverStyle}
+          >
+            <div className="ss-prop-color-grid" role="listbox">
+              {PROP_COLOR_PRESETS.map((c) => {
+                const selected = current.toLowerCase() === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    className={`ss-prop-color-chip${selected ? " is-selected" : ""}`}
+                    style={{ backgroundColor: c }}
+                    title={c}
+                    aria-label={c}
+                    onClick={() => {
+                      apply(c);
+                      setOpen(false);
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <label className="ss-prop-color-hex">
+              <span className="ss-prop-color-hex-label">Hex</span>
+              <input
+                type="text"
+                className="ss-prop-input ss-prop-color-hex-input"
+                value={hexDraft}
+                spellCheck={false}
+                aria-label="Hex color"
+                onChange={(ev) => setHexDraft(ev.target.value)}
+                onBlur={() => {
+                  const next = normalizeHexColor(hexDraft);
+                  if (next) {
+                    apply(next);
+                  } else {
+                    setHexDraft(entity.color);
+                  }
+                }}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter") {
+                    (ev.target as HTMLInputElement).blur();
+                    setOpen(false);
+                  }
+                }}
+              />
+            </label>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <label className="ss-prop-field">
+    <div className="ss-prop-field ss-prop-color-field" ref={rootRef}>
       <span className="ss-prop-label">Color</span>
-      <input
-        type="color"
-        className="ss-prop-color"
-        value={entity.color}
-        onChange={(ev) => {
-          getViewportState().updateEntity(entity.id, {
-            color: ev.target.value,
-          });
-          onColor?.(ev.target.value);
-        }}
-      />
-    </label>
+      <div className="ss-prop-color-control">
+        <button
+          ref={swatchRef}
+          type="button"
+          className="ss-prop-color"
+          style={{ backgroundColor: current }}
+          title={current}
+          aria-label={`Color ${current}`}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={() => setOpen((v) => !v)}
+        />
+        {popover}
+      </div>
+    </div>
   );
 }
 

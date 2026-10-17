@@ -26,39 +26,59 @@ import {
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   ChildSceneEntity,
+  ToolId,
   ViewportEntity,
   ViewportEntityType,
 } from "../viewport/types";
 import "./Outliner.css";
 
+/** Scene-local create tools (same as the viewport toolbar). */
+type OutlinerAddTool = Extract<
+  ToolId,
+  "region" | "tripwire" | "camera" | "sensor"
+>;
+
 const GROUPS: {
   type: ViewportEntityType;
   label: string;
+  /** Activate the matching viewport creation tool (toolbar flow). */
+  addTool?: OutlinerAddTool;
+  /** Scene-agnostic sheet (gallery / link child). */
   addHref?: string;
   addLabel?: string;
 }[] = [
   { type: "map", label: "Scene map" },
-  { type: "region", label: "Regions" },
-  { type: "tripwire", label: "Tripwires" },
+  {
+    type: "region",
+    label: "Regions",
+    addTool: "region",
+    addLabel: "Add region",
+  },
+  {
+    type: "tripwire",
+    label: "Tripwires",
+    addTool: "tripwire",
+    addLabel: "Add tripwire",
+  },
   {
     type: "camera",
     label: "Cameras",
-    addHref: "?ss=cam-create",
+    addTool: "camera",
     addLabel: "Add camera",
   },
   {
     type: "sensor",
     label: "Sensors",
-    addHref: "?ss=sensor-create",
+    addTool: "sensor",
     addLabel: "Add sensor",
   },
-  { type: "mark", label: "Tracked objects" },
   {
     type: "child",
     label: "Child scenes",
     addHref: "?ss=child-create",
     addLabel: "Link child",
   },
+  { type: "mark", label: "Tracked objects" },
 ];
 
 const TYPE_ICON: Record<ViewportEntityType, string> = {
@@ -327,8 +347,10 @@ export type OutlinerProps = {
  * through the viewport store (viewport click, strip click, outliner click).
  *
  * Cameras section can host a Preview toggle that opens the dock Live glance
- * split (see SinglePaneView). Delete lives on rows (hover / selected); the
- * keyboard Delete key dispatches the same confirm flow.
+ * split (see SinglePaneView). Section + for regions/tripwires/cameras/sensors
+ * arms the matching viewport tool (same as the toolbar); child + opens the
+ * link-child sheet. Delete lives on rows (hover / selected); the keyboard
+ * Delete key dispatches the same confirm flow.
  */
 export function Outliner({
   isSuperuser = false,
@@ -503,9 +525,11 @@ export function Outliner({
 
   return (
     <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
-      {GROUPS.map(({ type, label, addHref, addLabel }) => {
+      {GROUPS.map(({ type, label, addTool, addHref, addLabel }) => {
         const items = Object.values(entities).filter((e) => e.type === type);
-        if (items.length === 0 && !addHref) {
+        const showSheetAdd = Boolean(isSuperuser && addHref);
+        const showToolAdd = Boolean(addTool);
+        if (items.length === 0 && !showSheetAdd && !showToolAdd) {
           return null;
         }
         const isCollapsed = collapsed.has(type);
@@ -554,7 +578,31 @@ export function Outliner({
                   <span className="ss-outliner-preview-label">Preview</span>
                 </label>
               ) : null}
-              {isSuperuser && addHref ? (
+              {showToolAdd && addTool ? (
+                <button
+                  type="button"
+                  className="ss-outliner-add"
+                  title={addLabel}
+                  aria-label={addLabel}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    // Match the toolbar: expand the group and arm the tool.
+                    setCollapsed((prev) => {
+                      if (!prev.has(type)) {
+                        return prev;
+                      }
+                      const next = new Set(prev);
+                      next.delete(type);
+                      writeCollapsed(next);
+                      return next;
+                    });
+                    getViewportState().setTool(addTool);
+                  }}
+                >
+                  <i className="bi bi-plus" aria-hidden="true" />
+                </button>
+              ) : null}
+              {showSheetAdd && addHref ? (
                 <a
                   className="ss-outliner-add"
                   href={addHref}
