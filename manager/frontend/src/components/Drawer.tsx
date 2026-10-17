@@ -21,8 +21,8 @@ type Props = {
   /** Primary actions (Save) — shown next to Cancel in the header. */
   actions?: ReactNode;
   /**
-   * Show Cancel beside header actions. Defaults to true when `actions` is set.
-   * Uses the same dirty-leave confirm as the close control.
+   * Show Cancel beside header actions. Defaults to false — the × close control
+   * already dismisses (with the same dirty-leave confirm).
    */
   showCancel?: boolean;
   /** Optional extra bottom bar (prefer header Cancel + Save instead). */
@@ -55,7 +55,7 @@ export function Drawer({
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [confirmClose, setConfirmClose] = useState(false);
-  const cancelVisible = showCancel ?? Boolean(actions);
+  const cancelVisible = showCancel ?? false;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const onCloseRef = useRef(onClose);
@@ -69,13 +69,29 @@ export function Drawer({
     onCloseRef.current();
   }, []);
 
+  // Prefer the single-pane body (viewport + outliner dock) so sheets overlay
+  // the outliner but not the menu / options bars. Then the 3D stage alone;
+  // browse pages fall back to document.body.
+  const stage =
+    typeof document !== "undefined"
+      ? document.querySelector<HTMLElement>(".ss-sp-body") ??
+        document.querySelector<HTMLElement>(
+          ".ss-viewport-main-3d, .ss-viewport-split-3d",
+        )
+      : null;
+  const portalTarget =
+    stage ?? (typeof document !== "undefined" ? document.body : null);
+
   useEffect(() => {
     if (!open) {
       setConfirmClose(false);
       return;
     }
+    // Only lock page scroll for full-viewport drawers (no stage host).
     const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!stage) {
+      document.body.style.overflow = "hidden";
+    }
     // Autofocus close only when the drawer opens — not when dirty flips,
     // or the first keystroke steals focus from the field being edited.
     closeRef.current?.focus();
@@ -108,17 +124,22 @@ export function Drawer({
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      if (!stage) {
+        document.body.style.overflow = prev;
+      }
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, requestClose]);
+  }, [open, requestClose, stage]);
 
-  if (!open) {
+  if (!open || !portalTarget) {
     return null;
   }
 
   return createPortal(
-    <div className="ss-drawer-root is-open" role="presentation">
+    <div
+      className={`ss-drawer-root is-open${stage ? " is-stage" : ""}`}
+      role="presentation"
+    >
       <div className="ss-drawer-backdrop" onClick={requestClose} />
       <aside
         className={`ss-drawer-panel${wide ? " ss-drawer-panel--wide" : ""}`}
@@ -169,6 +190,6 @@ export function Drawer({
         <p>{leaveBody}</p>
       </ConfirmDialog>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

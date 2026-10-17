@@ -14,6 +14,12 @@
   pointer-events: auto;
 }
 
+/* Dock to the 3D stage (Object Library pattern) — not the full window. */
+.ss-drawer-root.is-stage {
+  position: absolute;
+  z-index: 50;
+}
+
 .ss-drawer-backdrop {
   position: absolute;
   inset: 0;
