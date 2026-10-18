@@ -70,7 +70,7 @@ export function deriveHeading(
   return Math.atan2(dy, dx);
 }
 
-function markKey(id: string | number): string {
+export function markKey(id: string | number): string {
   return `${MARK_ID_PREFIX}${id}`;
 }
 

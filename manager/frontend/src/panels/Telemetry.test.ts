@@ -2,15 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  parseSceneEventTopic,
+  sceneEventPayloadToFeed,
+} from "../mqtt/useSceneEventTelemetry";
 import type { MarkEntity } from "../viewport/types";
 import {
   brokerConnectDetails,
   capTelemetryEvents,
+  defaultSelectedTopicKeys,
   diffTelemetryBatch,
+  filterTelemetryByTopics,
+  filterTelemetryEvents,
   MAX_TELEMETRY_EVENTS,
   mqttNativeUrl,
   sceneDataTopic,
+  sceneTopicCatalog,
   summarizeMarks,
+  toggleTopicKey,
+  TOPIC_KEY_REGION,
+  TOPIC_KEY_REGULATED,
+  TOPIC_KEY_SCENE_DATA,
+  TOPIC_KEY_TRIPWIRE,
   type TelemetryEvent,
 } from "./Telemetry";
 
@@ -33,6 +46,15 @@ function mark(
   };
 }
 
+function ev(
+  partial: Omit<TelemetryEvent, "topicKey"> & { topicKey?: string },
+): TelemetryEvent {
+  return {
+    topicKey: TOPIC_KEY_REGULATED,
+    ...partial,
+  };
+}
+
 describe("diffTelemetryBatch", () => {
   it("emits track-new for unseen ids, newest first", () => {
     const { events, known, nextSeq } = diffTelemetryBatch(
@@ -43,6 +65,7 @@ describe("diffTelemetryBatch", () => {
     );
     expect(events).toHaveLength(2);
     expect(events.every((e) => e.kind === "track-new")).toBe(true);
+    expect(events.every((e) => e.topicKey === TOPIC_KEY_REGULATED)).toBe(true);
     // Newest first: mark:2 was later in the batch.
     expect(events[0]?.trackId).toBe("mark:2");
     expect(events[1]?.trackId).toBe("mark:1");
@@ -78,6 +101,7 @@ describe("diffTelemetryBatch", () => {
       kind: "track-lost",
       trackId: "mark:1",
       at: 3000,
+      topicKey: TOPIC_KEY_REGULATED,
     });
     expect(next).toEqual(new Set(["mark:2"]));
   });
@@ -113,13 +137,14 @@ describe("capTelemetryEvents", () => {
   it("keeps the newest MAX_TELEMETRY_EVENTS entries", () => {
     const events: TelemetryEvent[] = Array.from(
       { length: MAX_TELEMETRY_EVENTS + 50 },
-      (_, i): TelemetryEvent => ({
-        seq: i,
-        at: i,
-        kind: "track-new",
-        trackId: `mark:${i}`,
-        className: "person",
-      }),
+      (_, i): TelemetryEvent =>
+        ev({
+          seq: i,
+          at: i,
+          kind: "track-new",
+          trackId: `mark:${i}`,
+          className: "person",
+        }),
     ).reverse(); // newest first, seq desc
     const capped = capTelemetryEvents(events);
     expect(capped).toHaveLength(MAX_TELEMETRY_EVENTS);
@@ -129,7 +154,13 @@ describe("capTelemetryEvents", () => {
 
   it("leaves short feeds untouched", () => {
     const events: TelemetryEvent[] = [
-      { seq: 0, at: 0, kind: "track-new", trackId: "mark:1", className: "x" },
+      ev({
+        seq: 0,
+        at: 0,
+        kind: "track-new",
+        trackId: "mark:1",
+        className: "x",
+      }),
     ];
     expect(capTelemetryEvents(events)).toBe(events);
   });
@@ -153,6 +184,242 @@ describe("summarizeMarks", () => {
   });
 });
 
+describe("filterTelemetryEvents", () => {
+  const sample: TelemetryEvent[] = [
+    ev({
+      seq: 2,
+      at: 2,
+      kind: "track-new",
+      trackId: "mark:2",
+      className: "forklift",
+    }),
+    ev({
+      seq: 1,
+      at: 1,
+      kind: "track-lost",
+      trackId: "mark:1",
+      className: "person",
+    }),
+    ev({
+      seq: 0,
+      at: 0,
+      kind: "track-new",
+      trackId: "mark:0",
+      className: "person",
+    }),
+  ];
+
+  it("returns all events when filter is null", () => {
+    expect(filterTelemetryEvents(sample, null)).toBe(sample);
+  });
+
+  it("keeps only matching class names", () => {
+    expect(filterTelemetryEvents(sample, "person")).toEqual([
+      sample[1],
+      sample[2],
+    ]);
+    expect(filterTelemetryEvents(sample, "forklift")).toEqual([sample[0]]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    expect(filterTelemetryEvents(sample, "bicycle")).toEqual([]);
+  });
+
+  it("keeps events without a class when a filter is active", () => {
+    const bare = ev({
+      seq: 9,
+      at: 9,
+      kind: "region-enter",
+      topicKey: TOPIC_KEY_REGION,
+      trackId: "",
+      className: "",
+      entityId: "reg-1",
+      entityName: "Lobby",
+    });
+    expect(filterTelemetryEvents([...sample, bare], "person")).toEqual([
+      sample[1],
+      sample[2],
+      bare,
+    ]);
+  });
+});
+
+describe("filterTelemetryByTopics", () => {
+  const sample: TelemetryEvent[] = [
+    ev({
+      seq: 2,
+      at: 2,
+      kind: "track-new",
+      trackId: "mark:2",
+      className: "person",
+    }),
+    ev({
+      seq: 1,
+      at: 1,
+      kind: "region-enter",
+      topicKey: TOPIC_KEY_REGION,
+      trackId: "mark:1",
+      className: "person",
+      entityId: "r1",
+    }),
+    ev({
+      seq: 0,
+      at: 0,
+      kind: "tripwire-cross",
+      topicKey: TOPIC_KEY_TRIPWIRE,
+      trackId: "mark:0",
+      className: "person",
+      entityId: "t1",
+    }),
+  ];
+
+  it("defaults to regulated, region, and tripwire feed topics", () => {
+    expect(defaultSelectedTopicKeys()).toEqual([
+      TOPIC_KEY_REGULATED,
+      TOPIC_KEY_REGION,
+      TOPIC_KEY_TRIPWIRE,
+    ]);
+    expect(
+      filterTelemetryByTopics(sample, defaultSelectedTopicKeys()),
+    ).toEqual(sample);
+  });
+
+  it("supports multi-select", () => {
+    expect(
+      filterTelemetryByTopics(sample, [
+        TOPIC_KEY_REGULATED,
+        TOPIC_KEY_REGION,
+      ]),
+    ).toEqual([sample[0], sample[1]]);
+  });
+
+  it("returns empty when nothing is selected", () => {
+    expect(filterTelemetryByTopics(sample, [])).toEqual([]);
+  });
+
+  it("treats scene-data as an alias for the regulated track stream", () => {
+    expect(filterTelemetryByTopics(sample, [TOPIC_KEY_SCENE_DATA])).toEqual([
+      sample[0],
+    ]);
+  });
+
+  it("toggles keys without forcing a selection", () => {
+    expect(toggleTopicKey([TOPIC_KEY_REGULATED], TOPIC_KEY_REGION)).toEqual([
+      TOPIC_KEY_REGULATED,
+      TOPIC_KEY_REGION,
+    ]);
+    expect(toggleTopicKey([TOPIC_KEY_REGULATED], TOPIC_KEY_REGULATED)).toEqual(
+      [],
+    );
+  });
+});
+
+describe("sceneTopicCatalog", () => {
+  it("lists scene data/event topics and sensors (no camera/cmd/image)", () => {
+    const catalog = sceneTopicCatalog("scene-1", [
+      { name: "Temp", sensorId: "temp_1" },
+    ]);
+    const topics = catalog.map((c) => c.topic);
+    const keys = catalog.map((c) => c.key);
+    expect(topics).toContain("scenescape/regulated/scene/scene-1");
+    expect(topics).toContain("scenescape/data/scene/scene-1/+");
+    expect(topics).toContain("scenescape/event/region/scene-1/+/+");
+    expect(topics).toContain("scenescape/event/tripwire/scene-1/+/+");
+    expect(topics).toContain("scenescape/data/sensor/temp_1");
+    expect(topics.some((t) => t.includes("/data/camera/"))).toBe(false);
+    expect(topics.some((t) => t.includes("/cmd/"))).toBe(false);
+    expect(topics.some((t) => t.includes("/image/"))).toBe(false);
+    expect(keys[0]).toBe(TOPIC_KEY_REGULATED);
+  });
+});
+
+describe("scene event MQTT parsing", () => {
+  it("parses region and tripwire topics for the active scene", () => {
+    expect(
+      parseSceneEventTopic(
+        "scenescape/event/region/scene-1/reg-9/objects",
+        "scene-1",
+      ),
+    ).toEqual({
+      kind: "region",
+      sceneId: "scene-1",
+      entityId: "reg-9",
+    });
+    expect(
+      parseSceneEventTopic(
+        "scenescape/event/tripwire/scene-1/tw-1/objects",
+        "other",
+      ),
+    ).toBeNull();
+  });
+
+  it("emits enter/exit rows and skips count-only region updates", () => {
+    const parsed = {
+      kind: "region" as const,
+      sceneId: "scene-1",
+      entityId: "reg-9",
+    };
+    const empty = sceneEventPayloadToFeed(
+      parsed,
+      { counts: { person: 1 }, entered: [], exited: [] },
+      1000,
+      0,
+    );
+    expect(empty.events).toEqual([]);
+
+    const { events, nextSeq } = sceneEventPayloadToFeed(
+      parsed,
+      {
+        region_name: "Lobby",
+        entered: [{ id: "42", category: "person" }],
+        exited: [{ object: { id: "7", type: "person" } }],
+      },
+      2000,
+      0,
+    );
+    expect(nextSeq).toBe(2);
+    expect(events).toHaveLength(2);
+    expect(events[0]?.kind).toBe("region-exit");
+    expect(events[0]?.topicKey).toBe(TOPIC_KEY_REGION);
+    expect(events[0]?.trackId).toBe("mark:7");
+    expect(events[1]?.kind).toBe("region-enter");
+    expect(events[1]?.trackId).toBe("mark:42");
+    expect(events[1]?.entityName).toBe("Lobby");
+  });
+
+  it("emits tripwire-cross only when objects have direction", () => {
+    const parsed = {
+      kind: "tripwire" as const,
+      sceneId: "scene-1",
+      entityId: "tw-1",
+    };
+    expect(
+      sceneEventPayloadToFeed(
+        parsed,
+        { objects: [{ id: "1", category: "person" }] },
+        1000,
+        0,
+      ).events,
+    ).toEqual([]);
+    const { events } = sceneEventPayloadToFeed(
+      parsed,
+      {
+        tripwire_name: "Door",
+        objects: [{ id: "1", category: "person", direction: "+" }],
+      },
+      1000,
+      0,
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "tripwire-cross",
+      topicKey: TOPIC_KEY_TRIPWIRE,
+      trackId: "mark:1",
+      entityName: "Door",
+    });
+  });
+});
+
 describe("broker connect helpers", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -168,7 +435,7 @@ describe("broker connect helpers", () => {
     expect(mqttNativeUrl("  ")).toBe("mqtt://localhost:1883");
   });
 
-  it("assembles websocket, mqtt, and topic for display", () => {
+  it("assembles websocket and mqtt URLs for display", () => {
     vi.stubGlobal("window", {
       location: {
         hostname: "scene.local",
@@ -178,11 +445,10 @@ describe("broker connect helpers", () => {
     });
     const details = brokerConnectDetails(
       "wss://localhost/mqtt",
-      "scene-1",
       "scene.local",
     );
     expect(details.websocketUrl).toBe("wss://scene.local/mqtt");
     expect(details.mqttUrl).toBe("mqtt://scene.local:1883");
-    expect(details.topic).toBe("scenescape/regulated/scene/scene-1");
+    expect("topic" in details).toBe(false);
   });
 });

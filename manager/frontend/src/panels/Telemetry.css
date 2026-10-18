@@ -154,10 +154,90 @@
   font-weight: 600;
 }
 
+.tl-broker-topics {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ss-input-border-subtle, var(--ss-card-border));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.tl-broker-topics-head {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ss-text-muted);
+}
+
+.tl-broker-topics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 10rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.tl-broker-topics .tl-broker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-topic-row {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 7.5rem) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.tl-topic-row:hover {
+  background: var(--ss-hover-bg, var(--ss-elevated));
+}
+
+.tl-topic-row.is-selected {
+  border-color: var(--ss-accent, #0a84ff);
+  background: var(--ss-accent-fill, rgba(10, 132, 255, 0.14));
+}
+
+.tl-topic-row:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: 1px;
+}
+
 .tl-classes {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+button.tl-class {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+button.tl-class:hover {
+  background: var(--ss-hover-bg, var(--ss-elevated));
+}
+
+button.tl-class.is-active {
+  border-color: var(--ss-accent, #0a84ff);
+  background: var(--ss-accent-fill, rgba(10, 132, 255, 0.18));
+}
+
+button.tl-class:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: 2px;
 }
 
 .tl-swatch {
@@ -195,6 +275,19 @@
   background: var(--ss-elevated);
 }
 
+.tl-event.is-selectable {
+  cursor: pointer;
+}
+
+.tl-event.is-selectable:hover {
+  background: var(--ss-accent-fill, rgba(10, 132, 255, 0.16));
+}
+
+.tl-event.is-selectable:focus-visible {
+  outline: 2px solid var(--ss-accent, #0a84ff);
+  outline-offset: -2px;
+}
+
 .tl-time {
   color: var(--ss-text-muted);
   font-variant-numeric: tabular-nums;
@@ -209,12 +302,18 @@
   font-size: 0.625rem;
 }
 
-.tl-track-new .tl-kind {
+.tl-track-new .tl-kind,
+.tl-region-enter .tl-kind {
   color: var(--ss-status-ok);
 }
 
-.tl-track-lost .tl-kind {
+.tl-track-lost .tl-kind,
+.tl-region-exit .tl-kind {
   color: var(--ss-status-bad);
+}
+
+.tl-tripwire-cross .tl-kind {
+  color: var(--ss-accent, #0a84ff);
 }
 
 .tl-track {

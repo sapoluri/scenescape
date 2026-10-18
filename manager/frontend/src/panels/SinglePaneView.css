@@ -425,6 +425,11 @@
   flex-direction: column;
 }
 
+/* Author display:flex above must not defeat the hidden attribute. */
+.ss-sp-dock-panel[hidden] {
+  display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ss-sp-dock,
   .ss-sp-dock-rail,

@@ -528,7 +528,11 @@ export function SinglePaneView({
                   ))}
                 </div>
                 <div className="ss-sp-dock-body">
-                  {dockTab === "outliner" && (
+                  {/* Keep both mounted so MQTT event listeners stay live. */}
+                  <div
+                    className="ss-sp-dock-panel"
+                    hidden={dockTab !== "outliner"}
+                  >
                     <Outliner
                       isSuperuser={isSuperuser}
                       authToken={authToken}
@@ -542,13 +546,17 @@ export function SinglePaneView({
                       previewOpen={previewOpen}
                       onPreviewOpenChange={setPreview}
                     />
-                  )}
-                  {dockTab === "telemetry" && (
+                  </div>
+                  <div
+                    className="ss-sp-dock-panel"
+                    hidden={dockTab !== "telemetry"}
+                  >
                     <Telemetry
                       sceneId={sceneId}
                       wssConnection={wssConnection}
+                      sensors={sensors}
                     />
-                  )}
+                  </div>
                 </div>
               </div>
               {propertiesOpen ? (

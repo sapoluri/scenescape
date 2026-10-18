@@ -6,6 +6,11 @@ export { useSceneMqtt } from "./useSceneMqtt";
 export { useCameraStripMqtt, refreshCameraStrip } from "./useCameraStripMqtt";
 export { useChildStatusMqtt } from "./useChildStatusMqtt";
 export {
+  useSceneEventTelemetry,
+  parseSceneEventTopic,
+  sceneEventPayloadToFeed,
+} from "./useSceneEventTelemetry";
+export {
   useChildStatusStore,
   reduceChildStatusPayload,
 } from "./childStatusStore";

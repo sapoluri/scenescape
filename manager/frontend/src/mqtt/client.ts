@@ -24,20 +24,38 @@ export function mqttPayloadToString(data: unknown): string {
   if (typeof data === "string") {
     return data;
   }
-  if (typeof TextDecoder === "undefined") {
-    return "";
-  }
-  try {
-    if (data instanceof ArrayBuffer) {
-      return new TextDecoder().decode(data);
+  if (typeof TextDecoder !== "undefined") {
+    try {
+      if (data instanceof ArrayBuffer) {
+        return new TextDecoder().decode(data);
+      }
+      if (ArrayBuffer.isView(data)) {
+        return new TextDecoder().decode(data as ArrayBufferView);
+      }
+    } catch {
+      /* fall through */
     }
-    if (ArrayBuffer.isView(data)) {
-      return new TextDecoder().decode(data as ArrayBufferView);
-    }
-  } catch {
-    return "";
   }
-  // Fail closed: avoid Buffer.toString / Object.toString false positives.
+  // mqtt.js Buffer polyfill: byteLength + toString("utf8"), not always a view.
+  const buf = data as {
+    byteLength?: number;
+    toString?: (encoding?: string) => string;
+  };
+  if (
+    typeof buf.byteLength === "number" &&
+    typeof buf.toString === "function" &&
+    !Array.isArray(data)
+  ) {
+    try {
+      return buf.toString("utf8");
+    } catch {
+      try {
+        return buf.toString();
+      } catch {
+        return "";
+      }
+    }
+  }
   return "";
 }
 

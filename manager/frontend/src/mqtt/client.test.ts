@@ -33,6 +33,17 @@ describe("mqttPayloadToString", () => {
     expect(mqttPayloadToString(bogus)).toBe("");
   });
 
+  it("decodes Buffer-like objects via toString(utf8)", () => {
+    const payload = '{"ok":true}';
+    const bufLike = {
+      byteLength: payload.length,
+      toString(enc?: string) {
+        return enc === "utf8" ? payload : "";
+      },
+    };
+    expect(mqttPayloadToString(bufLike)).toBe(payload);
+  });
+
   it("fails closed on numbers and plain objects", () => {
     expect(mqttPayloadToString(42)).toBe("");
     expect(mqttPayloadToString({ a: 1 })).toBe("");
