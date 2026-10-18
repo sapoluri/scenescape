@@ -31,9 +31,15 @@ import {
 import { api, type RestError } from "../lib/rest";
 import {
   cameraCardFromRest,
+  sensorCardFromRest,
   upsertCameraCard,
+  upsertSensorCard,
 } from "../lib/sceneEntityCards";
-import type { SceneCameraBootstrap, SceneChildBootstrap } from "../scene/types";
+import type {
+  SceneCameraBootstrap,
+  SceneChildBootstrap,
+  SceneSensorBootstrap,
+} from "../scene/types";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import type { CameraOptics } from "../viewport/calibrate/types";
@@ -56,6 +62,7 @@ import type {
   RegionEntity,
   SensorAreaMode,
   SensorEntity,
+  SensorSingletonType,
   TripwireEntity,
   ViewportEntity,
 } from "../viewport/types";
@@ -993,13 +1000,16 @@ function SensorProps({
   sensorId,
   sceneId,
   authToken,
+  onSensorsChange,
 }: {
   e: SensorEntity;
   sensorId?: string;
   sceneId?: string;
   authToken?: string;
+  onSensorsChange?: Dispatch<SetStateAction<SceneSensorBootstrap[]>>;
 }) {
   const toast = useAppToast();
+  const isDraft = e.id.startsWith("draft-");
   const dirty = useEntityDirty(e);
   const [busy, setBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -1012,7 +1022,7 @@ function SensorProps({
   };
 
   const onSave = async () => {
-    if (!dirty || busy || !sensorId || !authToken || !sceneId) {
+    if (!dirty || busy || !authToken || !sceneId) {
       return;
     }
     setBusy(true);
@@ -1021,8 +1031,62 @@ function SensorProps({
       if (!cur || cur.type !== "sensor") {
         return;
       }
-      await persistSensorEntity(authToken, sceneId, sensorId, cur);
-      markEntityPersistClean(e.id);
+      let persistId = e.id;
+      let persistSensorId = sensorId;
+
+      if (isDraft || !persistSensorId) {
+        const base =
+          cur.name.trim().replace(/\s+/g, "_") ||
+          `sensor_${Date.now().toString(36)}`;
+        let sensor_id = base;
+        const existing = new Set(
+          Object.values(getViewportState().entities)
+            .filter((x) => x.type === "sensor" && x.id !== e.id)
+            .map((x) => x.id),
+        );
+        let n = 2;
+        while (existing.has(sensor_id)) {
+          sensor_id = `${base}_${n}`;
+          n += 1;
+        }
+        const payload: Record<string, unknown> = {
+          name: cur.name,
+          sensor_id,
+          scene: sceneId,
+          area: cur.areaMode,
+          singleton_type: cur.singletonType || "environmental",
+          center: [cur.position[0], cur.position[1]],
+        };
+        if (cur.areaMode === "circle") {
+          payload.radius = cur.radius;
+        }
+        if (cur.areaMode === "poly") {
+          if (!Array.isArray(cur.points) || cur.points.length < 3) {
+            throw new Error(
+              "Polygon coverage needs at least 3 vertices — click the floor to draw",
+            );
+          }
+          payload.points = cur.points;
+        }
+        const created = await api.createSensor(authToken, payload);
+        const card = sensorCardFromRest(created);
+        if (!card) {
+          throw new Error("Sensor create returned no id");
+        }
+        remapGeometryEntityIds({ [e.id]: card.id });
+        onSensorsChange?.((prev) => upsertSensorCard(prev, card));
+        persistId = card.id;
+        persistSensorId = card.sensorId;
+      } else {
+        await persistSensorEntity(
+          authToken,
+          sceneId,
+          persistSensorId,
+          cur,
+        );
+      }
+
+      markEntityPersistClean(persistId);
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       toast.show("Sensor saved", "ok");
@@ -1037,6 +1101,23 @@ function SensorProps({
     <>
       <NameRow entity={e} />
       <ColorRow entity={e} />
+      <label className="ss-prop-field">
+        <span className="ss-prop-label">Type</span>
+        <select
+          className="ss-prop-input ss-prop-select"
+          value={e.singletonType || "environmental"}
+          disabled={busy}
+          onChange={(ev) => {
+            patch({
+              singletonType: ev.target.value as SensorSingletonType,
+            });
+          }}
+          aria-label="Sensor type"
+        >
+          <option value="environmental">Environmental</option>
+          <option value="attribute">Attribute</option>
+        </select>
+      </label>
       <div className="ss-prop-grid3">
         <NumField
           label="X"
@@ -1118,18 +1199,22 @@ function SensorProps({
         dirty={dirty}
         busy={busy}
         savedFlash={savedFlash}
-        canPersist={Boolean(sensorId && authToken && sceneId)}
+        canPersist={Boolean(authToken && sceneId && (sensorId || isDraft))}
         onSave={() => void onSave()}
-        disabledTitle="Sensor is not linked to the server yet"
+        disabledTitle="Sign in and open a scene to save this sensor"
       />
       <p className="ss-prop-hint">
-        {e.areaMode === "scene"
-          ? "Full scene coverage. Save writes name and area to the database."
-          : e.areaMode === "circle"
-            ? "Circle uses X/Y as center. Save writes area and radius to the database."
-            : e.points.length >= 3
-              ? "Polygon is ready. Save writes vertices and center to the database."
-              : "Click the floor to place vertices. Click the first point (or Enter / double-click) to close."}
+        {isDraft
+          ? e.areaMode === "poly" && e.points.length < 3
+            ? "Click the floor to place polygon vertices, then Save to create this sensor on the server."
+            : "Save creates this sensor on the server with the current type, pose, and coverage. Delete from the Outliner."
+          : e.areaMode === "scene"
+            ? "Full scene coverage. Save writes name, type, and area to the database."
+            : e.areaMode === "circle"
+              ? "Circle uses X/Y as center. Save writes type, area, and radius to the database."
+              : e.points.length >= 3
+                ? "Polygon is ready. Save writes type, vertices, and center to the database."
+                : "Click the floor to place vertices. Click the first point (or Enter / double-click) to close."}
       </p>
     </>
   );
@@ -1415,21 +1500,17 @@ export function Properties({
   sensors = [],
   children = [],
   onCamerasChange,
+  onSensorsChange,
   authToken = "",
   isSuperuser = false,
 }: {
   sceneName: string;
   sceneId?: string;
   cameras?: SceneCameraBootstrap[];
-  sensors?: {
-    id: string;
-    sensorId: string;
-    name: string;
-    calibrateHref: string;
-    deleteUrl?: string | null;
-  }[];
+  sensors?: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
   onCamerasChange?: Dispatch<SetStateAction<SceneCameraBootstrap[]>>;
+  onSensorsChange?: Dispatch<SetStateAction<SceneSensorBootstrap[]>>;
   authToken?: string;
   isSuperuser?: boolean;
 }) {
@@ -1481,6 +1562,7 @@ export function Properties({
           sensorId={senBoot?.sensorId}
           sceneId={sceneId}
           authToken={authToken}
+          onSensorsChange={onSensorsChange}
         />
       )}
       {e?.type === "mark" && <MarkProps e={e} />}

@@ -74,6 +74,9 @@ export interface CameraEntity extends ViewportEntityBase {
 /** Sensor coverage area (matches AREA_CHOICES / SensorCalibratePanel). */
 export type SensorAreaMode = "scene" | "circle" | "poly";
 
+/** Singleton sensor kind (matches SINGLETON_CHOICES). */
+export type SensorSingletonType = "environmental" | "attribute";
+
 export interface SensorEntity extends ViewportEntityBase {
   type: "sensor";
   position: [number, number, number];
@@ -83,6 +86,8 @@ export interface SensorEntity extends ViewportEntityBase {
   radius: number;
   /** Floor polygon vertices in meters (poly mode). Empty while drawing. */
   points: [number, number][];
+  /** Environmental vs attribute analytics role. */
+  singletonType: SensorSingletonType;
   color: string;
 }
 

@@ -1096,6 +1096,7 @@ async function seedSensors(
           ? Number(area.radius)
           : 5;
       let position: [number, number, number] | null = null;
+      let singletonType: SensorEntity["singletonType"] = "environmental";
       if (authToken) {
         try {
           const row = (await api.getSensor(authToken, s.sensorId)) ?? {};
@@ -1105,6 +1106,12 @@ async function seedSensors(
               Number(row.translation[1]),
               0,
             ];
+          }
+          if (
+            row.singleton_type === "attribute" ||
+            row.singleton_type === "environmental"
+          ) {
+            singletonType = row.singleton_type;
           }
         } catch {
           position = null;
@@ -1136,6 +1143,7 @@ async function seedSensors(
         areaMode,
         radius: areaRadius,
         points,
+        singletonType,
         color: "#bf5af2",
       } satisfies SensorEntity;
     }),

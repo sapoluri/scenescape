@@ -603,6 +603,7 @@ export function SinglePaneView({
                     sensors={sensors}
                     children={children}
                     onCamerasChange={onCamerasChange}
+                    onSensorsChange={onSensorsChange}
                     authToken={authToken}
                     isSuperuser={isSuperuser}
                   />

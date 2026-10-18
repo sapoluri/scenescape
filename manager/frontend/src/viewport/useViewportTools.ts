@@ -480,6 +480,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         areaMode: "circle",
         radius: 5,
         points: [],
+        singletonType: "environmental",
         color: "#bf5af2",
       };
       s.commitHistory();

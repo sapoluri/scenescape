@@ -95,6 +95,7 @@ function seedSyntheticEntities(): void {
     areaMode: "circle",
     radius: 6,
     points: [],
+    singletonType: "environmental",
     color: "#bf5af2",
   };
   s.upsertEntities([region, flat, trip, camera, sensor]);

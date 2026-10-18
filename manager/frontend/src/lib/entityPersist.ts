@@ -60,6 +60,7 @@ export function entityPersistKey(e: ViewportEntity): string {
         areaMode: e.areaMode,
         radius: e.radius,
         points: e.points,
+        singletonType: e.singletonType,
         color: e.color,
       });
     case "region":
@@ -162,6 +163,7 @@ export async function persistSensorEntity(
     sensor_id: sensorId,
     scene: sceneId,
     area: e.areaMode,
+    singleton_type: e.singletonType || "environmental",
   };
   if (e.areaMode === "circle") {
     payload.center = [e.position[0], e.position[1]];
