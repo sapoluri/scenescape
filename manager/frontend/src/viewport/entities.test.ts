@@ -2,8 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
+  BoxGeometry,
+  ExtrudeGeometry,
+  FrontSide,
+  ConeGeometry,
   Euler,
   Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -14,14 +20,21 @@ import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
   buildChild,
+  buildRegion,
   buildTripwire,
   childViewportId,
+  entityLabelAnchor,
   lookAtOriginEuler,
   restPoseToRigEuler,
   TRIPWIRE_CURTAIN_HEIGHT,
   tripwirePlusNormal,
 } from "./entities";
-import type { CameraEntity, ChildSceneEntity, TripwireEntity } from "./types";
+import type {
+  CameraEntity,
+  ChildSceneEntity,
+  RegionEntity,
+  TripwireEntity,
+} from "./types";
 
 const D2R = Math.PI / 180;
 
@@ -245,6 +258,69 @@ describe("tripwirePlusNormal", () => {
   });
 });
 
+describe("buildRegion", () => {
+  it("renders ROI geometry at its configured height independent of volumetric", () => {
+    const region: RegionEntity = {
+      id: "roi-height",
+      type: "region",
+      name: "Height check",
+      visible: true,
+      points: [
+        [0, 0],
+        [4, 0],
+        [4, 3],
+      ],
+      min: [0, 0],
+      max: [4, 3],
+      height: 2.75,
+      color: "#30d158",
+      volumetric: false,
+      bufferSize: 0,
+    };
+    const nodes = buildRegion(region);
+    try {
+      const fill = nodes.gizmoTarget.children.find(
+        (node): node is Mesh =>
+          node instanceof Mesh && node.geometry instanceof ExtrudeGeometry,
+      );
+      expect(fill).toBeDefined();
+      fill!.geometry.computeBoundingBox();
+      expect(fill!.geometry.boundingBox!.max.z).toBeCloseTo(region.height);
+      const material = fill!.material as MeshStandardMaterial;
+      expect(material.side).toBe(FrontSide);
+      expect(material.depthWrite).toBe(true);
+    } finally {
+      nodes.dispose();
+    }
+  });
+});
+
+describe("entityLabelAnchor", () => {
+  it("anchors labels to the top center of world-space bounds", () => {
+    const root = new Object3D();
+    const geometry = new BoxGeometry(2, 4, 6);
+    const material = new MeshBasicMaterial();
+    const mesh = new Mesh(geometry, material);
+    mesh.position.set(4, -2, 3);
+    root.add(mesh);
+    const proxyGeometry = new BoxGeometry(10, 10, 20);
+    const proxyMaterial = new MeshBasicMaterial({ colorWrite: false });
+    const proxy = new Mesh(proxyGeometry, proxyMaterial);
+    proxy.position.z = 10;
+    root.add(proxy);
+    try {
+      expect(entityLabelAnchor(root, new Vector3()).toArray()).toEqual([
+        4, -2, 6,
+      ]);
+    } finally {
+      geometry.dispose();
+      material.dispose();
+      proxyGeometry.dispose();
+      proxyMaterial.dispose();
+    }
+  });
+});
+
 describe("buildTripwire light curtain", () => {
   function wire(points: [number, number][]): TripwireEntity {
     return {
@@ -311,6 +387,38 @@ describe("buildTripwire light curtain", () => {
       expect(axis.x).toBeCloseTo(1, 5);
       expect(axis.y).toBeCloseTo(0, 5);
       expect(arrow!.position.x).toBeGreaterThan(0);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("uses the tripwire color and exposes +1 as an entity label", () => {
+    const nodes = buildTripwire(
+      wire([
+        [0, 0],
+        [10, 0],
+      ]),
+    );
+    try {
+      const arrow = nodes.group.getObjectByName("tripwire-plus") as Mesh;
+      expect((arrow.material as MeshBasicMaterial).color.getHex()).toBe(
+        0xff9f0a,
+      );
+      expect(nodes.extraLabels).toHaveLength(1);
+      expect(nodes.extraLabels?.[0]).toMatchObject({
+        key: "plus",
+        text: "+1",
+        color: "#ff9f0a",
+      });
+      expect((arrow.geometry as ConeGeometry).parameters.radius).toBeCloseTo(
+        0.054,
+      );
+      expect((arrow.geometry as ConeGeometry).parameters.height).toBeCloseTo(
+        0.24,
+      );
+      expect(nodes.extraLabels?.[0].position.x).toBeCloseTo(5);
+      expect(nodes.extraLabels?.[0].position.y).toBeCloseTo(-0.4);
+      expect(nodes.extraLabels?.[0].position.z).toBeCloseTo(1.1);
     } finally {
       nodes.dispose();
     }

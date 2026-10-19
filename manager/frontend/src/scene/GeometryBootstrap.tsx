@@ -43,6 +43,7 @@ export function GeometryBootstrap({
       ];
       upsertRoiMeta(roi.uuid, {
         title: roi.title,
+        color: raw.color,
         volumetric: roi.volumetric,
         height: roi.height,
         buffer_size: roi.buffer_size,
@@ -60,6 +61,7 @@ export function GeometryBootstrap({
       }
       upsertTripMeta(uuid, {
         title: (raw.title || "").trim(),
+        color: raw.color,
         points: (raw.points || []).map(
           (p) => [Number(p[0]), Number(p[1])] as [number, number],
         ),

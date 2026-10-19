@@ -19,6 +19,7 @@ type Props = {
   calibrating?: boolean;
   mode?: "live" | "replay";
   onModeChange?: (mode: "live" | "replay") => void;
+  onExportScene?: () => void;
   sceneChrome?: SceneChromeActions | null;
 };
 
@@ -86,6 +87,7 @@ export function ViewportOptionsBar({
   calibrating = false,
   mode = "live",
   onModeChange,
+  onExportScene,
   sceneChrome = null,
 }: Props) {
   const ortho = useViewportStore((s) => s.ortho);
@@ -114,15 +116,17 @@ export function ViewportOptionsBar({
             <h2 className="ss-viewport-scene-name" id="scene_name">
               {sceneChrome.sceneName}
             </h2>
-            <a
+            <button
+              type="button"
               className="ss-viewport-bar-btn"
               id="export-scene"
-              href="#"
               title={`Export ${sceneChrome.sceneName}`}
+              aria-label={`Export ${sceneChrome.sceneName}`}
+              onClick={onExportScene}
             >
               <i className="bi bi-box-arrow-up" aria-hidden="true" />
               <span className="sr-only">Export</span>
-            </a>
+            </button>
             {sceneChrome.isSuperuser ? (
               <a
                 className="ss-viewport-bar-btn"

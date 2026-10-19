@@ -21,6 +21,7 @@ import type {
   SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import { SceneExportDialog } from "../scene/SceneExportDialog";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import { useVisualizeStore } from "../viewport/visualize";
@@ -204,6 +205,7 @@ export function SinglePaneView({
   const [editorAsset, setEditorAsset] = useState<string | null | undefined>(
     undefined,
   );
+  const [exportOpen, setExportOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [adminListKind, setAdminListKind] = useState<OpenAdminListKind | null>(
     null,
@@ -417,6 +419,7 @@ export function SinglePaneView({
           calibrating={(calibrating || visualizing) && !replayMode}
           mode={replayMode ? "replay" : "live"}
           onModeChange={(m) => setReplayMode(m === "replay")}
+          onExportScene={() => setExportOpen(true)}
           sceneChrome={sceneChrome}
         />
       </div>
@@ -697,6 +700,13 @@ export function SinglePaneView({
         }}
         authToken={authToken}
         isSuperuser={isSuperuser}
+      />
+      <SceneExportDialog
+        open={exportOpen}
+        sceneId={sceneId}
+        sceneName={sceneName}
+        authToken={authToken}
+        onClose={() => setExportOpen(false)}
       />
       <OpenAdminListDialog
         open={adminListKind !== null}

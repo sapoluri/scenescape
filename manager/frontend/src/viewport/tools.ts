@@ -52,7 +52,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "tripwire",
     label: "Tripwire",
-    icon: "bi-slash-lg",
+    icon: "bi-arrow-bar-right",
     shortcut: "T",
     hint: "Click 2+ floor points, double-click/Enter to finish (Esc cancels)",
   },

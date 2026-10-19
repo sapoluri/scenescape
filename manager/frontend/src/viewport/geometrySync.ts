@@ -55,6 +55,7 @@ export function restoreGeometry(snap: GeometrySnapshot): void {
   for (const r of snap.rois) {
     upsertRoiMeta(r.uuid, {
       title: r.title,
+      color: r.color,
       points: r.points,
       volumetric: r.volumetric,
       height: r.height,
@@ -64,7 +65,11 @@ export function restoreGeometry(snap: GeometrySnapshot): void {
     });
   }
   for (const t of snap.trips) {
-    upsertTripMeta(t.uuid, { title: t.title, points: t.points });
+    upsertTripMeta(t.uuid, {
+      title: t.title,
+      color: t.color,
+      points: t.points,
+    });
   }
   publishGeometryDirty("roi", true);
   publishGeometryDirty("trip", true);
@@ -136,9 +141,9 @@ export function seedEntitiesFromGeometry(): {
       min,
       max,
       height: Number(r.height) || 1,
-      color: r.sectors?.[0]?.color
+      color: r.color || (r.sectors?.[0]?.color
         ? sectorColorToHex(r.sectors[0].color)
-        : DEFAULT_REGION_COLOR,
+        : DEFAULT_REGION_COLOR),
       volumetric: Boolean(r.volumetric),
       bufferSize: Number(r.buffer_size) || 0,
     };
@@ -155,7 +160,7 @@ export function seedEntitiesFromGeometry(): {
       points,
       a: points[0] ?? [0, 0],
       b: points[points.length - 1] ?? [0, 0],
-      color: DEFAULT_TRIPWIRE_COLOR,
+      color: t.color || DEFAULT_TRIPWIRE_COLOR,
     };
   });
   return { regions, tripwires };
@@ -178,6 +183,7 @@ function sectorColorToHex(color: string): string {
 export function writeRegionToModel(e: RegionEntity): void {
   upsertRoiMeta(e.id, {
     title: e.name,
+    color: e.color,
     volumetric: e.volumetric,
     height: e.height,
     buffer_size: e.bufferSize,
@@ -187,7 +193,7 @@ export function writeRegionToModel(e: RegionEntity): void {
 }
 
 export function writeTripwireToModel(e: TripwireEntity): void {
-  upsertTripMeta(e.id, { title: e.name });
+  upsertTripMeta(e.id, { title: e.name, color: e.color });
   replaceTripPoints(e.id, e.points);
   publishGeometryDirty("trip", true);
 }

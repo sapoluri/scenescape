@@ -107,6 +107,7 @@ function NumField({
   value,
   step = 0.1,
   digits,
+  onPreview,
   onCommit,
 }: {
   label: string;
@@ -114,6 +115,7 @@ function NumField({
   step?: number;
   /** When set, display and commit are rounded to this many fractional digits. */
   digits?: number;
+  onPreview?: (v: number) => void;
   onCommit: (v: number) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -130,7 +132,16 @@ function NumField({
         step={inputStep}
         className="ss-prop-input"
         value={text ?? display}
-        onChange={(ev) => setText(ev.target.value)}
+        onChange={(ev) => {
+          const next = ev.target.value;
+          setText(next);
+          if (next.trim() !== "") {
+            const v = Number(next);
+            if (Number.isFinite(v)) {
+              onPreview?.(digits !== undefined ? roundDigits(v, digits) : v);
+            }
+          }
+        }}
         onBlur={() => {
           if (text !== null) {
             const v = Number(text);
@@ -486,6 +497,11 @@ function RegionProps({ e }: { e: RegionEntity }) {
       <NumField
         label="Height (m)"
         value={e.height}
+        onPreview={(v) =>
+          getViewportState().updateEntity(e.id, {
+            height: Math.max(0.1, v),
+          })
+        }
         onCommit={(v) => patch({ height: Math.max(0.1, v) })}
       />
       <NumField

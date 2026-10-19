@@ -71,7 +71,7 @@
   height: var(--ss-bar-control-h);
   background: var(--ss-fill-secondary, var(--ss-input-bg));
   border: 1px solid var(--ss-border, var(--ss-card-border));
-  border-radius: 8px;
+  border-radius: 0;
   padding: 2px;
   gap: 2px;
 }
@@ -83,7 +83,7 @@
   border: 0;
   background: transparent;
   color: var(--ss-text-muted);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0 10px;
   font-size: 12px;
   line-height: 1;
@@ -377,7 +377,9 @@
 }
 
 .ss-viewport-tools.is-vertical .ss-tool-btn .bi {
+  display: block;
   font-size: 22px;
+  line-height: 1;
 }
 
 .ss-viewport-tools.is-vertical .ss-viewport-bar-sep {
@@ -418,10 +420,19 @@
 }
 
 .ss-vlabel--cal {
-  min-width: 1.1rem;
-  text-align: center;
-  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 3px;
+  background: rgb(0 0 0 / 0.75);
+  color: #fff;
   font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   border-width: 2px;
   pointer-events: none;
 }

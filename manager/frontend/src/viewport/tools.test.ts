@@ -35,6 +35,7 @@ describe("TOOLS", () => {
 
   it("toolDef resolves and throws on unknown ids", () => {
     expect(toolDef("move").label).toBe("Move");
+    expect(toolDef("tripwire").icon).toBe("bi-arrow-bar-right");
     expect(() => toolDef("nope" as ToolId)).toThrow();
   });
 

@@ -328,15 +328,6 @@ export function CalibrateFeedPane(): React.JSX.Element {
                     r={markR}
                     fill={calibrationPointColor(i)}
                   />
-                  <text
-                    x={pt[0] + markR * 1.2}
-                    y={pt[1] - markR}
-                    fill="#e9eaee"
-                    fontSize={markR * 3.2}
-                    fontWeight="700"
-                  >
-                    {i + 1}
-                  </text>
                 </g>
               ))}
             </svg>
@@ -344,6 +335,20 @@ export function CalibrateFeedPane(): React.JSX.Element {
         ) : (
           <div className="ss-cal-feed-empty">Waiting for calibration frame…</div>
         )}
+        {imageUrl && camPoints.map((point, index) => (
+          <div
+            key={`label-${index}`}
+            className="ss-vlabel ss-vlabel--cal"
+            style={{
+              left: view.panX + point[0] * base * view.scale,
+              top: view.panY + (point[1] - markR) * base * view.scale - 4,
+              transform: "translate(-50%, -100%)",
+              borderColor: calibrationPointColor(index),
+            }}
+          >
+            {index + 1}
+          </div>
+        ))}
       </div>
     </div>
   );

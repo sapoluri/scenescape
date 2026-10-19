@@ -410,9 +410,9 @@ export function useCalibrateSession(
           continue;
         }
         el.style.display = "";
-        el.style.transform = `translate(-50%, -120%) translate(${
+        el.style.transform = `translate(-50%, -100%) translate(${(
           (proj.x * 0.5 + 0.5) * w
-        }px, ${(-proj.y * 0.5 + 0.5) * h}px)`;
+        )}px, ${(-proj.y * 0.5 + 0.5) * h - 4}px)`;
       }
     };
     world.onFrame.add(updateLabels);

@@ -529,6 +529,7 @@ class CamSerializer(NonNullSerializer):
 
 class RegionSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)
+  color = serializers.CharField(max_length=7, required=False, allow_blank=True)
   uid = serializers.SerializerMethodField('get_uuid')
   points = PointsSerializerField()
   scene = serializers.CharField(source='scene.pk')
@@ -577,13 +578,13 @@ class RegionSerializer(NonNullSerializer):
 
   class Meta:
     model = Region
-    fields = ['uid', 'name', 'points', 'scene', 'buffer_size', 'height', 'volumetric', 'color_ranges',
+    fields = ['uid', 'name', 'color', 'points', 'scene', 'buffer_size', 'height', 'volumetric', 'color_ranges',
               'visible']
 
 class TripwireSerializer(RegionSerializer):
   class Meta:
     model = Tripwire
-    fields = ['uid', 'name', 'points', 'height', 'scene', 'visible']
+    fields = ['uid', 'name', 'color', 'points', 'height', 'scene', 'visible']
 
 class MapCornersLLAField(serializers.JSONField):
   """Accept a parsed list or a JSON string (multipart form posts)."""

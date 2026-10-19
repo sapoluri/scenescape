@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useState } from "react";
+import { Button } from "../../components/Button";
 import { useAppToast } from "../../components/ToastProvider";
 import {
   frameToBase64,
@@ -243,99 +244,108 @@ export function CalibrateWizard({
         : "Step 3–4 · Frustum updated · Save when ready";
 
   return (
-    <div className="ss-cal-wizard" role="toolbar" aria-label="Calibration wizard">
-      <span className="ss-cal-wizard-badge">Calibrate</span>
-      <label className="ss-cal-wizard-cam">
-        <span className="ss-viewport-bar-label">Camera</span>
-        <select
-          value={cameraId || ""}
-          onChange={(ev) => {
-            const id = ev.target.value;
-            const cam = cameras.find((c) => c.id === id);
-            if (!cam) {
-              return;
-            }
-            if (dirty && !window.confirm("Switch camera and discard points?")) {
-              return;
-            }
-            restorePrior();
-            enter({
-              cameraId: cam.id,
-              sensorId: cam.sensorId,
-              cameraName: cam.name,
-            });
-          }}
-          aria-label="Select camera to calibrate"
-        >
-          {cameras.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className="ss-cal-wizard-step" title={stepLabel}>
-        {stepLabel}
-      </span>
-      <ProjectionOpacitySlider cameraId={cameraId || undefined} />
-      <span className="ss-viewport-bar-sep" aria-hidden="true" />
-      <button
-        type="button"
-        className="ss-tool-btn"
-        disabled={!hasPoints || busy}
-        onClick={undoPoint}
-        title="Undo last point"
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn"
-        disabled={!hasPoints || busy}
-        onClick={resetPoints}
-        title="Clear all points"
-      >
-        Reset
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn"
-        id="auto-autocalibration"
-        disabled={!autoReady || autoBusy || !feedImageUrl || busy}
-        title={autoBusy ? "Waiting for AprilTag calibration…" : autoTitle}
-        onClick={() => void onAutoCalibrate()}
-      >
-        <i className="bi bi-lightning" aria-hidden="true" />
-        <span className="ss-tool-label">
-          {autoBusy ? "Calibrating…" : "Auto Calibrate"}
+    <div
+      className="ss-cal-wizard ss-cal-wizard--calibration"
+      role="toolbar"
+      aria-label="Calibration wizard"
+    >
+      <div className="ss-cal-wizard-main">
+        <label className="ss-cal-wizard-cam">
+          <span className="ss-viewport-bar-label">Calibrate Camera</span>
+          <select
+            value={cameraId || ""}
+            onChange={(ev) => {
+              const id = ev.target.value;
+              const cam = cameras.find((c) => c.id === id);
+              if (!cam) {
+                return;
+              }
+              if (
+                dirty &&
+                !window.confirm("Switch camera and discard points?")
+              ) {
+                return;
+              }
+              restorePrior();
+              enter({
+                cameraId: cam.id,
+                sensorId: cam.sensorId,
+                cameraName: cam.name,
+              });
+            }}
+            aria-label="Select camera to calibrate"
+          >
+            {cameras.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="ss-cal-wizard-step" title={stepLabel}>
+          {stepLabel}
         </span>
-      </button>
-      <button
-        type="button"
-        className={`ss-tool-btn ss-tool-save${dirty && pairCount >= 4 ? " is-dirty" : ""}`}
-        disabled={!canSave}
-        onClick={onSave}
-        title={
-          camPoints.length !== mapPoints.length
-            ? "Need an equal number of points in each view"
-            : pairCount < 4
-              ? "Need at least 4 point pairs"
-              : "Save calibration (PUT camera)"
-        }
-      >
-        <i className="bi bi-check-lg" aria-hidden="true" />
-        <span className="ss-tool-label">
-          {busy ? "Saving…" : savedFlash ? "Saved" : "Save"}
-        </span>
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn ss-cal-wizard-exit"
-        onClick={onExit}
-        title="Exit calibrate (Esc)"
-      >
-        Exit
-      </button>
+      </div>
+      <div className="ss-cal-wizard-actions">
+        <ProjectionOpacitySlider cameraId={cameraId || undefined} />
+        <span className="ss-viewport-bar-sep" aria-hidden="true" />
+        <div className="ss-cal-wizard-buttons">
+          <Button
+            variant="secondary"
+            className="ss-btn--sm"
+            disabled={!hasPoints || busy}
+            onClick={undoPoint}
+            title="Undo last point"
+          >
+            Undo
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm"
+            disabled={!hasPoints || busy}
+            onClick={resetPoints}
+            title="Clear all points"
+          >
+            Reset
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm"
+            id="auto-autocalibration"
+            disabled={!autoReady || autoBusy || !feedImageUrl || busy}
+            title={autoBusy ? "Waiting for AprilTag calibration…" : autoTitle}
+            onClick={() => void onAutoCalibrate()}
+          >
+            <i className="bi bi-lightning" aria-hidden="true" />
+            {autoBusy ? "Calibrating…" : "Auto Calibrate"}
+          </Button>
+          <Button
+            variant="primary"
+            className={`ss-btn--sm${dirty && pairCount >= 4 ? " ss-btn--dirty" : ""}`}
+            disabled={!canSave}
+            onClick={onSave}
+            title={
+              camPoints.length !== mapPoints.length
+                ? "Need an equal number of points in each view"
+                : pairCount < 4
+                  ? "Need at least 4 point pairs"
+                  : "Save calibration (PUT camera)"
+            }
+          >
+            <i className="bi bi-check-lg" aria-hidden="true" />
+            {busy ? "Saving…" : savedFlash ? "Saved" : "Save"}
+          </Button>
+          <button
+            type="button"
+            className="ss-sp-dock-props-close"
+            onClick={onExit}
+            title="Close calibration (Esc)"
+            aria-label="Close calibration"
+          >
+            <i className="bi bi-x" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

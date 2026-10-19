@@ -15,6 +15,7 @@ import { CalibrateWizard } from "./calibrate/CalibrateWizard";
 import { useCalibrateStore } from "./calibrate/calibrateStore";
 import { useCalibrateSession } from "./calibrate/useCalibrateSession";
 import { useViewportEntities } from "./entities";
+import { SceneExportDialog } from "../scene/SceneExportDialog";
 import { useViewportMarks } from "./marks";
 import { countDirtyPersistable, usePersistStore } from "./persistStore";
 import { attachMarkRenderer } from "./renderMarks";
@@ -315,6 +316,7 @@ export function SceneViewport({
   const statsHostRef = useRef<HTMLDivElement>(null);
   const [world, setWorld] = useState<ViewportWorld | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const theme = useTheme();
   const emptyScene = !sceneId;
 
@@ -435,6 +437,15 @@ export function SceneViewport({
         .join(" ")}
       data-scene-id={sceneId || ""}
     >
+      {sceneId ? (
+        <SceneExportDialog
+          open={exportOpen}
+          sceneId={sceneId}
+          sceneName={sceneChrome?.sceneName || sceneName || "Scene"}
+          authToken={authToken}
+          onClose={() => setExportOpen(false)}
+        />
+      ) : null}
       {showTopChrome ? (
         <>
           <ViewportMenuBar
@@ -449,6 +460,7 @@ export function SceneViewport({
             calibrating={splitActive}
             mode={mode}
             onModeChange={onModeChange}
+            onExportScene={() => setExportOpen(true)}
             sceneChrome={emptyScene ? null : sceneChrome}
           />
         </>

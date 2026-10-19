@@ -181,9 +181,13 @@ def saveTripwireData(scene, form):
     # Use the provided title or default to "tripwire_<query_uuid>"
     trip_title = trip.title if trip.title else f"tripwire_{query_uuid}"
 
-    tripwire, _ = Tripwire.objects.update_or_create(uuid=query_uuid, defaults={
-        'scene':scene, 'name':trip_title,
-      })
+    defaults = {'scene': scene, 'name': trip_title}
+    if getattr(trip, 'color', None):
+      defaults['color'] = trip.color
+    tripwire, _ = Tripwire.objects.update_or_create(
+      uuid=query_uuid,
+      defaults=defaults,
+    )
     current_tripwire_ids.add(tripwire.uuid)
 
     current_tripwire_point_ids= set()
@@ -224,13 +228,19 @@ def saveRegionData(scene, form):
     # Use the provided title or default to "roi_<query_uuid>"
     roi_title = roi.title if roi.title else f"roi_{query_uuid}"
 
-    region, _ = Region.objects.update_or_create(uuid=query_uuid, defaults={
+    defaults = {
       'scene': scene,
       'name': roi_title,
       'volumetric': getattr(roi, 'volumetric', False),
       'height': getattr(roi, 'height', 1),
       'buffer_size': getattr(roi, 'buffer_size', 0)
-      })
+    }
+    if getattr(roi, 'color', None):
+      defaults['color'] = roi.color
+    region, _ = Region.objects.update_or_create(
+      uuid=query_uuid,
+      defaults=defaults,
+    )
     current_region_ids.add(region.uuid)
 
     current_region_point_ids= set()

@@ -88,7 +88,7 @@ const GROUPS: {
 const TYPE_ICON: Record<ViewportEntityType, string> = {
   map: "bi-box",
   region: "bi-square",
-  tripwire: "bi-slash-lg",
+  tripwire: "bi-arrow-bar-right",
   camera: "bi-camera-video",
   sensor: "bi-broadcast",
   mark: "bi-person-walking",

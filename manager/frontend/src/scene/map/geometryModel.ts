@@ -12,6 +12,7 @@ export type GeometryPoint = [number, number];
 export type RoiGeometry = {
   uuid: string;
   title: string;
+  color: string;
   points: GeometryPoint[];
   volumetric: boolean;
   height: number;
@@ -23,8 +24,12 @@ export type RoiGeometry = {
 export type TripwireGeometry = {
   uuid: string;
   title: string;
+  color: string;
   points: GeometryPoint[];
 };
+
+const DEFAULT_ROI_COLOR = "#30d158";
+const DEFAULT_TRIPWIRE_COLOR = "#ff9f0a";
 
 type Listener = () => void;
 
@@ -74,6 +79,7 @@ export function upsertRoiMeta(
   const next: RoiGeometry = {
     uuid,
     title: patch.title ?? prev?.title ?? "",
+    color: patch.color ?? prev?.color ?? DEFAULT_ROI_COLOR,
     points: patch.points ?? prev?.points ?? [],
     volumetric: patch.volumetric ?? prev?.volumetric ?? false,
     height: patch.height ?? prev?.height ?? 1,
@@ -101,6 +107,7 @@ export function upsertTripMeta(
   const next: TripwireGeometry = {
     uuid,
     title: patch.title ?? prev?.title ?? "",
+    color: patch.color ?? prev?.color ?? DEFAULT_TRIPWIRE_COLOR,
     points: patch.points ?? prev?.points ?? [],
   };
   trips.set(uuid, next);
@@ -158,6 +165,7 @@ export function replaceRoiPoints(uuid: string, points: GeometryPoint[]): void {
     rois.set(uuid, {
       uuid,
       title: "",
+      color: DEFAULT_ROI_COLOR,
       points,
       volumetric: false,
       height: 1,
@@ -179,7 +187,12 @@ export function replaceRoiPoints(uuid: string, points: GeometryPoint[]): void {
 export function replaceTripPoints(uuid: string, points: GeometryPoint[]): void {
   const prev = trips.get(uuid);
   if (!prev) {
-    trips.set(uuid, { uuid, title: "", points });
+    trips.set(uuid, {
+      uuid,
+      title: "",
+      color: DEFAULT_TRIPWIRE_COLOR,
+      points,
+    });
   } else {
     trips.set(uuid, { ...prev, points });
   }
@@ -192,6 +205,7 @@ export function ingestStringifyRois(
   drafts: Array<{
     uuid?: string;
     title?: string;
+    color?: string;
     points?: number[][];
     volumetric?: boolean;
     height?: number;
@@ -227,6 +241,7 @@ export function ingestStringifyRois(
           : undefined;
     upsertRoiMeta(uuid, {
       title: d.title,
+      color: d.color,
       points,
       volumetric: d.volumetric,
       height: d.height,
@@ -248,6 +263,7 @@ export function ingestStringifyTrips(
   drafts: Array<{
     uuid?: string;
     title?: string;
+    color?: string;
     points?: number[][];
   }>,
 ): void {
@@ -261,7 +277,7 @@ export function ingestStringifyTrips(
     const points = (d.points || []).map(
       (p) => [Number(p[0]), Number(p[1])] as GeometryPoint,
     );
-    upsertTripMeta(uuid, { title: d.title, points });
+    upsertTripMeta(uuid, { title: d.title, color: d.color, points });
   }
   for (const id of Array.from(trips.keys())) {
     if (!keep.has(id)) {
@@ -277,6 +293,7 @@ export function flushGeometryToHidden(): void {
   const roiPayload = getRoiList().map((r) => ({
     title: r.title,
     uuid: r.uuid,
+    color: r.color,
     points: r.points,
     volumetric: r.volumetric,
     height: r.height,
@@ -289,6 +306,7 @@ export function flushGeometryToHidden(): void {
   const tripPayload = getTripwireList().map((t) => ({
     title: t.title,
     uuid: t.uuid,
+    color: t.color,
     points: t.points,
   }));
   writeInput("id_rois", JSON.stringify(roiPayload));
