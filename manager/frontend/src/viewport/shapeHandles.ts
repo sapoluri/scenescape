@@ -17,13 +17,20 @@ import { useCalibrateStore } from "./calibrate/calibrateStore";
 import { bboxOf, writeRegionToModel, writeTripwireToModel } from "./geometrySync";
 import { getViewportState, useViewportStore } from "./store";
 import { CREATION_TOOLS } from "./tools";
-import type { RegionEntity, TripwireEntity } from "./types";
+import type { RegionEntity, SensorEntity, TripwireEntity } from "./types";
 import type { ViewportWorld } from "./world";
 
-type Shape = RegionEntity | TripwireEntity;
+type Shape = RegionEntity | TripwireEntity | SensorEntity;
 const HANDLE_Z = 0.04;
 const HANDLE_RADIUS_PX = 7;
 const PICK_RADIUS_PX = 11;
+
+export function replaceShapePoints(shape: Shape, points: [number, number][]): Shape {
+  const copied = points.map(([x, y]): [number, number] => [x, y]);
+  if (shape.type === "region") return { ...shape, points: copied, ...bboxOf(copied) };
+  if (shape.type === "tripwire") return { ...shape, points: copied, a: copied[0], b: copied[copied.length - 1] };
+  return { ...shape, points: copied };
+}
 
 export function moveShapeVertex(shape: Shape, index: number, point: [number, number]): Shape {
   if (index < 0 || index >= shape.points.length || !point.every(Number.isFinite)) {
@@ -32,9 +39,7 @@ export function moveShapeVertex(shape: Shape, index: number, point: [number, num
   const points = shape.points.map(([x, y], pointIndex): [number, number] =>
     pointIndex === index ? [point[0], point[1]] : [x, y],
   );
-  return shape.type === "region"
-    ? { ...shape, points, ...bboxOf(points) }
-    : { ...shape, points, a: points[0], b: points[points.length - 1] };
+  return replaceShapePoints(shape, points);
 }
 
 export function createShapeHandle(color: string): Group {
@@ -105,7 +110,7 @@ export function attachShapeHandles(world: ViewportWorld): () => void {
     getViewportState().upsertEntities([updated]);
     if (updated.type === "region") {
       writeRegionToModel(updated);
-    } else {
+    } else if (updated.type === "tripwire") {
       writeTripwireToModel(updated);
     }
   };
@@ -154,7 +159,9 @@ export function attachShapeHandles(world: ViewportWorld): () => void {
   const sync = () => {
     const state = getViewportState();
     const selected = state.selectedId ? state.entities[state.selectedId] : undefined;
-    const next = selected?.type === "region" || selected?.type === "tripwire" ? selected : null;
+    const next = selected?.type === "region" || selected?.type === "tripwire" ||
+      (selected?.type === "sensor" && selected.areaMode === "poly" && selected.points.length >= 3)
+      ? selected : null;
     const enabled = !!next && next.visible !== false &&
       !useCalibrateStore.getState().active && !CREATION_TOOLS.includes(state.activeTool);
     if (next === previousShape && enabled === previousEnabled) {
@@ -238,7 +245,7 @@ export function attachShapeHandles(world: ViewportWorld): () => void {
     ), world.getActiveCamera());
     const hit = ray.ray.intersectPlane(new Plane(new Vector3(0, 0, 1), 0), new Vector3());
     const selected = getViewportState().entities[drag.original.id];
-    if (!hit || (selected?.type !== "region" && selected?.type !== "tripwire")) {
+    if (!hit || (selected?.type !== "region" && selected?.type !== "tripwire" && selected?.type !== "sensor")) {
       return;
     }
     const point = selected.points[drag.index];

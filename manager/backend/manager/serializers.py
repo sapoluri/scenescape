@@ -3,6 +3,7 @@
 
 from collections import OrderedDict
 import json
+import math
 import os
 
 from django.contrib.auth import authenticate
@@ -188,6 +189,20 @@ class SingletonScalarThresholdSerializer(RegionOccupancyThresholdSerializer):
     instance.__dict__.pop('singleton_scalar_threshold', None)
     return
 
+class SensorTranslationField(serializers.ListField):
+  def __init__(self, **kwargs):
+    super().__init__(child=serializers.FloatField(), min_length=3, max_length=3, **kwargs)
+
+  def to_representation(self, obj):
+    return [obj.map_x, obj.map_y, obj.map_z]
+
+  def to_internal_value(self, data):
+    coordinates = super().to_internal_value(data)
+    if not all(math.isfinite(value) for value in coordinates):
+      raise serializers.ValidationError("Coordinates must be finite numbers.")
+    return dict(zip(('map_x', 'map_y', 'map_z'), coordinates))
+
+
 class SingletonSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)
   id = serializers.IntegerField(source="pk", read_only=True)
@@ -195,11 +210,9 @@ class SingletonSerializer(NonNullSerializer):
   scene = serializers.CharField(source='scene.pk', allow_null=True, required=False)
   center = CenterSerializerField(source='*', required=False)
   points = PointsSerializerField(required=False)
-  translation = serializers.SerializerMethodField('get_translation')
+  translation = SensorTranslationField(source='*', required=False)
+  color = serializers.RegexField(r'^#[0-9a-fA-F]{6}$', required=False)
   color_ranges = SingletonScalarThresholdSerializer(source='singleton_scalar_threshold', required=False)
-
-  def get_translation(self, obj):
-    return [obj.map_x, obj.map_y, 0.0]
 
   def validate(self, data):
     area = data.get('area')
@@ -241,7 +254,7 @@ class SingletonSerializer(NonNullSerializer):
     if scene_uid is not None:
       validated_data['scene_id'] = scene_uid['pk']
     center = validated_data.pop('center', None)
-    if center is not None:
+    if center is not None and 'map_x' not in validated_data:
       validated_data['map_x'] = center[0]
       validated_data['map_y'] = center[1]
     validated_data['type'] = "generic"
@@ -277,7 +290,7 @@ class SingletonSerializer(NonNullSerializer):
   class Meta:
     model = SingletonSensor
     fields = ['id', 'uid', 'scene', 'sensor_id', 'name', 'area', 'points', 'radius',
-              'center', 'translation', 'singleton_type', 'color_ranges', 'visible']
+              'center', 'translation', 'color', 'singleton_type', 'color_ranges', 'visible']
 
 class CamSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)

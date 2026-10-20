@@ -249,6 +249,26 @@
   font-weight: 500;
 }
 
+.ss-vlabel--mark-dwell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ss-vlabel--mark-dwell-list .ss-vlabel--mark-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.ss-vlabel--mark-region-name {
+  min-width: 0;
+  max-width: 20rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .ss-viewport-error {
   padding: 24px;
   color: var(--ss-text, #fff);

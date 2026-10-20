@@ -107,6 +107,7 @@ export interface MarkEntity extends ViewportEntityBase {
   /** Heading radians about the Z axis, derived from velocity. NaN if unknown. */
   heading: number;
   speed: number;
+  regionDwells?: { regionId: string; seconds: number }[];
 }
 
 export interface ChildSceneEntity extends ViewportEntityBase {

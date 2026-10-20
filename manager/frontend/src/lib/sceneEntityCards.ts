@@ -39,6 +39,8 @@ function areaJsonFromRest(data: Record<string, unknown>): string | null {
     radius: data.radius ?? null,
     x: center ? center[0] : null,
     y: center ? center[1] : null,
+    z: Array.isArray(data.translation) ? data.translation[2] : 0,
+    color: data.color ?? "#bf5af2",
     points: Array.isArray(data.points) ? data.points : [],
     sectors: {
       thresholds: colorRanges?.sectors ?? [],

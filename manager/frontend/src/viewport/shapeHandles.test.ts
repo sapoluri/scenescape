@@ -8,7 +8,7 @@ import { resetGeometryModel } from "../scene/map/geometryModel";
 import { seedEntitiesFromGeometry, writeRegionToModel, writeTripwireToModel } from "./geometrySync";
 import { attachShapeHandles, createShapeHandle, moveShapeVertex } from "./shapeHandles";
 import { getViewportState, useViewportStore } from "./store";
-import type { RegionEntity, TripwireEntity } from "./types";
+import type { RegionEntity, SensorEntity, TripwireEntity } from "./types";
 import type { ViewportWorld } from "./world";
 
 function region(): RegionEntity {
@@ -23,6 +23,15 @@ function tripwire(): TripwireEntity {
   return {
     id: "tripwire-1", type: "tripwire", name: "Tripwire 1", visible: true,
     points: [[0, 0], [2, 1], [4, 3]], a: [0, 0], b: [4, 3], color: "#ff9f0a",
+  };
+}
+
+function sensor(): SensorEntity {
+  return {
+    id: "sensor-1", type: "sensor", name: "Sensor 1", visible: true,
+    position: [20, 30, 2], areaMode: "poly", radius: 5,
+    points: [[0, 0], [4, 0], [4, 3], [0, 3]],
+    singletonType: "environmental", color: "#bf5af2",
   };
 }
 
@@ -59,7 +68,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function harness(shape: RegionEntity | TripwireEntity = region()) {
+function harness(shape: RegionEntity | TripwireEntity | SensorEntity = region()) {
   const host = new FakeHost();
   const scene = new Scene();
   const camera = new PerspectiveCamera(60, 1, 0.1, 1000);
@@ -74,7 +83,7 @@ function harness(shape: RegionEntity | TripwireEntity = region()) {
   } as unknown as ViewportWorld;
   getViewportState().upsertEntities([shape]);
   if (shape.type === "region") writeRegionToModel(shape);
-  else writeTripwireToModel(shape);
+  else if (shape.type === "tripwire") writeTripwireToModel(shape);
   getViewportState().select(shape.id);
   cleanup = attachShapeHandles(world);
   const pointer = (type: string, point: [number, number], buttons = 0) => {
@@ -133,7 +142,7 @@ describe("floor shape handles", () => {
     expect(moveShapeVertex(original, 0, [NaN, 2])).toBe(original);
   });
 
-  it.each([region, tripwire])("drags vertices with crosshair/grabbing cursors and one undo step", (makeShape) => {
+  it.each([region, tripwire, sensor])("drags vertices with crosshair/grabbing cursors and one undo step", (makeShape) => {
     const original = makeShape();
     const { host, pointer, orbit } = harness(original);
     pointer("pointermove", [0, 0]);
@@ -148,11 +157,14 @@ describe("floor shape handles", () => {
     const updated = getViewportState().entities[original.id] as typeof original;
     expect(updated.points[0][0]).toBeLessThan(-1.9);
     expect(updated.points[1]).toEqual(original.points[1]);
+    if (updated.type === "sensor") expect(updated.position).toEqual([20, 30, 2]);
     expect(getViewportState().past).toHaveLength(1);
     expect(orbit.enabled).toBe(true);
     expect(host.hasPointerCapture(1)).toBe(false);
-    const model = seedEntitiesFromGeometry();
-    expect([...model.regions, ...model.tripwires].find(item => item.id === original.id)?.points).toEqual(updated.points);
+    if (updated.type !== "sensor") {
+      const model = seedEntitiesFromGeometry();
+      expect([...model.regions, ...model.tripwires].find(item => item.id === original.id)?.points).toEqual(updated.points);
+    }
     getViewportState().undo();
     expect((getViewportState().entities[original.id] as typeof original).points).toEqual(original.points);
   });

@@ -32,7 +32,7 @@ import {
 import { scenePoseFromObject } from "../placement/poseThree";
 import { getViewportState, useViewportStore } from "./store";
 import { CREATION_TOOLS, entityCanScale } from "./tools";
-import { attachShapeHandles } from "./shapeHandles";
+import { attachShapeHandles, replaceShapePoints } from "./shapeHandles";
 import type {
   CameraEntity,
   RegionEntity,
@@ -272,11 +272,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
       world.scene.remove(draft.preview);
       disposeGroup(draft.preview);
       const g = new Group();
+      const sensor = draft.sensorId ? getViewportState().entities[draft.sensorId] : undefined;
       const color =
         draft.tool === "region"
           ? 0x30d158
           : draft.tool === "sensor-poly"
-            ? 0xbf5af2
+            ? sensor?.type === "sensor" ? sensor.color : 0xbf5af2
             : 0xff9f0a;
       const mat = new MeshBasicMaterial({ color });
       for (const [x, y] of draft.points) {
@@ -343,12 +344,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
         if (!cur || cur.type !== "sensor") {
           return;
         }
-        const [cx, cy] = centroidOf(pts);
         s.commitHistory();
-        s.updateEntity(sensorId, {
-          points: pts.map(([x, y]) => [x, y] as [number, number]),
-          position: [cx, cy, cur.position[2]],
-        });
+        s.upsertEntities([replaceShapePoints(cur, pts)]);
         s.select(sensorId);
         return;
       }

@@ -18,6 +18,7 @@ import {
   ExtrudeGeometry,
   Group,
   LineBasicMaterial,
+  LineLoop,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -25,7 +26,6 @@ import {
   Object3D,
   PerspectiveCamera,
   Quaternion,
-  RingGeometry,
   Shape,
   ShapeGeometry,
   SphereGeometry,
@@ -74,6 +74,7 @@ import type { ViewportWorld } from "./world";
 
 export interface EntityNodes {
   group: Group;
+  labelRoot?: Object3D;
   ready?: Promise<void>;
   /** Object the TransformControls gizmo attaches to. */
   gizmoTarget: Object3D;
@@ -678,29 +679,28 @@ export function buildCamera(e: CameraEntity): EntityNodes {
 /* Sensors                                                             */
 /* ------------------------------------------------------------------ */
 
-function buildSensor(e: SensorEntity): EntityNodes {
+export function buildSensor(e: SensorEntity): EntityNodes {
   const group = new Group();
+  const marker = new Group();
+  marker.name = "sensor-marker";
   const base = new Color(e.color);
   const [x, y, z] = e.position;
   const polyPoints = e.areaMode === "poly" ? e.points : [];
   const showPoly = polyPoints.length >= 3;
-  const radius = e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
-
-  const poleGeo = new CylinderGeometry(0.09, 0.12, 2.2, 10);
-  poleGeo.rotateX(Math.PI / 2); // axis Y -> Z (Z-up)
-  const pole = new Mesh(
-    poleGeo,
-    new MeshStandardMaterial({ color: 0x3a3b45, roughness: 0.6 }),
-  );
-  pole.position.z = 1.1;
+  const radius = Math.max(e.radius, 0.5);
   const headMat = new MeshStandardMaterial({
     color: base.clone(),
     emissive: base.clone(),
     emissiveIntensity: 0.6,
     roughness: 0.4,
   });
-  const head = new Mesh(new SphereGeometry(0.22, 14, 10), headMat);
-  head.position.z = 2.3;
+  const head = new Mesh(new SphereGeometry(0.11, 16, 12), headMat);
+  head.name = "sensor-sphere";
+  head.position.z = 0.11;
+  const proxy = new Mesh(new SphereGeometry(0.16, 12, 8), proxyMaterial());
+  proxy.position.z = 0.11;
+  marker.add(head, proxy);
+  marker.position.set(x, y, z);
 
   const coverage = new Group();
   coverage.name = "sensor-coverage";
@@ -726,19 +726,22 @@ function buildSensor(e: SensorEntity): EntityNodes {
       new LineBasicMaterial({ color: base.clone() }),
     );
     edges.position.z = 0.06;
-    coverage.position.set(cx - x, cy - y, 0);
+    coverage.position.set(cx, cy, 0);
     coverage.add(fill, edges);
   } else if (e.areaMode === "circle") {
     // RingGeometry/CircleGeometry already lie in the XY plane = Z-up floor.
-    const ring = new Mesh(
-      new RingGeometry(Math.max(radius - 0.25, 0.1), radius, 48),
-      new MeshBasicMaterial({
+    const ring = new LineLoop(
+      new BufferGeometry().setFromPoints(Array.from({ length: 64 }, (_, index) => {
+        const angle = index * Math.PI * 2 / 64;
+        return new Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+      })),
+      new LineBasicMaterial({
         color: base.clone(),
-        transparent: true,
-        opacity: 0.35,
-        side: DoubleSide,
+        depthWrite: false,
       }),
     );
+    ring.name = "sensor-coverage-outline";
+    ring.renderOrder = 2;
     ring.position.z = 0.06;
     const disc = new Mesh(
       new CircleGeometry(radius, 48),
@@ -751,33 +754,19 @@ function buildSensor(e: SensorEntity): EntityNodes {
       }),
     );
     disc.position.z = 0.05;
+    coverage.position.set(x, y, 0);
     coverage.add(ring, disc);
-  } else if (e.areaMode === "poly") {
-    // Waiting for vertices — faint ring so the sensor stays findable.
-    const ring = new Mesh(
-      new RingGeometry(0.95, 1.2, 32),
-      new MeshBasicMaterial({
-        color: base.clone(),
-        transparent: true,
-        opacity: 0.22,
-        side: DoubleSide,
-      }),
-    );
-    ring.position.z = 0.06;
-    coverage.add(ring);
   }
 
-  const proxy = new Mesh(new BoxGeometry(1.5, 1.5, 2.6), proxyMaterial());
-  proxy.position.z = 1.3;
-  group.add(pole, head, coverage, proxy);
-  group.position.set(x, y, z);
+  group.add(marker, coverage);
   group.userData.entityId = e.id;
 
-  const labelPos = new Vector3(x, y, z + 2.9);
+  const labelPos = new Vector3(x, y, z + 0.45);
 
   return {
     group,
-    gizmoTarget: group,
+    labelRoot: marker,
+    gizmoTarget: marker,
     labelPos,
     setSelected: (on: boolean) => {
       headMat.emissiveIntensity = on ? 1.6 : 0.6;
@@ -786,8 +775,11 @@ function buildSensor(e: SensorEntity): EntityNodes {
       if (ent.type !== "sensor") {
         return;
       }
-      group.position.set(ent.position[0], ent.position[1], ent.position[2]);
-      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 2.9);
+      marker.position.set(ent.position[0], ent.position[1], ent.position[2]);
+      if (ent.areaMode === "circle") {
+        coverage.position.set(ent.position[0], ent.position[1], 0);
+      }
+      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 0.45);
     },
     dispose: () => disposeObject(group),
   };
@@ -1050,6 +1042,8 @@ type SensorArea = {
   area?: string;
   x?: unknown;
   y?: unknown;
+  z?: unknown;
+  color?: unknown;
   radius?: unknown;
   points?: unknown;
 };
@@ -1072,7 +1066,7 @@ function parseSensorPolyPoints(area: SensorArea | null): [number, number][] {
   return out;
 }
 
-async function seedSensors(
+export async function seedSensors(
   sensors: SceneSensorBootstrap[],
   authToken: string,
 ): Promise<SensorEntity[]> {
@@ -1089,6 +1083,8 @@ async function seedSensors(
           ? Number(area.radius)
           : 5;
       let position: [number, number, number] | null = null;
+      let color = typeof area?.color === "string" && /^#[0-9a-f]{6}$/i.test(area.color)
+        ? area.color : "#bf5af2";
       let singletonType: SensorEntity["singletonType"] = "environmental";
       if (authToken) {
         try {
@@ -1097,8 +1093,11 @@ async function seedSensors(
             position = [
               Number(row.translation[0]),
               Number(row.translation[1]),
-              0,
+              Number(row.translation[2]),
             ];
+          }
+          if (typeof row.color === "string" && /^#[0-9a-f]{6}$/i.test(row.color)) {
+            color = row.color;
           }
           if (
             row.singleton_type === "attribute" ||
@@ -1118,7 +1117,7 @@ async function seedSensors(
           Number.isFinite(Number(area?.x)) &&
           Number.isFinite(Number(area?.y))
         ) {
-          position = [Number(area?.x), Number(area?.y), 0];
+          position = [Number(area?.x), Number(area?.y), Number.isFinite(Number(area?.z)) ? Number(area?.z) : 0];
         } else if (points.length >= 3) {
           const [cx, cy] = centroidOf(points);
           position = [cx, cy, 0];
@@ -1137,7 +1136,7 @@ async function seedSensors(
         radius: areaRadius,
         points,
         singletonType,
-        color: "#bf5af2",
+        color,
       } satisfies SensorEntity;
     }),
   );
@@ -1536,7 +1535,7 @@ export function useViewportEntities(
           e.id,
           "name",
           e.name,
-          entityLabelAnchor(nodes.group, nodes.labelPos),
+          entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos),
         );
         void nodes.ready?.then(() => {
           if (world.entityNodes.get(e.id) === nodes) {
@@ -1544,7 +1543,7 @@ export function useViewportEntities(
               e.id,
               "name",
               e.name,
-              entityLabelAnchor(nodes.group, nodes.labelPos),
+              entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos),
             );
           }
         });
@@ -1585,7 +1584,7 @@ export function useViewportEntities(
         }
         nodes.applyPose(e);
         const entry = labelEls.get(labelKey(id, "name"));
-        entry?.pos.copy(entityLabelAnchor(nodes.group, nodes.labelPos));
+        entry?.pos.copy(entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos));
       }
     };
 

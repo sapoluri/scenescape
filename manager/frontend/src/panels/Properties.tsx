@@ -1072,6 +1072,8 @@ function SensorProps({
           area: cur.areaMode,
           singleton_type: cur.singletonType || "environmental",
           center: [cur.position[0], cur.position[1]],
+          translation: [...cur.position],
+          color: cur.color,
         };
         if (cur.areaMode === "circle") {
           payload.radius = cur.radius;
@@ -1180,11 +1182,31 @@ function SensorProps({
         </select>
       </label>
       {e.areaMode === "circle" ? (
-        <NumField
-          label="Radius (m)"
-          value={e.radius}
-          onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
-        />
+        <>
+          <NumField
+            label="Radius (m)"
+            value={e.radius}
+            onPreview={(v) => patch({ radius: Math.max(0.5, v) })}
+            onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
+          />
+          <input
+            type="range"
+            className="ss-prop-range ss-prop-radius-slider"
+            aria-label="Coverage radius"
+            min={0.5}
+            max={Math.max(50, Math.ceil(e.radius / 10) * 10)}
+            step={0.1}
+            value={e.radius}
+            disabled={busy}
+            onPointerDown={() => getViewportState().commitHistory()}
+            onKeyDown={(event) => {
+              if (!event.repeat && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+                getViewportState().commitHistory();
+              }
+            }}
+            onChange={(event) => patch({ radius: Number(event.target.value) })}
+          />
+        </>
       ) : null}
       {e.areaMode === "poly" ? (
         <div className="ss-prop-actions">
@@ -1229,7 +1251,7 @@ function SensorProps({
             : e.areaMode === "circle"
               ? "Circle uses X/Y as center. Save writes type, area, and radius to the database."
               : e.points.length >= 3
-                ? "Polygon is ready. Save writes type, vertices, and center to the database."
+                ? "Save writes polygon coverage and the independent sensor position to the database."
                 : "Click the floor to place vertices. Click the first point (or Enter / double-click) to close."}
       </p>
     </>

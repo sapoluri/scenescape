@@ -3,11 +3,13 @@
 
 import {
   BoxGeometry,
+  CircleGeometry,
   ExtrudeGeometry,
   FrontSide,
   ConeGeometry,
   Euler,
   LineBasicMaterial,
+  LineLoop,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -15,21 +17,25 @@ import {
   Object3D,
   PerspectiveCamera,
   Quaternion,
+  SphereGeometry,
   Vector3,
 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { loadSceneObject } from "../placement/loadSceneObject";
+import { api } from "../lib/rest";
 import { sceneGeometryFromRest } from "../placement/sceneGeometry";
 import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
   buildChild,
   buildRegion,
+  buildSensor,
   buildTripwire,
   childViewportId,
   entityLabelAnchor,
   lookAtOriginEuler,
   restPoseToRigEuler,
+  seedSensors,
   TRIPWIRE_CURTAIN_HEIGHT,
   tripwirePlusNormal,
 } from "./entities";
@@ -37,6 +43,7 @@ import type {
   CameraEntity,
   ChildSceneEntity,
   RegionEntity,
+  SensorEntity,
   TripwireEntity,
 } from "./types";
 
@@ -372,6 +379,87 @@ describe("buildRegion", () => {
       expect(edges!.renderOrder).toBeGreaterThan(fill!.renderOrder);
     } finally {
       nodes.dispose();
+    }
+  });
+});
+
+describe("buildSensor", () => {
+  function sensor(): SensorEntity {
+    return {
+      id: "sensor", type: "sensor", name: "Infrared", visible: true,
+      position: [15, 20, 2], areaMode: "poly", radius: 5,
+      points: [[0, 0], [4, 0], [4, 4], [0, 4]],
+      singletonType: "environmental", color: "#bf5af2",
+    };
+  }
+
+  it("uses only a half-sized sphere marker and anchors its label to that marker", () => {
+    const nodes = buildSensor(sensor());
+    try {
+      const sphere = nodes.group.getObjectByName("sensor-sphere") as Mesh;
+      expect(sphere.geometry).toBeInstanceOf(SphereGeometry);
+      expect((sphere.geometry as SphereGeometry).parameters.radius).toBe(0.11);
+      expect(nodes.gizmoTarget.position.toArray()).toEqual([15, 20, 2]);
+      expect(nodes.gizmoTarget.children).toHaveLength(2);
+      expect(nodes.labelRoot).toBe(nodes.gizmoTarget);
+      const label = entityLabelAnchor(nodes.labelRoot!, nodes.labelPos);
+      expect(label.x).toBeCloseTo(15);
+      expect(label.y).toBeCloseTo(20);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("keeps polygon coverage fixed on the floor when its sensor moves", () => {
+    const entity = sensor();
+    const nodes = buildSensor(entity);
+    try {
+      const coverage = nodes.group.getObjectByName("sensor-coverage")!;
+      expect(coverage.position.toArray()).toEqual([2, 2, 0]);
+      nodes.applyPose?.({ ...entity, position: [30, 40, 5] });
+      expect(nodes.gizmoTarget.position.toArray()).toEqual([30, 40, 5]);
+      expect(coverage.position.toArray()).toEqual([2, 2, 0]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("keeps circular coverage centered below the sphere and reflects its radius", () => {
+    const entity = { ...sensor(), areaMode: "circle" as const, radius: 8 };
+    const nodes = buildSensor(entity);
+    try {
+      const coverage = nodes.group.getObjectByName("sensor-coverage")!;
+      expect(coverage.position.toArray()).toEqual([15, 20, 0]);
+      expect(((coverage.children[1] as Mesh).geometry as CircleGeometry).parameters).toMatchObject({ radius: 8 });
+      const outline = coverage.getObjectByName("sensor-coverage-outline") as LineLoop;
+      expect(outline).toBeInstanceOf(LineLoop);
+      expect((outline.material as LineBasicMaterial).linewidth).toBe(1);
+      expect((outline.material as LineBasicMaterial).color.getHexString()).toBe("bf5af2");
+      nodes.applyPose?.({ ...entity, position: [30, 40, 5] });
+      expect(coverage.position.toArray()).toEqual([30, 40, 0]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("reloads configured color and all three position coordinates", async () => {
+    const card = {
+      id: "1", sensorId: "infrared", name: "Infrared", iconUrl: null,
+      areaJson: JSON.stringify({ area: "poly", x: 1, y: 2, z: 3, color: "#112233", points: [[0, 0], [1, 0], [1, 1]] }),
+      calibrateHref: "", editHref: "", deleteUrl: null,
+    };
+    const request = vi.spyOn(api, "getSensor").mockResolvedValueOnce({
+      translation: [15, 20, 4.5], color: "#ff9900", singleton_type: "environmental",
+    });
+    try {
+      const [sensor] = await seedSensors([card], "test-token");
+      expect(sensor.position).toEqual([15, 20, 4.5]);
+      expect(sensor.color).toBe("#ff9900");
+      const [fallback] = await seedSensors([card], "");
+      expect(fallback.position).toEqual([1, 2, 3]);
+      expect(fallback.color).toBe("#112233");
+    } finally {
+      request.mockRestore();
     }
   });
 });

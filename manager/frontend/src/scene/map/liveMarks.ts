@@ -15,6 +15,7 @@ export type SceneObjectMark = {
   type?: string;
   translation?: number[] | { x?: number; y?: number };
   tag_id?: string | number;
+  regions?: Record<string, unknown>;
   persistent_data?: Record<string, unknown>;
 };
 

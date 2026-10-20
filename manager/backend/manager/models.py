@@ -637,6 +637,8 @@ class Sensor(models.Model):
              'radius': self.singletonsensor.radius,
              'x': self.singletonsensor.map_x,
              'y': self.singletonsensor.map_y,
+             'z': self.singletonsensor.map_z,
+             'color': self.singletonsensor.color,
              'points': []}
     for point in self.singletonsensor.points.all():
       rdict['points'].append([point.x, point.y])
@@ -895,6 +897,8 @@ class Cam(Sensor):
 class SingletonSensor(Sensor):
   map_x = models.FloatField(default=None, null=True, blank=True)
   map_y = models.FloatField(default=None, null=True, blank=True)
+  map_z = models.FloatField(default=0.0)
+  color = models.CharField(max_length=7, default='#bf5af2')
   area = models.CharField(max_length=16, choices=AREA_CHOICES, default='scene')
   radius = models.FloatField(default=None, null=True, blank=True)
   visible = models.BooleanField(default=False)
