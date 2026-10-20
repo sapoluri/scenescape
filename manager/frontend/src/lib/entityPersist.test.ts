@@ -6,11 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.stubGlobal("document", { getElementById: () => null });
 vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 
-import { persistSensorEntity, remapGeometryEntityIds } from "./entityPersist";
+import { persistCameraEntity, persistSensorEntity, remapGeometryEntityIds } from "./entityPersist";
 import { api } from "./rest";
 import { getPersistState, usePersistStore } from "../viewport/persistStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
-import type { RegionEntity, SensorEntity } from "../viewport/types";
+import type { CameraEntity, RegionEntity, SensorEntity } from "../viewport/types";
 
 function region(id: string, name = "Region"): RegionEntity {
   return {
@@ -69,6 +69,25 @@ describe("remapGeometryEntityIds", () => {
     getViewportState().upsertEntities([region(uid)]);
     remapGeometryEntityIds({ [uid]: uid });
     expect(getViewportState().entities[uid]).toBeDefined();
+  });
+});
+
+describe("camera scene persistence", () => {
+  it("saves an existing camera to the selected scene without changing its sensor id", async () => {
+    const camera: CameraEntity = {
+      id: "42", type: "camera", name: "Camera", visible: true,
+      position: [1, 2, 3], target: [0, 0, 0], rotation: [0, 0, 0],
+      restRotation: [0, 0, 0], posed: true, fov: 60, color: "#0a84ff",
+    };
+    const update = vi.spyOn(api, "updateCamera").mockResolvedValueOnce({});
+    try {
+      await persistCameraEntity("test-token", "destination-scene", "camera-id", camera);
+      expect(update).toHaveBeenCalledWith("test-token", "camera-id", expect.objectContaining({
+        scene: "destination-scene", sensor_id: "camera-id", name: "Camera", translation: [1, 2, 3],
+      }));
+    } finally {
+      update.mockRestore();
+    }
   });
 });
 

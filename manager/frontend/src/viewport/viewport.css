@@ -141,9 +141,18 @@
 }
 
 .ss-viewport-bar .vchk .box::after {
-  content: "✓";
+  content: "";
+  width: 4px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
   opacity: 0;
-  font-weight: 700;
+}
+
+.ss-viewport-stats[hidden],
+.ss-scene-rate[hidden] {
+  display: none !important;
 }
 
 .ss-viewport-bar .vchk.on {

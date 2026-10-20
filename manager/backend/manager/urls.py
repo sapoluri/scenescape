@@ -49,6 +49,7 @@ urlpatterns = [
   path('child/delete/<int:pk>/', views.ChildDeleteView.as_view(), name='child_delete'),
   path('sign_in/', views.sign_in, name="sign_in"),
   path('sign_out/', views.sign_out, name="sign_out"),
+  path('api/v1/session', views.session_status, name='session_status'),
   path('account_locked/', views.account_locked, name="account_locked"),
   path('media/list/<str:folder_name>/', views.list_resources, name='list_resources'),
   path('api/v1/save-geospatial-snapshot/', views.SaveGeospatialSnapshot.as_view(), name='save_geospatial_snapshot'),

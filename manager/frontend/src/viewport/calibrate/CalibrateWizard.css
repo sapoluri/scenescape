@@ -117,6 +117,38 @@
   align-self: center;
 }
 
+.ss-viz-bar.ss-cal-wizard--calibration {
+  align-items: center;
+}
+
+.ss-viz-bar .ss-cal-wizard-main {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ss-viz-opacity-slot {
+  display: flex;
+  align-items: center;
+  flex: none;
+  width: 12rem;
+  height: 24px;
+}
+
+.ss-viz-opacity-slot .ss-cal-wizard-opacity {
+  transform: translateY(3px);
+}
+
+@container (max-width: 700px) {
+  .ss-viz-bar.ss-cal-wizard--calibration {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ss-viz-bar .ss-cal-wizard-actions {
+    grid-column: 1;
+    justify-self: end;
+  }
+}
+
 .ss-cal-wizard-opacity {
   display: inline-flex;
   align-items: center;

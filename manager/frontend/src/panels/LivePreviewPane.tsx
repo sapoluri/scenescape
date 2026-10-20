@@ -4,8 +4,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { refreshCameraStrip } from "../mqtt";
 import type { SceneCameraBootstrap } from "../scene/types";
+import { formatCameraFps } from "../scene/useLiveChrome";
 import { useViewportStore } from "../viewport/store";
 import { enterCameraVisualize } from "../viewport/visualize";
+import { useVisualizeStore } from "../viewport/visualize/visualizeStore";
 import "./LivePreviewPane.css";
 
 type Props = {
@@ -113,13 +115,19 @@ export function LivePreviewPane({
     {},
   );
   const selectedId = useViewportStore((s) => s.selectedId);
+  const showTelemetry = useViewportStore((s) => s.showTelemetry);
+  const liveCameraId = useVisualizeStore((state) => state.active ? state.cameraId : null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const onlineCount = cameras.filter((c) => onlineBySensor[c.sensorId]).length;
+  const availableCameras = useMemo(
+    () => cameras.filter((camera) => camera.id !== liveCameraId),
+    [cameras, liveCameraId],
+  );
+  const onlineCount = availableCameras.filter((c) => onlineBySensor[c.sensorId]).length;
 
   const visibleCameras = useMemo(
-    () => cameras.filter((cam) => cameraMatchesQuery(cam, query)),
-    [cameras, query],
+    () => availableCameras.filter((cam) => cameraMatchesQuery(cam, query)),
+    [availableCameras, query],
   );
   const filtering = query.trim().length > 0;
   const visibleIdSet = useMemo(
@@ -224,8 +232,8 @@ export function LivePreviewPane({
           className="ss-live-preview-count"
           aria-label={
             filtering
-              ? `${onlineCount} live of ${cameras.length} cameras, ${visibleCameras.length} shown`
-              : `${onlineCount} live of ${cameras.length} cameras`
+              ? `${onlineCount} live of ${availableCameras.length} cameras, ${visibleCameras.length} shown`
+              : `${onlineCount} live of ${availableCameras.length} cameras`
           }
         >
           {onlineCount}
@@ -249,7 +257,7 @@ export function LivePreviewPane({
         </div>
       </div>
 
-      {cameras.length > 0 ? (
+      {availableCameras.length > 0 ? (
         <div className="ss-live-preview-search-row">
           <input
             type="search"
@@ -271,7 +279,10 @@ export function LivePreviewPane({
         {cameras.length === 0 && (
           <p className="ss-live-preview-empty">No cameras in this scene yet.</p>
         )}
-        {cameras.length > 0 && filtering && visibleCameras.length === 0 ? (
+        {cameras.length > 0 && availableCameras.length === 0 ? (
+          <p className="ss-live-preview-empty">No other cameras.</p>
+        ) : null}
+        {availableCameras.length > 0 && filtering && visibleCameras.length === 0 ? (
           <p className="ss-live-preview-empty">
             No cameras match “{query.trim()}”.
           </p>
@@ -324,9 +335,11 @@ export function LivePreviewPane({
                 <span className="ss-camera-card-name" title={cam.name}>
                   {cam.name}
                 </span>
-                <span className="ss-camera-card-rate">
-                  {online ? `${cameraRates[cam.sensorId] ?? "--"} fps` : "—"}
-                </span>
+                {showTelemetry ? (
+                  <span className="ss-camera-card-rate">
+                    {online ? formatCameraFps(cameraRates[cam.sensorId]) : "—"}
+                  </span>
+                ) : null}
               </span>
             </div>
           );

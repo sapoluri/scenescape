@@ -63,6 +63,7 @@ interface SceneViewportProps {
   mapScale?: number | null;
   assetMarkColors?: Record<string, string>;
   cameras?: SceneCameraBootstrap[];
+  cameraRates?: Record<string, string>;
   sensors?: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
   authToken: string;
@@ -304,6 +305,7 @@ export function SceneViewport({
   cameras = [],
   sensors = [],
   children = [],
+  cameraRates = {},
   authToken,
   onOpenLibrary,
   onOpenScene,
@@ -323,6 +325,7 @@ export function SceneViewport({
   const [webglFailed, setWebglFailed] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const theme = useTheme();
+  const showTelemetry = useViewportStore((state) => state.showTelemetry);
   const emptyScene = !sceneId;
 
   useViewportMarks({ assetMarkColors });
@@ -355,19 +358,20 @@ export function SceneViewport({
 
   // three.js Stats (FPS) ? bottom-left, same placement as the legacy 3D UI.
   useEffect(() => {
-    if (!world || !statsHostRef.current) {
+    const statsHost = statsHostRef.current;
+    if (!world || !statsHost || !showTelemetry) {
       return;
     }
     const stats = new Stats();
     stats.showPanel(0);
-    statsHostRef.current.replaceChildren(stats.dom);
+    statsHost.replaceChildren(stats.dom);
     const onFrame = () => stats.update();
     world.onFrame.add(onFrame);
     return () => {
       world.onFrame.delete(onFrame);
-      statsHostRef.current?.replaceChildren();
+      statsHost.replaceChildren();
     };
-  }, [world]);
+  }, [world, showTelemetry]);
 
   useEffect(() => {
     world?.setTheme(theme);
@@ -530,12 +534,13 @@ export function SceneViewport({
             <div
               className="ss-viewport-stats"
               ref={statsHostRef}
+              hidden={!showTelemetry}
               aria-hidden="true"
             />
             <ViewportPoweredBy />
           </div>
           {calibrating ? <CalibrateFeedPane /> : null}
-          {visualizing && !calibrating ? <VisualizeFeedPane /> : null}
+          {visualizing && !calibrating ? <VisualizeFeedPane cameraRates={cameraRates} /> : null}
         </div>
       </div>
     </div>

@@ -58,6 +58,10 @@ describe("region dwell labels", () => {
     updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }]);
     expect(list.children).toHaveLength(1);
     expect(list.children[0].children[1].textContent).toBe("4.7 s");
+    updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }], false);
+    expect(dwell.hidden).toBe(true);
+    updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }], true);
+    expect(dwell.hidden).toBe(false);
     updateMarkDwellLabel(label, []);
     expect(dwell.hidden).toBe(true);
     expect(list.children).toHaveLength(0);

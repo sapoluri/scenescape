@@ -26,6 +26,7 @@ import type { EntityNodes } from "./entities";
 import type { CameraProjectionHandle } from "./projection/projectOntoMap";
 import type { ProjectionPool } from "./projection/projectionPool";
 import { getViewportState } from "./store";
+import { useLightingStore } from "./lighting";
 
 export type ViewportTheme = "light" | "dark";
 
@@ -123,7 +124,16 @@ export function createViewportWorld(
   renderer.setSize(host.clientWidth, host.clientHeight, false);
   host.replaceChildren(renderer.domElement);
 
-  scene.add(new AmbientLight(0xffffff, 0.7));
+  const ambient = new AmbientLight(0xa0a0a0, useLightingStore.getState().intensity);
+  ambient.name = "ambient-light";
+  scene.add(ambient);
+  const applyLighting = () => {
+    const intensity = useLightingStore.getState().intensity;
+    ambient.intensity = intensity;
+    if (renderer) renderer.toneMappingExposure = intensity;
+  };
+  applyLighting();
+  const unsubscribeLighting = useLightingStore.subscribe(applyLighting);
   const key = new DirectionalLight(0xffffff, 0.8);
   key.position.set(4, -6, 10);
   scene.add(key);
@@ -355,6 +365,7 @@ export function createViewportWorld(
     },
     dispose: () => {
       disposed = true;
+      unsubscribeLighting();
       window.cancelAnimationFrame(frame);
       ro.disconnect();
       onFrame.clear();

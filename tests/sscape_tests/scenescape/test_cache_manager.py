@@ -80,6 +80,44 @@ class TestCacheManagerInitialization:
 class TestCacheManagerRefreshScenes:
   """Test scene refresh functionality."""
 
+  @pytest.mark.parametrize("retained", [True, False])
+  def test_invalidated_scene_trackers_are_torn_down_when_not_reused(self, retained):
+    old_scene = SimpleNamespace(
+      uid='scene-1', name='Previous scene', sensors={}, tracker=Mock())
+    new_scene = SimpleNamespace(uid='scene-1', name='Updated scene', cameras={}, sensors={})
+    cache_mgr = CacheManager.__new__(CacheManager)
+    cache_mgr.cached_scenes_by_uid = {}
+    cache_mgr._old_scene_cache = {'scene-1': old_scene}
+    cache_mgr.tracker_config_data = {}
+    cache_mgr.reid_config_data = {}
+    cache_mgr._scene_cls = Mock()
+    cache_mgr._scene_cls.deserialize.return_value = new_scene
+    with patch('scene_common.cache_manager.CameraRegistry') as cameras, \
+         patch('scene_common.cache_manager.TrackedObjectRegistry') as objects:
+      cache_mgr._applySceneResults([{'uid': 'scene-1'}] if retained else [])
+    old_scene.tracker.join.assert_called_once_with()
+    cameras.getInstance.return_value.removeScene.assert_called_once_with('Previous scene')
+    objects.getInstance.return_value.removeScene.assert_called_once_with('Previous scene')
+    assert cache_mgr._old_scene_cache is None
+    if retained:
+      assert cache_mgr.cached_scenes_by_uid['scene-1'] is new_scene
+    else:
+      cache_mgr._scene_cls.deserialize.assert_not_called()
+
+  def test_invalidated_scene_reused_for_sensor_values_keeps_its_tracker(self):
+    scene = SimpleNamespace(
+      uid='scene-1', name='Previous scene', cameras={},
+      sensors={'sensor': SimpleNamespace(value=12)}, tracker=Mock(), updateScene=Mock())
+    cache_mgr = CacheManager.__new__(CacheManager)
+    cache_mgr.cached_scenes_by_uid = {}
+    cache_mgr._old_scene_cache = {'scene-1': scene}
+    cache_mgr.tracker_config_data = {}
+    cache_mgr.reid_config_data = {}
+    cache_mgr._applySceneResults([{'uid': 'scene-1'}])
+    scene.tracker.join.assert_not_called()
+    scene.updateScene.assert_called_once_with({'uid': 'scene-1'})
+    assert cache_mgr.cached_scenes_by_uid['scene-1'] is scene
+
   def test_refresh_scenes_with_empty_results(self):
     """Test that refreshScenes handles empty results gracefully."""
     mock_data_source = Mock()
@@ -838,7 +876,10 @@ class TestCacheManagerEdgeCases:
     cache_mgr = CacheManager.__new__(CacheManager)
     cache_mgr._lock = threading.RLock()
     cache_mgr._refresh_done = threading.Condition(cache_mgr._lock)
-    cache_mgr.cached_scenes_by_uid = {'scene-old': Mock(spec=Scene)}
+    old_scene = Mock(spec=Scene)
+    old_scene.name = 'old'
+    old_scene.tracker = Mock()
+    cache_mgr.cached_scenes_by_uid = {'scene-old': old_scene}
     cache_mgr._cached_scenes_by_cameraID = {}
     cache_mgr._cached_scenes_by_sensorID = {}
     cache_mgr.cached_child_transforms_by_uid = {}
@@ -890,6 +931,7 @@ class TestCacheManagerEdgeCases:
     assert not errors
     assert list(cache_mgr.cached_scenes_by_uid.keys()) == ['scene-fresh']
     assert mock_data_source.getScenes.call_count == 2
+    old_scene.tracker.join.assert_called_once_with()
 
   def test_force_refresh_does_not_share_stale_in_flight_fetch(self):
     """force=True waits for in-flight work, then performs a new fetch."""

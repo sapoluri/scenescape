@@ -3,6 +3,11 @@
 
 import { useEffect, useState } from "react";
 
+export function formatCameraFps(value?: string): string {
+  const rate = (value ?? "--").replace(/(?:\s*fps)+\s*$/i, "").trim();
+  return `${rate || "--"} FPS`;
+}
+
 /**
  * MQTT connected flag from ss-mqtt-status / live client, mirrored onto #mqtt_status.
  */

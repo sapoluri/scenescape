@@ -53,6 +53,7 @@ describe("useViewportStore", () => {
       showLabels: true,
       showTrails: true,
       showFrustums: true,
+      showTelemetry: false,
       activeTool: "live",
       editFocus: 0,
     });
@@ -64,6 +65,15 @@ describe("useViewportStore", () => {
     expect(Object.keys(useViewportStore.getState().entities)).toHaveLength(2);
     s.upsertEntities([{ ...region("a"), name: "Renamed" }]);
     expect(useViewportStore.getState().entities["a"].name).toBe("Renamed");
+  });
+
+  it("toggles telemetry visibility independently of static labels", () => {
+    expect(useViewportStore.getState().showTelemetry).toBe(false);
+    useViewportStore.getState().toggleOverlay("showTelemetry");
+    expect(useViewportStore.getState().showTelemetry).toBe(true);
+    expect(useViewportStore.getState().showLabels).toBe(true);
+    useViewportStore.getState().toggleOverlay("showTelemetry");
+    expect(useViewportStore.getState().showTelemetry).toBe(false);
   });
 
   it("toggles a whole object type without changing other types", () => {

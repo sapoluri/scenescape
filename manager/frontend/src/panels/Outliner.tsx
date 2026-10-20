@@ -25,6 +25,12 @@ import {
   removeTripwireFromModel,
 } from "../viewport/geometrySync";
 import { ProjectionOpacitySlider } from "../viewport/ProjectionOpacitySlider";
+import {
+  LIGHT_INTENSITY_STEP,
+  MAX_LIGHT_INTENSITY,
+  MIN_LIGHT_INTENSITY,
+  useLightingStore,
+} from "../viewport/lighting";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
@@ -96,6 +102,7 @@ const TYPE_ICON: Record<ViewportEntityType, string> = {
 };
 
 const COLLAPSED_KEY = "ss-outliner-collapsed";
+type OutlinerGroupType = ViewportEntityType | "lighting";
 
 type DeleteTarget = {
   id: string;
@@ -105,7 +112,7 @@ type DeleteTarget = {
   isDraft: boolean;
 };
 
-function readCollapsed(): Set<ViewportEntityType> {
+function readCollapsed(): Set<OutlinerGroupType> {
   try {
     const raw = sessionStorage.getItem(COLLAPSED_KEY);
     if (!raw) {
@@ -116,14 +123,14 @@ function readCollapsed(): Set<ViewportEntityType> {
       return new Set();
     }
     return new Set(
-      list.filter((t): t is ViewportEntityType => typeof t === "string"),
+      list.filter((t): t is OutlinerGroupType => typeof t === "string"),
     );
   } catch {
     return new Set();
   }
 }
 
-function writeCollapsed(collapsed: Set<ViewportEntityType>): void {
+function writeCollapsed(collapsed: Set<OutlinerGroupType>): void {
   try {
     sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
   } catch {
@@ -419,6 +426,7 @@ export function Outliner({
 }: OutlinerProps) {
   const toast = useAppToast();
   const entities = useViewportStore((s) => s.entities);
+  const lightIntensity = useLightingStore((s) => s.intensity);
   const projectAllActive = useViewportStore((s) => s.projectAllActive);
   const selectedType = useViewportStore((s) => {
     const id = s.selectedId;
@@ -431,7 +439,7 @@ export function Outliner({
       return e?.type === "camera" && e.posed;
     });
   const [collapsed, setCollapsed] =
-    useState<Set<ViewportEntityType>>(readCollapsed);
+    useState<Set<OutlinerGroupType>>(readCollapsed);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -450,7 +458,7 @@ export function Outliner({
     });
   }, [selectedType]);
 
-  const toggleGroup = useCallback((type: ViewportEntityType) => {
+  const toggleGroup = useCallback((type: OutlinerGroupType) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(type)) {
@@ -763,6 +771,55 @@ export function Outliner({
           </div>
         );
       })}
+      <div className={`ss-outliner-group${collapsed.has("lighting") ? " is-collapsed" : ""}`}>
+        <div className="ss-outliner-group-header">
+          <button
+            type="button"
+            className="ss-outliner-group-toggle ss-outliner-group-chevron"
+            aria-expanded={!collapsed.has("lighting")}
+            aria-controls="ss-outliner-body-lighting"
+            aria-label={`${collapsed.has("lighting") ? "Expand" : "Collapse"} Lighting`}
+            title={`${collapsed.has("lighting") ? "Expand" : "Collapse"} Lighting`}
+            onClick={() => toggleGroup("lighting")}
+          >
+            <i className={`bi ${collapsed.has("lighting") ? "bi-chevron-right" : "bi-chevron-down"}`} aria-hidden="true" />
+          </button>
+          <i className="bi bi-lightbulb ss-outliner-icon" aria-hidden="true" />
+          <button
+            type="button"
+            className="ss-outliner-group-toggle"
+            aria-expanded={!collapsed.has("lighting")}
+            aria-controls="ss-outliner-body-lighting"
+            onClick={() => toggleGroup("lighting")}
+          >
+            <span className="ss-outliner-group-label">Lighting</span>
+          </button>
+          <div className="ss-outliner-group-actions">
+            <span className="ss-outliner-badge">1</span>
+          </div>
+        </div>
+        <div
+          id="ss-outliner-body-lighting"
+          className="ss-outliner-group-body"
+          hidden={collapsed.has("lighting")}
+          role="group"
+          aria-label="Lighting"
+        >
+          <label className="ss-outliner-light-control">
+            <span>Ambient</span>
+            <input
+              type="range"
+              aria-label="Ambient light intensity"
+              min={MIN_LIGHT_INTENSITY}
+              max={MAX_LIGHT_INTENSITY}
+              step={LIGHT_INTENSITY_STEP}
+              value={lightIntensity}
+              onChange={(event) => useLightingStore.getState().setIntensity(Number(event.target.value))}
+            />
+            <output>{lightIntensity.toFixed(2)}</output>
+          </label>
+        </div>
+      </div>
       <ConfirmDialog
         open={deleteTarget != null}
         title={deleteTitle}

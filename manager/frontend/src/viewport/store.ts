@@ -18,6 +18,7 @@ export interface ViewportUiState {
   showLabels: boolean;
   showTrails: boolean;
   showFrustums: boolean;
+  showTelemetry: boolean;
   activeTool: ToolId;
   /**
    * Camera entity ids whose live JPEGs are projected onto the scene map
@@ -171,7 +172,7 @@ interface ViewportStore extends ViewportUiState {
   /** Set the Project-all overlay override (does not change per-camera values). */
   setProjectAllOpacity: (opacity: number) => void;
   toggleOverlay: (
-    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums",
+    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums" | "showTelemetry",
   ) => void;
   /**
    * Snapshot the current structural state onto the undo stack. Call BEFORE
@@ -190,6 +191,7 @@ const initialUi: ViewportUiState = {
   showLabels: true,
   showTrails: true,
   showFrustums: true,
+  showTelemetry: false,
   activeTool: "live",
   projectCameraIds: [],
   projectOpacityById: {},

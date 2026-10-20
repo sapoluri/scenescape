@@ -107,6 +107,7 @@ function SceneDetailInner({ bootstrap }: Props) {
         <SinglePaneView
           sceneId={scene.id}
           sceneName={scene.name}
+          scenes={bootstrap.scenes || []}
           mapUrl={scene.mapUrl}
           mapScale={scene.scale}
           assetMarkColors={bootstrap.assetMarkColors}

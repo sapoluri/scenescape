@@ -29,6 +29,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -588,6 +589,13 @@ def sign_in(request):
       return JsonResponse({"ok": False, "errors": errors}, status=400)
 
   return render(request, 'sscape/sign_in.html', {'form': form})
+
+@require_GET
+def session_status(request):
+  return HttpResponse(
+    status=204 if request.user.is_authenticated else 401,
+    headers={'Cache-Control': 'no-store'})
+
 
 def sign_out(request):
   logout(request)

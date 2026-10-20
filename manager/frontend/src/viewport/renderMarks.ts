@@ -180,14 +180,14 @@ export function createMarkLabelElement(title: string): HTMLDivElement {
   return el;
 }
 
-export function updateMarkDwellLabel(label: HTMLDivElement, rows: ReturnType<typeof regionDwellRows>): void {
+export function updateMarkDwellLabel(label: HTMLDivElement, rows: ReturnType<typeof regionDwellRows>, showTelemetry = true): void {
   const dwell = label.querySelector<HTMLDivElement>(".ss-vlabel--mark-dwell")!;
-  const signature = JSON.stringify(rows.map(row => [row.regionId, row.name, row.seconds.toFixed(1)]));
+  const signature = JSON.stringify([showTelemetry, rows.map(row => [row.regionId, row.name, row.seconds.toFixed(1)])]);
   if (dwell.dataset.signature === signature) {
     return;
   }
   dwell.dataset.signature = signature;
-  dwell.hidden = rows.length === 0;
+  dwell.hidden = !showTelemetry || rows.length === 0;
   const list = dwell.querySelector<HTMLUListElement>(".ss-vlabel--mark-dwell-list")!;
   list.replaceChildren(...rows.map(row => {
     const item = document.createElement("li");
@@ -463,7 +463,7 @@ export function attachMarkRenderer(
     if (header && header.textContent !== name) {
       header.textContent = name;
     }
-    updateMarkDwellLabel(el, regionDwellRows(entity, getViewportState().entities));
+    updateMarkDwellLabel(el, regionDwellRows(entity, getViewportState().entities), getViewportState().showTelemetry);
     return el;
   };
 
@@ -592,7 +592,8 @@ export function attachMarkRenderer(
 
   const projV = new Vector3();
   const updateLabels = () => {
-    const show = getViewportState().showLabels && world.markRoot.visible;
+    const { showLabels, showTelemetry } = getViewportState();
+    const show = (showLabels || showTelemetry) && world.markRoot.visible;
     if (!show) {
       for (const element of labelEls.values()) {
         element.style.display = "none";
@@ -627,9 +628,9 @@ export function attachMarkRenderer(
 
   // Hide mark labels when the label overlay is off.
   const unsubscribeLabels = useViewportStore.subscribe((s, prev) => {
-    if (s.showLabels !== prev.showLabels) {
+    if (s.showLabels !== prev.showLabels || s.showTelemetry !== prev.showTelemetry) {
       for (const el of labelEls.values()) {
-        el.style.display = s.showLabels ? "" : "none";
+        el.style.display = s.showLabels || s.showTelemetry ? "" : "none";
       }
     }
   });

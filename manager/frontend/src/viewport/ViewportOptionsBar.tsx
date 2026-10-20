@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useViewportStore } from "./store";
 
 export type SceneChromeActions = {
@@ -48,7 +48,7 @@ function OverlayCheck({
  * second id — camera FPS + scene rate only update while it is checked.
  */
 function useShowTelemetry(): [boolean, () => void] {
-  const [on, setOn] = useState(false);
+  const on = useViewportStore((state) => state.showTelemetry);
 
   useEffect(() => {
     const el = document.getElementById(
@@ -57,9 +57,10 @@ function useShowTelemetry(): [boolean, () => void] {
     if (!el) {
       return;
     }
-    const sync = () => setOn(el.checked);
+    const sync = () => useViewportStore.setState({ showTelemetry: el.checked });
     sync();
     el.addEventListener("change", sync);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
     return () => el.removeEventListener("change", sync);
   }, []);
 
@@ -231,7 +232,7 @@ export function ViewportOptionsBar({
       {showScene ? (
         <>
           <div className="ss-viewport-bar-spacer" aria-hidden="true" />
-          <div className="scene-rate ss-scene-rate telemetry-hide">
+          <div className="scene-rate ss-scene-rate telemetry-hide" hidden={!showTelemetry}>
             Rate: &nbsp;
             <span id="scene-rate">{sceneChrome.sceneRate ?? "--"}</span>
             &nbsp; Hz

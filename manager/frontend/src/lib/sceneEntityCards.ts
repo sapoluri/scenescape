@@ -56,6 +56,15 @@ export function restDestId(
   return asStr(data[key]);
 }
 
+export function cameraSceneAfterSave(
+  sceneId: string,
+  originalSceneId: string | null,
+  isNew: boolean,
+): string | null {
+  return sceneId && (isNew || sceneId !== originalSceneId)
+    ? `/${encodeURIComponent(sceneId)}/` : null;
+}
+
 export function cameraCardFromRest(
   data: Record<string, unknown>,
 ): SceneCameraBootstrap | null {

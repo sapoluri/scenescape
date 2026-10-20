@@ -31,6 +31,7 @@ import {
 import { api, type RestError } from "../lib/rest";
 import {
   cameraCardFromRest,
+  cameraSceneAfterSave,
   sensorCardFromRest,
   upsertCameraCard,
   upsertSensorCard,
@@ -589,6 +590,7 @@ function CameraProps({
   e,
   sensorId,
   sceneId,
+  scenes,
   calibrateHref,
   authToken,
   onCalibrate,
@@ -597,6 +599,7 @@ function CameraProps({
   e: CameraEntity;
   sensorId?: string;
   sceneId?: string;
+  scenes: { id: string; name: string }[];
   calibrateHref?: string;
   authToken?: string;
   onCalibrate?: () => void;
@@ -612,13 +615,15 @@ function CameraProps({
     s.active && s.cameraId === e.id ? s.optics : null,
   );
   const poseDirty = useEntityDirty(e);
+  const [destinationSceneId, setDestinationSceneId] = useState(sceneId || "");
+  useEffect(() => setDestinationSceneId(sceneId || ""), [sceneId, e.id]);
   const [optics, setOptics] = useState<CameraOptics | null>(null);
   const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
   const opticsDirty =
     optics != null &&
     opticsBaseline != null &&
     opticsPersistKey(optics) !== opticsBaseline;
-  const dirty = poseDirty || opticsDirty;
+  const dirty = poseDirty || opticsDirty || destinationSceneId !== sceneId;
   const [saveBusy, setSaveBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -707,7 +712,7 @@ function CameraProps({
   };
 
   const onSave = async () => {
-    if (!dirty || saveBusy || !authToken || !sceneId) {
+    if (!dirty || saveBusy || !authToken || !sceneId || !destinationSceneId) {
       return;
     }
     setSaveBusy(true);
@@ -738,7 +743,7 @@ function CameraProps({
         const payload: Record<string, unknown> = {
           name: cur.name,
           sensor_id,
-          scene: sceneId,
+          scene: destinationSceneId,
           transform_type: "euler",
           translation: cur.position,
           rotation: restRotation,
@@ -768,18 +773,29 @@ function CameraProps({
         if (!card) {
           throw new Error("Camera create returned no id");
         }
-        remapGeometryEntityIds({ [e.id]: card.id });
-        onCamerasChange?.((prev) => upsertCameraCard(prev, card));
+        if (destinationSceneId === sceneId) {
+          remapGeometryEntityIds({ [e.id]: card.id });
+          onCamerasChange?.((prev) => upsertCameraCard(prev, card));
+        }
         persistId = card.id;
         persistSensorId = card.sensorId;
       } else {
         await persistCameraEntity(
           authToken,
-          sceneId,
+          destinationSceneId,
           persistSensorId,
           cur,
           optics ?? undefined,
         );
+      }
+
+      const destination = cameraSceneAfterSave(destinationSceneId, sceneId, isDraft || !sensorId);
+      if (destinationSceneId !== sceneId) {
+        getViewportState().removeEntity(e.id);
+        onCamerasChange?.((previous) => previous.filter(camera => camera.id !== e.id && camera.id !== persistId));
+        toast.show("Camera moved to selected scene", "ok");
+        if (destination) window.location.assign(destination);
+        return;
       }
 
       getViewportState().updateEntity(persistId, {
@@ -793,6 +809,7 @@ function CameraProps({
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       toast.show("Camera saved", "ok");
+      if (destination) window.location.assign(destination);
     } catch (err) {
       toast.show((err as RestError).message || "Save failed", "bad");
     } finally {
@@ -806,6 +823,21 @@ function CameraProps({
   return (
     <>
       <NameRow entity={e} />
+      <label className="ss-prop-field">
+        <span className="ss-prop-label">Scene</span>
+        <select
+          className="ss-prop-input ss-prop-select"
+          aria-label="Camera scene"
+          value={destinationSceneId}
+          disabled={saveBusy || calibrating}
+          onChange={(event) => setDestinationSceneId(event.target.value)}
+        >
+          {sceneId && !scenes.some(scene => scene.id === sceneId) ? (
+            <option value={sceneId}>Current scene</option>
+          ) : null}
+          {scenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
+        </select>
+      </label>
       <span className="ss-prop-section">Position</span>
       <div className="ss-prop-grid3">
         <NumField
@@ -1259,9 +1291,11 @@ function SensorProps({
 }
 
 function MarkProps({ e }: { e: MarkEntity }) {
+  const showTelemetry = useViewportStore((state) => state.showTelemetry);
   return (
     <>
       <ReadField label="Class" value={e.className} />
+      {showTelemetry ? <>
       <ReadField
         label="Position"
         value={`${fmt(e.position[0])}, ${fmt(e.position[1])}, ${fmt(e.position[2])}`}
@@ -1275,6 +1309,7 @@ function MarkProps({ e }: { e: MarkEntity }) {
         }
       />
       <ReadField label="Speed" value={`${fmt(e.speed)} m/frame`} />
+      </> : null}
       <p className="ss-prop-hint">
         Live tracked object — values update from the tracker feed. Mark shape
         and color come from the Object Library (B).
@@ -1534,6 +1569,7 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
 export function Properties({
   sceneName,
   sceneId,
+  scenes = [],
   cameras = [],
   sensors = [],
   children = [],
@@ -1544,6 +1580,7 @@ export function Properties({
 }: {
   sceneName: string;
   sceneId?: string;
+  scenes?: { id: string; name: string }[];
   cameras?: SceneCameraBootstrap[];
   sensors?: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
@@ -1579,6 +1616,7 @@ export function Properties({
           e={e}
           sensorId={camBoot?.sensorId}
           sceneId={sceneId}
+          scenes={scenes}
           calibrateHref={camBoot?.calibrateHref}
           authToken={authToken}
           onCamerasChange={onCamerasChange}

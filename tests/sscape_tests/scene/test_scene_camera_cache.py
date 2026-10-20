@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from django.test import TestCase
+from unittest.mock import patch
 
 from manager.models import Cam, Scene
+from manager.serializers import CamSerializer
 from scene_common.options import QUATERNION
 from scene_common.scenescape import SceneLoader
 
@@ -60,6 +62,46 @@ class SceneCameraCacheTestCase(TestCase):
     self.assertEqual(self.cachedTranslation(), first)
     self.assertEqual(first, INITIAL_TRANSFORMS[:3])
     return
+
+  def test_serialized_pose_survives_a_concurrent_cache_eviction(self):
+    cached_scene = self.scene.scenescapeScene
+    with patch.object(cached_scene, 'cameraWithID', return_value=None):
+      data = CamSerializer(self.cam).data
+    self.assertEqual(data.get('translation'), INITIAL_TRANSFORMS[:3])
+    self.assertEqual(list(data['rotation']), [0.0, 0.0, 0.0])
+    self.assertEqual(list(data['scale']), [1.0, 1.0, 1.0])
+
+  def test_serialization_leaves_shared_camera_cache_untouched(self):
+    cached_scene = self.scene.scenescapeScene
+    cached_camera = cached_scene.cameras[self.cam.sensor_id]
+    data = CamSerializer(self.cam).data
+    self.assertEqual(data['translation'], INITIAL_TRANSFORMS[:3])
+    self.assertIs(cached_scene.cameras[self.cam.sensor_id], cached_camera)
+
+  def test_pose_is_computed_once_for_all_serialized_fields(self):
+    from scene_common.camera import Camera
+    with patch('manager.serializers.ScenescapeCamera', wraps=Camera) as camera:
+      serializer = CamSerializer(self.cam)
+      serializer.data
+    camera.assert_called_once()
+
+  def test_point_correspondence_pose_matches_existing_scene_conversion(self):
+    self.cam.transform_type = '3d-2d point correspondence'
+    self.cam.transforms = [
+      640, 360, 992, 360, 992, 712, 640, 712,
+      0, 0, 0, 4, 0, 0, 4, 4, 0, 0, 4, 0,
+    ]
+    self.cam.intrinsics_fx = self.cam.intrinsics_fy = 880
+    self.cam.intrinsics_cx = 640
+    self.cam.intrinsics_cy = 360
+    self.cam.width, self.cam.height = 1280, 720
+    self.cam.save()
+    expected = self.scene.scenescapeScene.cameraWithID(self.cam.sensor_id).pose
+    actual = CamSerializer(self.cam).data
+    for observed, saved in zip(actual['translation'], expected.translation.asNumpyCartesian):
+      self.assertAlmostEqual(observed, saved, places=5)
+    for observed, saved in zip(actual['rotation'], expected.euler_rotation):
+      self.assertAlmostEqual(observed, saved, places=5)
 
   def test_camera_pose_reset_on_scene_reassignment(self):
     """Positive: camera pose must be cleared when reassigned to a different scene."""
