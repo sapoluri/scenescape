@@ -54,7 +54,7 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
-  cursor: crosshair;
+  cursor: inherit;
   line-height: 0;
   will-change: transform;
 }

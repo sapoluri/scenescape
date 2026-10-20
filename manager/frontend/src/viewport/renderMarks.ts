@@ -255,7 +255,7 @@ function trackColorFor(entity: MarkEntity): string {
   return colorFromTrackId(trackIdFromMarkKey(entity.id));
 }
 
-function createTrailRibbon(trackColor: string): Mesh {
+export function createTrailRibbon(trackColor: string): Mesh {
   const geometry = new BufferGeometry();
   // Placeholder attributes so the mesh is valid before the first sample.
   geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
@@ -265,13 +265,12 @@ function createTrailRibbon(trackColor: string): Mesh {
     transparent: true,
     opacity: 0.85,
     depthWrite: false,
-    // Stay readable over the map GLB from every orbit angle.
-    depthTest: false,
+    depthTest: true,
     side: DoubleSide,
   });
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 6;
+  mesh.renderOrder = -1;
   mesh.visible = false;
   mesh.name = "trail";
   return mesh;
@@ -568,8 +567,11 @@ export function attachMarkRenderer(
 
   const projV = new Vector3();
   const updateLabels = () => {
-    const show = getViewportState().showLabels;
+    const show = getViewportState().showLabels && world.markRoot.visible;
     if (!show) {
+      for (const element of labelEls.values()) {
+        element.style.display = "none";
+      }
       return;
     }
     const cam = world.getActiveCamera();

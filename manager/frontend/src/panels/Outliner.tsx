@@ -87,7 +87,7 @@ const GROUPS: {
 
 const TYPE_ICON: Record<ViewportEntityType, string> = {
   map: "bi-box",
-  region: "bi-square",
+  region: "bi-bounding-box-circles",
   tripwire: "bi-arrow-bar-right",
   camera: "bi-camera-video",
   sensor: "bi-broadcast",
@@ -269,6 +269,10 @@ function OutlinerRow({
         }
       }}
     >
+      <i
+        className={`bi ${TYPE_ICON[entity.type]} ss-outliner-icon`}
+        aria-hidden="true"
+      />
       <button
         type="button"
         className="ss-outliner-eye"
@@ -286,10 +290,6 @@ function OutlinerRow({
           aria-hidden="true"
         />
       </button>
-      <i
-        className={`bi ${TYPE_ICON[entity.type]} ss-outliner-icon`}
-        aria-hidden="true"
-      />
       <span className="ss-outliner-name" title={entity.name}>
         {entity.name}
       </span>
@@ -592,6 +592,7 @@ export function Outliner({
           return null;
         }
         const isCollapsed = collapsed.has(type);
+        const anyVisible = items.some((item) => item.visible !== false);
         const bodyId = `ss-outliner-body-${type}`;
         return (
           <div
@@ -601,9 +602,10 @@ export function Outliner({
             <div className="ss-outliner-group-header">
               <button
                 type="button"
-                className="ss-outliner-group-toggle"
+                className="ss-outliner-group-toggle ss-outliner-group-chevron"
                 aria-expanded={!isCollapsed}
                 aria-controls={bodyId}
+                aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${label}`}
                 onClick={() => toggleGroup(type)}
                 title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
               >
@@ -611,8 +613,27 @@ export function Outliner({
                   className={`bi ${isCollapsed ? "bi-chevron-right" : "bi-chevron-down"}`}
                   aria-hidden="true"
                 />
+              </button>
+              <button
+                type="button"
+                className="ss-outliner-eye"
+                disabled={items.length === 0}
+                title={`${anyVisible ? "Hide" : "Show"} all ${label.toLowerCase()}`}
+                aria-label={`${anyVisible ? "Hide" : "Show"} all ${label.toLowerCase()}`}
+                aria-pressed={anyVisible}
+                onClick={() => getViewportState().setTypeVisible(type, !anyVisible)}
+              >
+                <i className={`bi ${anyVisible ? "bi-eye" : "bi-eye-slash"}`} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="ss-outliner-group-toggle"
+                aria-expanded={!isCollapsed}
+                aria-controls={bodyId}
+                onClick={() => toggleGroup(type)}
+                title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+              >
                 <span className="ss-outliner-group-label">{label}</span>
-                <span className="ss-outliner-badge">{items.length}</span>
               </button>
               <div className="ss-outliner-group-actions">
                 {type === "camera" &&
@@ -664,6 +685,7 @@ export function Outliner({
                     <i className="bi bi-cast" aria-hidden="true" />
                   </button>
                 ) : null}
+                <span className="ss-outliner-badge">{items.length}</span>
                 {showToolAdd && addTool ? (
                   <button
                     type="button"

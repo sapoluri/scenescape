@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, expect, it } from "vitest";
-import { Group, Object3D, Vector3 } from "three";
-import { attachSceneMeshPose } from "./loadSceneObject";
+import { describe, expect, it, vi } from "vitest";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { attachSceneMeshPose, loadSceneObject } from "./loadSceneObject";
 import {
   applyScenePoseToObject,
   scenePoseFromObject,
@@ -82,5 +83,26 @@ describe("attachSceneMeshPose", () => {
     expect(attachSceneMeshPose(plane, spec)).toBe(plane);
     expect(plane.position.x).toBe(1);
     expect(plane.position.y).toBe(2);
+  });
+});
+
+describe("map render order", () => {
+  it("draws map geometry before trails and object bodies", async () => {
+    const scene = new Group();
+    const mesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    scene.add(mesh);
+    const loader = vi.spyOn(GLTFLoader.prototype, "loadAsync").mockResolvedValueOnce({
+      scene,
+    } as Awaited<ReturnType<GLTFLoader["loadAsync"]>>);
+    try {
+      const map = await loadSceneObject(glbSpec(IDENTITY_POSE));
+      expect(map.getObjectById(mesh.id)).toBe(mesh);
+      expect(mesh.renderOrder).toBeLessThan(-1);
+      expect((mesh.material as MeshStandardMaterial).depthTest).toBe(true);
+    } finally {
+      loader.mockRestore();
+      mesh.geometry.dispose();
+      (mesh.material as MeshStandardMaterial).dispose();
+    }
   });
 });

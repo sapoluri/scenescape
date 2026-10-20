@@ -214,12 +214,6 @@ function SceneCard({
     thumbnailUrl: scene.thumbnailUrl ?? null,
     mapUrl: scene.mapUrl ?? null,
   });
-  const initials = scene.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
   const openScene = (ev: { preventDefault: () => void }) => {
     ev.preventDefault();
     onOpen(scene.uid);
@@ -258,7 +252,7 @@ function SceneCard({
                 decoding="async"
               />
             ) : (
-              <span className="ss-open-scene-thumb-initials">{initials}</span>
+              <i className="bi bi-box ss-open-scene-thumb-icon" aria-hidden="true" />
             )}
           </span>
         </a>

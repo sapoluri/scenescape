@@ -31,7 +31,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "rotate",
     label: "Rotate",
-    icon: "bi-arrow-clockwise",
+    icon: "bi-arrow-repeat",
     shortcut: "E",
     hint: "Drag the gizmo to rotate the selection",
   },
@@ -45,7 +45,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "region",
     label: "Region",
-    icon: "bi-bounding-box",
+    icon: "bi-bounding-box-circles",
     shortcut: "G",
     hint: "Click floor points, double-click/Enter to finish (Esc cancels)",
   },
@@ -59,7 +59,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "camera",
     label: "Camera",
-    icon: "bi-camera",
+    icon: "bi-camera-video",
     shortcut: "C",
     hint: "Click the floor to place a camera marker",
   },
@@ -78,6 +78,15 @@ export const TOOLS: ToolDef[] = [
     hint: "Click start, drag to extend, click end · Esc clears",
   },
 ];
+
+export function isToolEnabledInScene(toolId: ToolId, hasScene: boolean): boolean {
+  return (
+    hasScene ||
+    toolId === "live" ||
+    toolId === "move" ||
+    toolId === "rotate"
+  );
+}
 
 /** Tools that attach the TransformControls gizmo to the selection. */
 export const TRANSFORM_TOOLS: ToolId[] = ["move", "rotate", "scale"];

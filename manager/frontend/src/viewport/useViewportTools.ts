@@ -32,6 +32,7 @@ import {
 import { scenePoseFromObject } from "../placement/poseThree";
 import { getViewportState, useViewportStore } from "./store";
 import { CREATION_TOOLS, entityCanScale } from "./tools";
+import { attachShapeHandles } from "./shapeHandles";
 import type {
   CameraEntity,
   RegionEntity,
@@ -198,6 +199,7 @@ function sensorNeedsPolyDraw(): SensorEntity | null {
 }
 
 export function useViewportTools(world: ViewportWorld | null): void {
+  useEffect(() => world ? attachShapeHandles(world) : undefined, [world]);
   const draftRef = useRef<Draft | null>(null);
   const finishDraftRef = useRef<(() => void) | null>(null);
   const measureRef = useRef<{
@@ -576,6 +578,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerDown = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       if (ev.button !== 0) {
         return;
       }
@@ -633,6 +638,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerMove = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const draft = draftRef.current;
       const pt = floorPoint(world, ev);
       if (draft && pt) {
@@ -648,6 +656,11 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerUp = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        downRef.current = null;
+        downPickRef.current = null;
+        return;
+      }
       const down = downRef.current;
       const downPick = downPickRef.current;
       downRef.current = null;
@@ -682,6 +695,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onDblClick = (ev: MouseEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const tool = getViewportState().activeTool;
       const draft = draftRef.current;
       if (
@@ -745,6 +761,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
     const drawingSensorPoly = selectedSensorPolyPending;
 
     const canTransform =
+      !calActive &&
       nodes &&
       entity &&
       !drawingSensorPoly &&
@@ -763,12 +780,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
     // this via capture + no left-drag on markers). Middle/right still navigate.
     const drawingFloor = drawingSensorPoly || CREATION_TOOLS.includes(tool);
     const orbitLeftDrag =
-      !drawingFloor &&
-      (calActive ||
+      calActive || (!drawingFloor &&
+      (
         tool === "live" ||
         tool === "move" ||
         tool === "rotate" ||
-        tool === "scale");
+        tool === "scale"));
     if (orbitLeftDrag) {
       world.orbit.mouseButtons.LEFT = world.orbit.enableRotate
         ? MOUSE.ROTATE
@@ -864,6 +881,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
       l: "live",
     };
     const onKey = (ev: KeyboardEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const t = ev.target as HTMLElement | null;
       if (
         t &&

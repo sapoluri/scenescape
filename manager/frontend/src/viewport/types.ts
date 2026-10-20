@@ -111,6 +111,7 @@ export interface MarkEntity extends ViewportEntityBase {
 
 export interface ChildSceneEntity extends ViewportEntityBase {
   type: "child";
+  geometry?: import("../placement/sceneGeometry").SceneGeometrySpec | null;
   /** Parent-scene pose translation [x, y, z] meters, Z-up. */
   position: [number, number, number];
   /** Euler degrees XYZ (Z-up), matching SceneEulerPose / REST transform. */

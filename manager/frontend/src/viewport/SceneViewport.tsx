@@ -22,7 +22,7 @@ import { attachMarkRenderer } from "./renderMarks";
 import { useLiveCameraProjection } from "./useLiveCameraProjection";
 import { useSceneMap } from "./useSceneMap";
 import { getViewportState, useViewportStore } from "./store";
-import { TOOLS, entityCanScale } from "./tools";
+import { isToolEnabledInScene, TOOLS, entityCanScale } from "./tools";
 import type { ToolId } from "./types";
 import { useViewportTools } from "./useViewportTools";
 import { ViewportMenuBar, ViewportPoweredBy } from "./ViewportMenuBar";
@@ -208,6 +208,9 @@ function ToolHeader({
   }, [dirty, saving, authToken, sceneId, cameras, sensors, geometryDirty]);
 
   const pickTool = (id: ToolId) => {
+    if (!isToolEnabledInScene(id, Boolean(sceneId))) {
+      return;
+    }
     if (id === "scale" && !scaleEnabled) {
       return;
     }
@@ -223,9 +226,11 @@ function ToolHeader({
     >
       <div className="ss-tools-group" role="group" aria-label="Tools">
         {TOOLS.map((t) => {
-          const disabled = t.id === "scale" && !scaleEnabled;
+          const disabled =
+            !isToolEnabledInScene(t.id, Boolean(sceneId)) ||
+            (t.id === "scale" && !scaleEnabled);
           const tip = disabled
-            ? "Scale applies to regions and tripwires"
+            ? !sceneId ? "Create or open a scene first" : "Scale applies to regions and tripwires"
             : `${t.label} (${t.shortcut})`;
           return (
             <button
@@ -248,7 +253,7 @@ function ToolHeader({
         <button
           type="button"
           className="ss-tool-btn"
-          disabled={!canUndo}
+              disabled={!sceneId || !canUndo}
           onClick={undo}
           data-tip="Undo (Ctrl+Z)"
           aria-label="Undo"
@@ -258,19 +263,19 @@ function ToolHeader({
         <button
           type="button"
           className="ss-tool-btn"
-          disabled={!canRedo}
+              disabled={!sceneId || !canRedo}
           onClick={redo}
           data-tip="Redo (Ctrl+Shift+Z)"
           aria-label="Redo"
         >
           <i className="bi bi-arrow-clockwise" aria-hidden="true" />
         </button>
-      </div>
-      <span className="ss-viewport-bar-sep" aria-hidden="true" />
-      <button
+          </div>
+          <span className="ss-viewport-bar-sep" aria-hidden="true" />
+          <button
         type="button"
         className={`ss-tool-btn ss-tool-save${dirty ? " is-dirty" : ""}`}
-        aria-disabled={!dirty || saving || !authToken}
+            aria-disabled={!sceneId || !dirty || saving || !authToken}
         onClick={() => void onSaveAll()}
         aria-label={saving ? "Saving" : "Save all"}
         data-tip={
@@ -389,6 +394,26 @@ export function SceneViewport({
   const visualizing = useVisualizeStore((s) => s.active) && !emptyScene;
   const splitActive = calibrating || visualizing;
 
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    world.markRoot.visible = !calibrating;
+    const helpers = world.scene.children.filter(
+      (object) => object.type === "GridHelper" || object.type === "AxesHelper",
+    );
+    for (const helper of helpers) {
+      helper.visible = !calibrating &&
+        (helper.type !== "GridHelper" || getViewportState().showGrid);
+    }
+    return () => {
+      world.markRoot.visible = true;
+      for (const helper of helpers) {
+        helper.visible = helper.type !== "GridHelper" || getViewportState().showGrid;
+      }
+    };
+  }, [world, calibrating]);
+
   // View state -> world (presets, projection, grid).
   useEffect(() => {
     if (!world) {
@@ -399,7 +424,7 @@ export function SceneViewport({
         world.setActiveCamera(s.ortho);
       }
       if (s.showGrid !== prev.showGrid) {
-        world.setGridVisible(s.showGrid);
+        world.setGridVisible(s.showGrid && !useCalibrateStore.getState().active);
       }
     });
   }, [world]);
@@ -476,7 +501,7 @@ export function SceneViewport({
         <VisualizeBar cameras={cameras} isSuperuser={isSuperuser} />
       ) : null}
       <div className="ss-viewport-stage">
-        {!emptyScene && !splitActive ? (
+        {!splitActive ? (
           <ToolHeader
             sceneId={sceneId || ""}
             authToken={authToken}

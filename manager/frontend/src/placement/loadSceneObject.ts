@@ -114,8 +114,11 @@ export async function loadSceneObject(
   if (!spec.mapUrl) {
     throw new Error(`Scene ${spec.name || spec.id} has no map or mesh`);
   }
-  if (spec.isGlb) {
-    return loadGlb(spec);
-  }
-  return loadMapPlane(spec, tint);
+  const object = await (spec.isGlb ? loadGlb(spec) : loadMapPlane(spec, tint));
+  object.traverse((child) => {
+    if ((child as Mesh).isMesh) {
+      child.renderOrder = -2;
+    }
+  });
+  return object;
 }

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
+import { MeshBasicMaterial } from "three";
+import { createTrailRibbon } from "./renderMarks";
 import {
   buildMarkEntities,
   colorFromTrackId,
@@ -11,6 +13,22 @@ import {
   parseMarkPosition,
   trackIdFromMarkKey,
 } from "./marks";
+
+describe("trail rendering", () => {
+  it("renders beneath object bodies and respects scene depth", () => {
+    const trail = createTrailRibbon("#ff0000");
+    const material = trail.material as MeshBasicMaterial;
+    try {
+      expect(material.depthTest).toBe(true);
+      expect(material.depthWrite).toBe(false);
+      expect(material.transparent).toBe(true);
+      expect(trail.renderOrder).toBe(-1);
+    } finally {
+      trail.geometry.dispose();
+      material.dispose();
+    }
+  });
+});
 
 describe("parseMarkPosition", () => {
   it("parses array translations", () => {

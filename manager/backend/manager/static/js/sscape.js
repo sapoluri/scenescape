@@ -845,6 +845,9 @@ window.ssAttachSceneMqttClient = function (client) {
 
       schedulePlot(msg.objects || []);
     } else if (topic.includes("event")) {
+      if (window.ssUseReactMap) {
+        return;
+      }
       var etype = topic.split("/")[2];
       if (etype == "region") {
         if (msg["metadata"]?.fromSensor == true) {
@@ -2096,7 +2099,7 @@ function drawSensor(sensor, index, type) {
       var p = metersToPixels([sensor.x, sensor.y], scale, scene_y_max);
       sensor.x = p[0];
       sensor.y = p[1];
-      var sensor_circle = document.querySelector("#" + i + " > .sensor");
+      var sensor_circle = existing.querySelector(":scope > .sensor");
       sensor_circle.setAttribute("cx", sensor?.x);
       sensor_circle.setAttribute("cy", sensor?.y);
       applySensorNameAnchor(name_text, sensor.x, sensor.y);
@@ -2104,7 +2107,7 @@ function drawSensor(sensor, index, type) {
       hierarchy_text.setAttribute("y", sensor?.y + 15);
     }
     if (sensor.area === "circle") {
-      var outer_circle = document.querySelector("#" + i + " > .area");
+      var outer_circle = existing.querySelector(":scope > .area");
       outer_circle.setAttribute("cx", sensor.x);
       outer_circle.setAttribute("cy", sensor.y);
       outer_circle.setAttribute("r", sensor.radius * scale);
@@ -2115,7 +2118,7 @@ function drawSensor(sensor, index, type) {
         area_points.push(p[0], p[1]);
       });
       var points_string = area_points.join(",");
-      var polygon = document.querySelector("#" + i + " > .area");
+      var polygon = existing.querySelector(":scope > .area");
       if (polygon && polygon.getAttribute("points") != points_string) {
         polygon.setAttribute("points", points_string);
       }

@@ -7,6 +7,7 @@ import {
   TOOLS,
   TRANSFORM_TOOLS,
   entityCanScale,
+  isToolEnabledInScene,
   toolDef,
 } from "./tools";
 import type { ToolId } from "./types";
@@ -35,8 +36,23 @@ describe("TOOLS", () => {
 
   it("toolDef resolves and throws on unknown ids", () => {
     expect(toolDef("move").label).toBe("Move");
+    expect(toolDef("rotate").icon).toBe("bi-arrow-repeat");
+    expect(toolDef("camera").icon).toBe("bi-camera-video");
+    expect(toolDef("region").icon).toBe("bi-bounding-box-circles");
     expect(toolDef("tripwire").icon).toBe("bi-arrow-bar-right");
     expect(() => toolDef("nope" as ToolId)).toThrow();
+  });
+
+  it("disables scene-editing tools when no scene is open", () => {
+    expect(isToolEnabledInScene("live", false)).toBe(true);
+    expect(isToolEnabledInScene("move", false)).toBe(true);
+    expect(isToolEnabledInScene("rotate", false)).toBe(true);
+    expect(isToolEnabledInScene("region", false)).toBe(false);
+    expect(isToolEnabledInScene("tripwire", false)).toBe(false);
+    expect(isToolEnabledInScene("camera", false)).toBe(false);
+    expect(isToolEnabledInScene("sensor", false)).toBe(false);
+    expect(isToolEnabledInScene("measure", false)).toBe(false);
+    expect(isToolEnabledInScene("region", true)).toBe(true);
   });
 
   it("transform/creation tool lists are subsets of the tool set", () => {

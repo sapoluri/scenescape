@@ -7,6 +7,8 @@ import {
   FrontSide,
   ConeGeometry,
   Euler,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -15,7 +17,9 @@ import {
   Quaternion,
   Vector3,
 } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { loadSceneObject } from "../placement/loadSceneObject";
+import { sceneGeometryFromRest } from "../placement/sceneGeometry";
 import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
@@ -37,6 +41,10 @@ import type {
 } from "./types";
 
 const D2R = Math.PI / 180;
+
+vi.mock("../placement/loadSceneObject", () => ({
+  loadSceneObject: vi.fn(),
+}));
 
 function quatFromDeg([x, y, z]: [number, number, number]): Quaternion {
   return new Quaternion().setFromEuler(
@@ -206,7 +214,7 @@ describe("childViewportId", () => {
   });
 });
 
-describe("buildChild footprint", () => {
+describe("buildChild map", () => {
   function makeChild(): ChildSceneEntity {
     return {
       id: "child1",
@@ -236,9 +244,74 @@ describe("buildChild footprint", () => {
       expect(nodes.group.position.y).toBeCloseTo(3, 9);
       expect(nodes.group.position.z).toBeCloseTo(0.5, 9);
       expect(nodes.group.rotation.z).toBeCloseTo(Math.PI / 4, 9);
+      expect(nodes.group.children).toEqual([]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([]);
     } finally {
       nodes.dispose();
     }
+  });
+
+  it.each(["annex.glb", "annex.png"])("attaches %s beneath the child pose", async (file) => {
+    const geometry = sceneGeometryFromRest({ map: `/media/${file}`, scale: 50 });
+    const mesh = new Mesh(new BoxGeometry(12, 8, 3), new MeshBasicMaterial());
+    mesh.position.set(20, 30, 10);
+    vi.mocked(loadSceneObject).mockResolvedValueOnce(mesh);
+    const nodes = buildChild({ ...makeChild(), geometry });
+    try {
+      expect(nodes.group.children).toEqual([]);
+      await nodes.ready;
+      expect(mesh.parent).toBe(nodes.group);
+      expect(loadSceneObject).toHaveBeenLastCalledWith(geometry);
+      expect(nodes.group.children).toEqual([mesh]);
+      expect(mesh.position.toArray()).toEqual([20, 30, 10]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([mesh]);
+      nodes.setSelected(false);
+      expect(nodes.group.children).toEqual([mesh]);
+      expect(mesh.visible).toBe(true);
+      nodes.applyPose?.({ ...makeChild(), position: [10, 20, 2] });
+      expect(nodes.group.position.toArray()).toEqual([10, 20, 2]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("does not create placeholder geometry if the child map cannot load", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(loadSceneObject).mockRejectedValueOnce(new Error("Map unavailable"));
+    const nodes = buildChild({
+      ...makeChild(),
+      geometry: sceneGeometryFromRest({ map: "/media/missing.glb" }),
+    });
+    try {
+      await nodes.ready;
+      expect(nodes.group.children).toEqual([]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([]);
+      expect(warning).toHaveBeenCalledOnce();
+    } finally {
+      nodes.dispose();
+      warning.mockRestore();
+    }
+  });
+
+  it("disposes a map that finishes loading after its child is removed", async () => {
+    let finishLoad!: (object: Object3D) => void;
+    vi.mocked(loadSceneObject).mockReturnValueOnce(new Promise((resolve) => {
+      finishLoad = resolve;
+    }));
+    const mesh = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
+    const dispose = vi.spyOn(mesh.geometry, "dispose");
+    const nodes = buildChild({
+      ...makeChild(),
+      geometry: sceneGeometryFromRest({ map: "/media/annex.glb" }),
+    });
+    nodes.dispose();
+    finishLoad(mesh);
+    await nodes.ready;
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(mesh.parent).toBeNull();
   });
 });
 
@@ -288,7 +361,15 @@ describe("buildRegion", () => {
       expect(fill!.geometry.boundingBox!.max.z).toBeCloseTo(region.height);
       const material = fill!.material as MeshStandardMaterial;
       expect(material.side).toBe(FrontSide);
-      expect(material.depthWrite).toBe(true);
+      expect(material.depthWrite).toBe(false);
+      expect(material.depthTest).toBe(true);
+      expect(fill!.renderOrder).toBeGreaterThan(0);
+      const edges = nodes.gizmoTarget.children.find(
+        (node): node is LineSegments => node instanceof LineSegments,
+      );
+      expect(edges).toBeDefined();
+      expect((edges!.material as LineBasicMaterial).depthWrite).toBe(false);
+      expect(edges!.renderOrder).toBeGreaterThan(fill!.renderOrder);
     } finally {
       nodes.dispose();
     }
@@ -387,6 +468,29 @@ describe("buildTripwire light curtain", () => {
       expect(axis.x).toBeCloseTo(1, 5);
       expect(axis.y).toBeCloseTo(0, 5);
       expect(arrow!.position.x).toBeGreaterThan(0);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("fills each segment with a pane and draws no interior vertical bars", () => {
+    const points: [number, number][] = [[0, 0], [10, 0], [10, 8]];
+    const nodes = buildTripwire(wire(points));
+    try {
+      const curtain = nodes.group.getObjectByName("tripwire-curtain") as Mesh;
+      expect(curtain.geometry.getIndex()!.count).toBe(12);
+      expect(curtain.geometry.getAttribute("position").count).toBe(8);
+      expect((curtain.material as MeshBasicMaterial).transparent).toBe(true);
+      const edges = nodes.group.getObjectByName("tripwire-beams") as LineSegments;
+      const positions = edges.geometry.getAttribute("position");
+      expect(positions.count).toBe(14);
+      for (let index = 0; index < positions.count; index++) {
+        const x = positions.getX(index) + nodes.gizmoTarget.position.x;
+        const y = positions.getY(index) + nodes.gizmoTarget.position.y;
+        expect(points.some(([pointX, pointY]) =>
+          Math.abs(pointX - x) < 1e-5 && Math.abs(pointY - y) < 1e-5,
+        )).toBe(true);
+      }
     } finally {
       nodes.dispose();
     }

@@ -907,24 +907,24 @@ class SceneSerializer(NonNullSerializer):
 
     for trans_type in transform_types:
       key = f'mesh_{trans_type}'
-      popped_data = data.pop(key, None)
+      transform_data = data.get(key, None)
 
       # Skip if not provided
-      if popped_data is None:
+      if transform_data is None:
         continue
 
       # Must be a list or tuple of exactly 3 elements
-      if not isinstance(popped_data, (list, tuple)) or len(popped_data) != 3:
+      if not isinstance(transform_data, (list, tuple)) or len(transform_data) != 3:
         raise serializers.ValidationError({
           key: 'Must be a list of exactly 3 numeric values [x, y, z].'
         })
-      if len(popped_data) != 3:
+      if len(transform_data) != 3:
         raise serializers.ValidationError({
-          key: f'Must have exactly 3 values, got {len(popped_data)}.'
+          key: f'Must have exactly 3 values, got {len(transform_data)}.'
         })
 
       for axis, index in axes.items():
-        value = popped_data[index]
+        value = transform_data[index]
 
         # Must be int or float
         if not isinstance(value, (int, float)):

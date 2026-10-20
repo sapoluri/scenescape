@@ -18,7 +18,6 @@ import {
   ExtrudeGeometry,
   Group,
   LineBasicMaterial,
-  LineDashedMaterial,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -34,7 +33,9 @@ import {
   Vector3,
 } from "three";
 import { api } from "../lib/rest";
+import { loadSceneObject } from "../placement/loadSceneObject";
 import { applyScenePoseToObject } from "../placement/poseThree";
+import { sceneGeometryFromRest } from "../placement/sceneGeometry";
 import { subscribeGeometry } from "../scene/map/geometryModel";
 import type {
   SceneCameraBootstrap,
@@ -50,6 +51,7 @@ import {
 import { bboxOf, centroidOf, seedEntitiesFromGeometry } from "./geometrySync";
 import { getPersistState } from "./persistStore";
 import { getViewportState, useViewportStore } from "./store";
+import { useCalibrateStore } from "./calibrate/calibrateStore";
 import type {
   CameraEntity,
   ChildSceneEntity,
@@ -72,6 +74,7 @@ import type { ViewportWorld } from "./world";
 
 export interface EntityNodes {
   group: Group;
+  ready?: Promise<void>;
   /** Object the TransformControls gizmo attaches to. */
   gizmoTarget: Object3D;
   /** World-space anchor for the name label. */
@@ -194,18 +197,21 @@ export function buildRegion(e: RegionEntity): EntityNodes {
     transparent: true,
     opacity: idleOpacity,
     roughness: 0.85,
-    depthWrite: true,
+    depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   });
   const fill = new Mesh(geo, fillMat);
+  fill.renderOrder = 1;
   const edgeMat = new LineBasicMaterial({
     color: baseColor.clone(),
     transparent: true,
     opacity: 0.9,
+    depthWrite: false,
   });
   const edges = new LineSegments(new EdgesGeometry(geo), edgeMat);
+  edges.renderOrder = 2;
   const { min, max } = bboxOf(e.points);
   const proxyH = Math.max(solidHeight, 0.5);
   const proxy = new Mesh(
@@ -248,7 +254,6 @@ export function buildRegion(e: RegionEntity): EntityNodes {
 export const TRIPWIRE_CURTAIN_HEIGHT = 2;
 
 const TRIPWIRE_CURTAIN_FLOOR = 0.02;
-const TRIPWIRE_BEAM_SPACING = 0.22;
 const TRIPWIRE_PLUS_OFFSET = 0.28;
 const TRIPWIRE_PLUS_ARROW_SCALE = 0.6;
 const TRIPWIRE_CURTAIN_OPACITY = 0.26;
@@ -395,14 +400,6 @@ export function addTripwireCurtain(
       beamed = true;
     }
     beams.push(a[0], a[1], z0, b[0], b[1], z0, a[0], a[1], z1, b[0], b[1], z1);
-    for (
-      let dist = TRIPWIRE_BEAM_SPACING;
-      dist < len - 1e-4;
-      dist += TRIPWIRE_BEAM_SPACING
-    ) {
-      const t = dist / len;
-      pushBeam(a[0] + dx * t, a[1] + dy * t);
-    }
     pushBeam(b[0], b[1]);
   }
 
@@ -800,32 +797,10 @@ function buildSensor(e: SensorEntity): EntityNodes {
 /* Dispatcher + seeding                                              */
 /* ------------------------------------------------------------------ */
 
-/** Dashed yellow AABB footprint for a linked child scene. */
+/** Linked scene map beneath its child-to-parent pose. */
 export function buildChild(e: ChildSceneEntity): EntityNodes {
   const group = new Group();
-  const [sx, sy, sz] = e.size;
-  const edgeSrc = new BoxGeometry(sx, sy, sz);
-  const edges = new EdgesGeometry(edgeSrc);
-  edgeSrc.dispose();
-  const lineMat = new LineDashedMaterial({
-    color: new Color(e.color || CHILD_FOOTPRINT_COLOR),
-    dashSize: 0.45,
-    gapSize: 0.28,
-    linewidth: 1,
-  });
-  const lines = new LineSegments(edges, lineMat);
-  lines.computeLineDistances();
-  group.add(lines);
-
-  // Invisible fill so ray picks hit the footprint volume, not only edges.
-  const hitMat = new MeshBasicMaterial({
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    side: DoubleSide,
-  });
-  const hit = new Mesh(new BoxGeometry(sx, sy, sz), hitMat);
-  group.add(hit);
+  let disposed = false;
 
   applyChildPoseToObject(group, {
     position: e.position,
@@ -837,23 +812,30 @@ export function buildChild(e: ChildSceneEntity): EntityNodes {
   const labelPos = new Vector3(
     e.position[0],
     e.position[1],
-    e.position[2] + Math.max(sz * e.scale[2], 0.5) + 0.4,
+    e.position[2] + Math.max(e.size[2] * e.scale[2], 0.5) + 0.4,
   );
 
-  const selectedMat = new LineDashedMaterial({
-    color: new Color("#ffffff"),
-    dashSize: 0.45,
-    gapSize: 0.28,
-  });
+  let ready: Promise<void> | undefined;
+  if (e.geometry?.mapUrl) {
+    ready = loadSceneObject(e.geometry).then((object) => {
+      if (disposed) {
+        disposeObject(object);
+        return;
+      }
+      group.add(object);
+    }).catch((error) => {
+      if (!disposed) {
+        console.warn(`Failed to load child scene map: ${e.name}`, error);
+      }
+    });
+  }
 
   return {
     group,
+    ready,
     gizmoTarget: group,
     labelPos,
-    setSelected: (on: boolean) => {
-      lines.material = on ? selectedMat : lineMat;
-      lines.computeLineDistances();
-    },
+    setSelected: () => {},
     applyPose: (ent) => {
       if (ent.type !== "child") {
         return;
@@ -870,14 +852,8 @@ export function buildChild(e: ChildSceneEntity): EntityNodes {
       );
     },
     dispose: () => {
-      const attached = lines.material;
+      disposed = true;
       disposeObject(group);
-      if (attached !== selectedMat) {
-        selectedMat.dispose();
-      }
-      if (attached !== lineMat) {
-        lineMat.dispose();
-      }
     },
   };
 }
@@ -1211,6 +1187,11 @@ async function seedChildren(
     children.map(async (c) => {
       let pose = parseChildPose({});
       let transformSource: string | null = null;
+      let geometry = sceneGeometryFromRest({
+        uid: c.restUid,
+        name: c.name,
+        map: c.mapUrl,
+      });
       if (authToken && c.restUid) {
         try {
           const row = await api.getChild(authToken, c.restUid);
@@ -1219,6 +1200,13 @@ async function seedChildren(
             row.transform_source != null ? String(row.transform_source) : null;
         } catch {
           /* keep identity pose */
+        }
+      }
+      if (authToken && c.restUid && c.childType !== "remote") {
+        try {
+          geometry = sceneGeometryFromRest(await api.getScene(authToken, c.restUid));
+        } catch (error) {
+          console.warn(`Failed to fetch child scene map metadata: ${c.name}`, error);
         }
       }
       return {
@@ -1238,6 +1226,7 @@ async function seedChildren(
         editHref: c.editHref || `?ss=child-edit&id=${c.restUid}`,
         transformSource,
         deleteUrl: c.deleteUrl,
+        geometry,
       } satisfies ChildSceneEntity;
     }),
   );
@@ -1514,6 +1503,7 @@ export function useViewportEntities(
 
     const reconcile = () => {
       const { entities, selectedId, showFrustums } = getViewportState();
+      const calibration = useCalibrateStore.getState();
       const seen = new Set<string>();
       for (const e of Object.values(entities)) {
         if (e.type === "map") {
@@ -1522,7 +1512,7 @@ export function useViewportEntities(
           }
           continue;
         }
-        if (e.visible === false) {
+        if (calibration.active ? e.id !== calibration.cameraId : e.visible === false) {
           continue;
         }
         const nodes = buildEntityNodes(e);
@@ -1548,6 +1538,16 @@ export function useViewportEntities(
           e.name,
           entityLabelAnchor(nodes.group, nodes.labelPos),
         );
+        void nodes.ready?.then(() => {
+          if (world.entityNodes.get(e.id) === nodes) {
+            ensureLabel(
+              e.id,
+              "name",
+              e.name,
+              entityLabelAnchor(nodes.group, nodes.labelPos),
+            );
+          }
+        });
         for (const label of nodes.extraLabels ?? []) {
           ensureLabel(
             e.id,
@@ -1610,6 +1610,11 @@ export function useViewportEntities(
         }
       }
     });
+    const unsubscribeCalibration = useCalibrateStore.subscribe((state, previous) => {
+      if (state.active !== previous.active || state.cameraId !== previous.cameraId) {
+        reconcile();
+      }
+    });
     reconcile();
 
     const projV = new Vector3();
@@ -1621,6 +1626,10 @@ export function useViewportEntities(
       const w = world.host.clientWidth;
       const h = world.host.clientHeight;
       for (const { el, pos } of labelEls.values()) {
+        if (useCalibrateStore.getState().active) {
+          el.style.display = "none";
+          continue;
+        }
         projV.copy(pos).project(cam);
         if (projV.z > 1 || projV.z < -1) {
           el.style.display = "none";
@@ -1634,6 +1643,7 @@ export function useViewportEntities(
 
     return () => {
       unsubscribe();
+      unsubscribeCalibration();
       world.onFrame.delete(updateLabels);
       clearNodes();
     };

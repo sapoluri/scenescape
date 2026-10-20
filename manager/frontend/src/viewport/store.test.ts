@@ -66,6 +66,30 @@ describe("useViewportStore", () => {
     expect(useViewportStore.getState().entities["a"].name).toBe("Renamed");
   });
 
+  it("toggles a whole object type without changing other types", () => {
+    const store = useViewportStore.getState();
+    store.upsertEntities([region("a"), region("b"), mark("tracked")]);
+    store.setTypeVisible("region", false);
+    expect(useViewportStore.getState().entities.a.visible).toBe(false);
+    expect(useViewportStore.getState().entities.b.visible).toBe(false);
+    expect(useViewportStore.getState().entities.tracked.visible).toBe(true);
+    store.setTypeVisible("region", true);
+    expect(useViewportStore.getState().entities.a.visible).toBe(true);
+    expect(useViewportStore.getState().entities.b.visible).toBe(true);
+  });
+
+  it("keeps tracked-object group visibility through incoming frames", () => {
+    const store = useViewportStore.getState();
+    store.upsertEntities([mark("first")], { fromMarks: true });
+    store.setTypeVisible("mark", false);
+    store.upsertEntities([mark("first"), mark("new")], { fromMarks: true });
+    expect(useViewportStore.getState().entities.first.visible).toBe(false);
+    expect(useViewportStore.getState().entities.new.visible).toBe(false);
+    store.setTypeVisible("mark", true);
+    store.upsertEntities([mark("first")], { fromMarks: true });
+    expect(useViewportStore.getState().entities.first.visible).toBe(true);
+  });
+
   it("removes one entity and clears selection", () => {
     const s = useViewportStore.getState();
     s.upsertEntities([region("a"), region("b")]);

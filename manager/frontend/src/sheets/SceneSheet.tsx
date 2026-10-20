@@ -28,7 +28,7 @@ type Props = {
   onSaved: (sceneUid?: string, opts?: { setup?: "reconstruct" }) => void;
 };
 
-type MapSource = "upload" | "reconstruct" | "geospatial";
+type MapSource = "none" | "upload" | "reconstruct" | "geospatial";
 
 const MAPPING_ENABLE_HINT =
   "Mapping is not running. Upload a map, use geospatial, or start mapping with: docker compose --profile mapping up -d";
@@ -45,7 +45,7 @@ export function SceneSheet({
   const [name, setName] = useState("");
   const [scale, setScale] = useState("100");
   const [mapFile, setMapFile] = useState<File | null>(null);
-  const [mapSource, setMapSource] = useState<MapSource>("upload");
+  const [mapSource, setMapSource] = useState<MapSource>("none");
   const [mappingAvailable, setMappingAvailable] = useState(false);
   const [mappingChecked, setMappingChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -70,6 +70,7 @@ export function SceneSheet({
     }
     setError(null);
     setMapFile(null);
+    setMapSource("none");
     setGeoResult(null);
     setMapSnapshotName(null);
     setOutputLla("false");
@@ -90,7 +91,6 @@ export function SceneSheet({
         }
         setMappingAvailable(ok);
         setMappingChecked(true);
-        setMapSource(ok ? "reconstruct" : "upload");
       });
       return () => {
         cancelled = true;
@@ -187,7 +187,7 @@ export function SceneSheet({
           appendGeospatialSceneFields(form, geoResult, {
             mapFile,
           });
-        } else {
+        } else if (mapSource !== "none") {
           form.append("map_type", "map_upload");
           if (scale.trim()) {
             form.append("scale", scale.trim());
@@ -232,6 +232,7 @@ export function SceneSheet({
         open={open}
         title={mode === "create" ? "New scene" : "Edit scene"}
         onClose={onClose}
+        closeOnBackdrop={mode !== "create"}
         wide
         actions={
           <Button
@@ -273,6 +274,17 @@ export function SceneSheet({
             >
               <fieldset className="ss-map-source-fieldset">
                 <legend className="ss-text-field-label">How will you provide the map?</legend>
+                <label className="ss-map-source-option">
+                  <input
+                    type="radio"
+                    name="ss-map-source"
+                    value="none"
+                    checked={mapSource === "none"}
+                    disabled={busy}
+                    onChange={() => setMapSource("none")}
+                  />
+                  <span>No map — create an empty scene and add a map later</span>
+                </label>
                 <label className="ss-map-source-option">
                   <input
                     type="radio"
