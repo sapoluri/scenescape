@@ -23,7 +23,7 @@ import type { ViewportWorld } from "../world";
 import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
 import { calibrationPointColor, calibrationPointColorHex, CALIBRATION_POINT_RADIUS_PX, CALIBRATION_POINT_HIT_PX } from "./colors";
 import { preloadOpenCv, solveCameraPose } from "./poseSolve";
-import { fovFromOptics, refineIntrinsics } from "./refineIntrinsics";
+import { calibrationOpticsForFrame, fovFromOptics, refineIntrinsics } from "./refineIntrinsics";
 import { transformsToPairs } from "./types";
 
 const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
@@ -454,9 +454,31 @@ export function useCalibrateSession(
 
   const feedImageUrl = useCalibrateStore((s) => s.feedImageUrl);
   const previewPose = useCalibrateStore((s) => s.previewPose);
-  const opticsReady = useCalibrateStore((s) =>
-    s.optics != null && s.optics.fx > 0 && s.optics.fy > 0,
-  );
+  const feedImageSize = useCalibrateStore((s) => s.feedImageSize);
+  const optics = useCalibrateStore((s) => s.optics);
+  const manualDiagonalFov = useCalibrateStore((s) => s.manualDiagonalFov);
+  const locks = useCalibrateStore((s) => s.locks);
+  const opticsRevision = useCalibrateStore((s) => s.opticsRevision);
+  const opticsReady = optics != null && feedImageSize != null &&
+    optics.fx > 0 && optics.fy > 0 && optics.fx === optics.fy &&
+    optics.width === feedImageSize.width && optics.height === feedImageSize.height &&
+    optics.cx === feedImageSize.width / 2 && optics.cy === feedImageSize.height / 2;
+
+  useEffect(() => {
+    if (!active || !optics || !feedImageSize) {
+      return;
+    }
+    if (
+      optics.fx === optics.fy && optics.width === feedImageSize.width &&
+      optics.height === feedImageSize.height && optics.cx === feedImageSize.width / 2 &&
+      optics.cy === feedImageSize.height / 2
+    ) {
+      return;
+    }
+    useCalibrateStore.getState().setOptics(
+      calibrationOpticsForFrame(optics, feedImageSize.width, feedImageSize.height, manualDiagonalFov),
+    );
+  }, [active, optics, feedImageSize, manualDiagonalFov]);
 
   // Live solve when both sides have the same count (≥4).
   const equalCount =
@@ -517,13 +539,14 @@ export function useCalibrateSession(
                 authToken,
                 pairs,
                 working,
+                locks,
               );
               if (epoch !== solveEpochRef.current) {
                 return;
               }
               if (refined) {
                 working = refined;
-                useCalibrateStore.getState().setOptics(refined);
+                useCalibrateStore.getState().setOptics(refined, true);
               }
             } catch (err) {
               console.warn("Calibrate intrinsics refine failed", err);
@@ -588,19 +611,19 @@ export function useCalibrateSession(
         useCalibrateStore.getState().setUpdatingPose(false);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pairsKey stands in for points
-  }, [active, cameraId, authToken, pairsKey, equalCount, opticsReady]);
+  }, [active, cameraId, authToken, pairsKey, equalCount, opticsReady, feedImageSize, locks, opticsRevision]);
 
-  // Pose on rAF; JPEG debounced — avoid stacking project() + decode on enter.
+  // Use the decoded frame's pixel space for both the solve and projector.
   useEffect(() => {
-    if (!active || !world?.projectionPool || !previewPose || !cameraId) {
+    if (!active || !world?.projectionPool || !previewPose || !cameraId || !opticsReady || !optics) {
       return;
     }
     let cancelled = false;
     const handle = world.projectionPool.acquire(cameraId);
     world.cameraProjection = handle;
     const pose = {
-      fov: previewPose.fov,
+      fov: fovFromOptics(optics),
+      aspect: optics.width / optics.height,
       position: previewPose.position,
       rotationDeg: restPoseToRigEuler(previewPose.rotation),
     };
@@ -629,7 +652,7 @@ export function useCalibrateSession(
             }
           })
           .catch((err) => console.warn("Map projection update failed", err));
-      }, 200);
+      }, 0);
     }
     return () => {
       cancelled = true;
@@ -638,7 +661,7 @@ export function useCalibrateSession(
         window.clearTimeout(feedTimer);
       }
     };
-  }, [active, world, previewPose, feedImageUrl, cameraId]);
+  }, [active, world, previewPose, feedImageUrl, cameraId, opticsReady, optics]);
 
   // Keep opacity slider live while calibrate owns the projector.
   const projectOpacity = useViewportStore((s) =>

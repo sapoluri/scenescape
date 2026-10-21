@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { create } from "zustand";
-import type { CalibrateStep, CameraOptics } from "./types";
+import type { CalibrateStep, CalibrationLocks, CameraOptics, ManualIntrinsics } from "./types";
 import { zipCalibratePairs } from "./types";
+import { diagonalFovFromOptics, opticsPersistKey } from "../../lib/cameraOptics";
 
 type PointSnapshot = {
   camPoints: [number, number][];
@@ -29,8 +30,15 @@ export type CalibrateState = {
   pointEditStart: PointSnapshot | null;
   savedPointsKey: string;
   optics: CameraOptics | null;
+  locks: CalibrationLocks;
+  manualIntrinsics: ManualIntrinsics;
+  manualDiagonalFov: number | null;
+  opticsRevision: number;
+  opticsDirty: boolean;
+  savedOpticsKey: string | null;
   /** Latest calibration JPEG object URL (for map coverage projection). */
   feedImageUrl: string | null;
+  feedImageSize: { width: number; height: number } | null;
   /** Last live-solved REST-style pose (for projection camera). */
   previewPose: {
     position: [number, number, number];
@@ -52,8 +60,12 @@ export type CalibrateState = {
   }) => void;
   exit: () => void;
   setStep: (step: CalibrateStep) => void;
-  setOptics: (optics: CameraOptics) => void;
+  setOptics: (optics: CameraOptics, changed?: boolean) => void;
+  editOptics: (optics: CameraOptics) => void;
+  setOpticsLock: (key: keyof CalibrationLocks, locked: boolean) => void;
+  setManualIntrinsics: (mode: ManualIntrinsics) => void;
   setFeedImageUrl: (url: string | null) => void;
+  setFeedImageSize: (size: { width: number; height: number } | null) => void;
   setPreviewPose: (
     pose: {
       position: [number, number, number];
@@ -123,7 +135,7 @@ function snapshot(points: PointSnapshot): PointSnapshot {
 function editPoints(state: CalibrateState, points: PointSnapshot) {
   if (pointsKey(state) === pointsKey(points)) return state;
   return {
-    ...afterPoints(points.camPoints, points.mapPoints, pointsKey(points) !== state.savedPointsKey),
+    ...afterPoints(points.camPoints, points.mapPoints, state.opticsDirty || pointsKey(points) !== state.savedPointsKey),
     pastPoints: state.pointEditStart ? state.pastPoints :
       [...state.pastPoints, snapshot(state)].slice(-CALIBRATION_HISTORY_LIMIT),
     futurePoints: state.pointEditStart ? state.futurePoints : [],
@@ -144,7 +156,14 @@ const idle = {
   pointEditStart: null as PointSnapshot | null,
   savedPointsKey: JSON.stringify([[], []]),
   optics: null as CameraOptics | null,
+  locks: { focal: false, k1: true },
+  manualIntrinsics: "neither" as ManualIntrinsics,
+  manualDiagonalFov: null as number | null,
+  opticsRevision: 0,
+  opticsDirty: false,
+  savedOpticsKey: null as string | null,
   feedImageUrl: null as string | null,
+  feedImageSize: null as CalibrateState["feedImageSize"],
   previewPose: null as CalibrateState["previewPose"],
   priorPose: null as CalibrateState["priorPose"],
   updatingPose: false,
@@ -171,8 +190,31 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
     }),
   exit: () => set({ ...idle }),
   setStep: (step) => set({ step }),
-  setOptics: (optics) => set({ optics }),
+  setOptics: (optics, changed = false) => set((s) => {
+    const savedOpticsKey = !s.opticsDirty && !changed ? opticsPersistKey(optics) : s.savedOpticsKey;
+    const opticsDirty = opticsPersistKey(optics) !== savedOpticsKey;
+    return { optics, savedOpticsKey, opticsDirty,
+      manualDiagonalFov: s.manualIntrinsics === "dfov" ? s.manualDiagonalFov ?? diagonalFovFromOptics(optics) : null,
+      dirty: opticsDirty || pointsKey(s) !== s.savedPointsKey };
+  }),
+  editOptics: (optics) => set((s) => {
+    const opticsDirty = opticsPersistKey(optics) !== s.savedOpticsKey;
+    return { optics, opticsDirty, opticsRevision: s.opticsRevision + 1,
+      manualDiagonalFov: s.manualIntrinsics === "dfov" ? diagonalFovFromOptics(optics) : null,
+      dirty: opticsDirty || pointsKey(s) !== s.savedPointsKey };
+  }),
+  setOpticsLock: (key, locked) => set((s) => ({
+    locks: { ...s.locks, [key]: locked },
+    ...(key === "focal" ? { manualIntrinsics: locked ? "focal" as const : "neither" as const,
+      manualDiagonalFov: null } : {}),
+  })),
+  setManualIntrinsics: (manualIntrinsics) => set((s) => ({
+    manualIntrinsics,
+    manualDiagonalFov: manualIntrinsics === "dfov" && s.optics ? diagonalFovFromOptics(s.optics) : null,
+    locks: { ...s.locks, focal: manualIntrinsics !== "neither" },
+  })),
   setFeedImageUrl: (feedImageUrl) => set({ feedImageUrl }),
+  setFeedImageSize: (feedImageSize) => set({ feedImageSize }),
   setPreviewPose: (previewPose) => set({ previewPose }),
   setPriorPose: (priorPose) => set({ priorPose }),
   setUpdatingPose: (updatingPose) => set({ updatingPose }),
@@ -227,7 +269,7 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
       const previous = s.pastPoints[s.pastPoints.length - 1];
       if (!previous || s.pointEditStart) return s;
       return {
-        ...afterPoints(previous.camPoints, previous.mapPoints, pointsKey(previous) !== s.savedPointsKey),
+        ...afterPoints(previous.camPoints, previous.mapPoints, s.opticsDirty || pointsKey(previous) !== s.savedPointsKey),
         pastPoints: s.pastPoints.slice(0, -1),
         futurePoints: [...s.futurePoints, snapshot(s)].slice(-CALIBRATION_HISTORY_LIMIT),
       };
@@ -236,7 +278,7 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
     const next = s.futurePoints[s.futurePoints.length - 1];
     if (!next || s.pointEditStart) return s;
     return {
-      ...afterPoints(next.camPoints, next.mapPoints, pointsKey(next) !== s.savedPointsKey),
+      ...afterPoints(next.camPoints, next.mapPoints, s.opticsDirty || pointsKey(next) !== s.savedPointsKey),
       pastPoints: [...s.pastPoints, snapshot(s)].slice(-CALIBRATION_HISTORY_LIMIT),
       futurePoints: s.futurePoints.slice(0, -1),
     };
@@ -255,11 +297,12 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
     set((s) => editPoints(s, { camPoints: [], mapPoints: [] })),
   replacePoints: (camPoints, mapPoints, dirty = true) =>
     set((s) => dirty ? editPoints(s, { camPoints, mapPoints }) : {
-      ...afterPoints(camPoints, mapPoints, false),
+      ...afterPoints(camPoints, mapPoints, s.opticsDirty),
       savedPointsKey: pointsKey({ camPoints, mapPoints }),
       pastPoints: [], futurePoints: [], pointEditStart: null,
     }),
-  markClean: () => set((s) => ({ dirty: false, savedPointsKey: pointsKey(s) })),
+  markClean: () => set((s) => ({ dirty: false, opticsDirty: false,
+    savedOpticsKey: s.optics ? opticsPersistKey(s.optics) : null, savedPointsKey: pointsKey(s) })),
 }));
 
 export function getCalibrateState(): CalibrateState {

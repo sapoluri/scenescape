@@ -83,6 +83,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
   const optics = useCalibrateStore((s) => s.optics);
 
   const setFeedImageUrl = useCalibrateStore((s) => s.setFeedImageUrl);
+  const setFeedImageSize = useCalibrateStore((s) => s.setFeedImageSize);
   const { imageUrl, naturalSize } = useCalibrationImage(sensorId, true);
   const imgW = naturalSize?.w || optics?.width || 1000;
   const imgH = naturalSize?.h || optics?.height || 1000;
@@ -102,6 +103,11 @@ export function CalibrateFeedPane(): React.JSX.Element {
     setFeedImageUrl(imageUrl);
     return () => setFeedImageUrl(null);
   }, [imageUrl, setFeedImageUrl]);
+
+  useEffect(() => {
+    setFeedImageSize(naturalSize ? { width: naturalSize.w, height: naturalSize.h } : null);
+    return () => setFeedImageSize(null);
+  }, [naturalSize, setFeedImageSize]);
 
   useLayoutEffect(() => {
     const pane = paneRef.current;

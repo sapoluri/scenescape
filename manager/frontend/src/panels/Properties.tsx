@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -14,8 +15,9 @@ import { createPortal } from "react-dom";
 import { useAppToast } from "../components/ToastProvider";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
 import {
+  diagonalFovFromOptics,
+  focalFromDiagonalFov,
   fovFromFy,
-  fyFromFov,
   opticsPersistKey,
   parseCameraOptics,
 } from "../lib/cameraOptics";
@@ -43,7 +45,7 @@ import type {
 } from "../scene/types";
 import { enterCameraCalibrate } from "../viewport/calibrate";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
-import type { CameraOptics } from "../viewport/calibrate/types";
+import type { CameraOptics, ManualIntrinsics } from "../viewport/calibrate/types";
 import { restPoseToRigEuler } from "../viewport/entities";
 import {
   writeRegionToModel,
@@ -110,6 +112,7 @@ function NumField({
   digits,
   onPreview,
   onCommit,
+  readOnly = false,
 }: {
   label: string;
   value: number;
@@ -118,7 +121,9 @@ function NumField({
   digits?: number;
   onPreview?: (v: number) => void;
   onCommit: (v: number) => void;
+  readOnly?: boolean;
 }) {
+  const inputId = useId();
   const [text, setText] = useState<string | null>(null);
   const display =
     digits !== undefined && Number.isFinite(value)
@@ -126,10 +131,14 @@ function NumField({
       : String(value);
   const inputStep = digits !== undefined ? 10 ** -digits : step;
   return (
-    <label className="ss-prop-field">
-      <span className="ss-prop-label">{label}</span>
+    <div className="ss-prop-field">
+      <span className="ss-prop-label ss-prop-label-controls">
+        <label htmlFor={inputId}>{label}</label>
+      </span>
       <input
+        id={inputId}
         type="number"
+        readOnly={readOnly}
         step={inputStep}
         className="ss-prop-input"
         value={text ?? display}
@@ -158,7 +167,7 @@ function NumField({
           }
         }}
       />
-    </label>
+    </div>
   );
 }
 
@@ -614,10 +623,15 @@ function CameraProps({
   const calOptics = useCalibrateStore((s) =>
     s.active && s.cameraId === e.id ? s.optics : null,
   );
+  const calibrationLocks = useCalibrateStore((s) => s.locks);
+  const setOpticsLock = useCalibrateStore((s) => s.setOpticsLock);
+  const manualIntrinsics = useCalibrateStore((s) => s.manualIntrinsics);
+  const setManualIntrinsics = useCalibrateStore((s) => s.setManualIntrinsics);
+  const manualGroupId = useId();
   const poseDirty = useEntityDirty(e);
   const [destinationSceneId, setDestinationSceneId] = useState(sceneId || "");
   useEffect(() => setDestinationSceneId(sceneId || ""), [sceneId, e.id]);
-  const [optics, setOptics] = useState<CameraOptics | null>(null);
+  const [optics, setOptics] = useState<CameraOptics | null>(calOptics);
   const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
   const opticsDirty =
     optics != null &&
@@ -697,18 +711,28 @@ function CameraProps({
       }
       const next = { ...prev, ...p };
       if (calibrating) {
-        useCalibrateStore.getState().setOptics(next);
+        useCalibrateStore.getState().editOptics(next);
       }
       return next;
     });
   };
 
-  const onFovCommit = (v: number) => {
-    const fov = roundDigits(Math.min(120, Math.max(10, v)), 2);
-    patch({ fov });
-    if (optics) {
-      patchOptics({ fy: roundDigits(fyFromFov(fov, optics.height), 2) });
+  const onFocalCommit = (value: number) => {
+    if (!(value > 0) || !optics) {
+      return;
     }
+    const focal = roundDigits(value, 2);
+    patchOptics({ fx: focal, fy: focal });
+    patch({ fov: fovFromFy(focal, 2 * optics.cy) });
+  };
+
+  const onFovCommit = (v: number) => {
+    if (!optics || !(v > 0 && v < 180)) {
+      return;
+    }
+    const focal = focalFromDiagonalFov(v, optics.cx, optics.cy);
+    patchOptics({ fx: focal, fy: focal });
+    patch({ fov: fovFromFy(focal, 2 * optics.cy) });
   };
 
   const onSave = async () => {
@@ -880,68 +904,103 @@ function CameraProps({
           onCommit={(v) => setRot(2, v)}
         />
       </div>
-      <NumField
-        label="FOV (°)"
-        value={e.fov}
-        digits={2}
-        onCommit={onFovCommit}
-      />
       {optics ? (
         <>
+          {calibrating ? (
+            <fieldset className="ss-prop-manual-intrinsics">
+              <legend>Manually set:</legend>
+              {([
+                ["dfov", "dFOV"], ["focal", "fx/fy"], ["neither", "Neither"],
+              ] as [ManualIntrinsics, string][]).map(([mode, label]) => (
+                <label key={mode}>
+                  <input
+                    type="radio"
+                    name={manualGroupId}
+                    value={mode}
+                    checked={manualIntrinsics === mode}
+                    onChange={() => setManualIntrinsics(mode)}
+                  />
+                  <span>{label}</span>
+                  {mode === "neither" ? <small>(requires 6+ point pairs)</small> : null}
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          <NumField
+            label="Diagonal FOV (°)"
+            value={diagonalFovFromOptics(optics)}
+            digits={2}
+            readOnly={!calibrating || manualIntrinsics !== "dfov"}
+            onCommit={onFovCommit}
+          />
           <span className="ss-prop-section">Intrinsics (px)</span>
           <div className="ss-prop-grid2">
             <NumField
               label="fx"
               value={optics.fx}
               digits={2}
-              onCommit={(v) => patchOptics({ fx: v })}
+              readOnly={calibrating && manualIntrinsics !== "focal"}
+              onCommit={onFocalCommit}
             />
             <NumField
               label="fy"
               value={optics.fy}
               digits={2}
-              onCommit={(v) => {
-                const fy = roundDigits(v, 2);
-                patchOptics({ fy });
-                patch({
-                  fov: roundDigits(
-                    Math.min(120, Math.max(10, fovFromFy(fy, optics.height))),
-                    2,
-                  ),
-                });
-              }}
+              readOnly={calibrating && manualIntrinsics !== "focal"}
+              onCommit={onFocalCommit}
             />
             <NumField
               label="cx"
               value={optics.cx}
               digits={2}
+              readOnly={calibrating}
               onCommit={(v) => patchOptics({ cx: v })}
             />
             <NumField
               label="cy"
               value={optics.cy}
               digits={2}
+              readOnly={calibrating}
               onCommit={(v) => patchOptics({ cy: v })}
             />
           </div>
-          <span className="ss-prop-section">Distortion</span>
+          <div className="ss-prop-section ss-prop-distortion-heading">
+            <span>Distortion</span>
+            {calibrating ? (
+              <label>
+                <input
+                  type="checkbox"
+                  aria-label="Manually set distortion"
+                  checked={calibrationLocks.k1}
+                  onChange={event => setOpticsLock("k1", event.target.checked)}
+                />
+                <span>Manually set</span>
+              </label>
+            ) : null}
+          </div>
+          {calibrating && !calibrationLocks.k1 ? (
+            <small className="ss-prop-estimation-requirement">Automatic k1 (requires 8+ point pairs)</small>
+          ) : null}
           <div className="ss-prop-grid3">
             <NumField
               label="k1"
               value={optics.k1}
               digits={4}
+              readOnly={calibrating && !calibrationLocks.k1}
               onCommit={(v) => patchOptics({ k1: v })}
             />
             <NumField
               label="k2"
               value={optics.k2}
               digits={4}
+              readOnly={calibrating && !calibrationLocks.k1}
               onCommit={(v) => patchOptics({ k2: v })}
             />
             <NumField
               label="k3"
               value={optics.k3}
               digits={4}
+              readOnly={calibrating && !calibrationLocks.k1}
               onCommit={(v) => patchOptics({ k3: v })}
             />
           </div>
@@ -950,12 +1009,14 @@ function CameraProps({
               label="p1"
               value={optics.p1}
               digits={4}
+              readOnly={calibrating && !calibrationLocks.k1}
               onCommit={(v) => patchOptics({ p1: v })}
             />
             <NumField
               label="p2"
               value={optics.p2}
               digits={4}
+              readOnly={calibrating && !calibrationLocks.k1}
               onCommit={(v) => patchOptics({ p2: v })}
             />
           </div>

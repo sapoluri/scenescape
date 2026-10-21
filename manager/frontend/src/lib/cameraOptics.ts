@@ -65,3 +65,13 @@ export function fyFromFov(fovDeg: number, height: number): number {
   }
   return height / (2 * Math.tan((fovDeg * Math.PI) / 360));
 }
+
+export function diagonalFovFromOptics(
+  optics: Pick<CameraOptics, "cx" | "cy" | "fx" | "fy">,
+): number {
+  return 2 * Math.atan(Math.hypot(optics.cx / optics.fx, optics.cy / optics.fy)) * 180 / Math.PI;
+}
+
+export function focalFromDiagonalFov(angle: number, cx: number, cy: number): number {
+  return Math.hypot(cx, cy) / Math.tan(angle * Math.PI / 360);
+}

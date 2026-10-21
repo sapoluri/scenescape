@@ -23,6 +23,71 @@
   flex: none;
 }
 
+.ss-prop-label-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ss-prop-label-controls label {
+  margin: 0;
+}
+
+.ss-prop-manual-intrinsics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ss-prop-manual-intrinsics legend {
+  float: none;
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: var(--ss-text-muted);
+}
+
+.ss-prop-manual-intrinsics label,
+.ss-prop-distortion-heading,
+.ss-prop-distortion-heading label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+}
+
+.ss-prop-manual-intrinsics input,
+.ss-prop-distortion-heading input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--ss-brand);
+}
+
+.ss-prop-manual-intrinsics small,
+.ss-prop-estimation-requirement {
+  font-size: 10px;
+  color: var(--ss-text-muted);
+}
+
+.ss-prop-distortion-heading {
+  gap: 12px;
+}
+
+.ss-prop-distortion-heading label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.ss-prop-input[readonly] {
+  color: var(--ss-text-muted);
+  cursor: default;
+}
+
 .ss-prop-value {
   color: var(--ss-text, #f5f5f7);
   font-variant-numeric: tabular-nums;

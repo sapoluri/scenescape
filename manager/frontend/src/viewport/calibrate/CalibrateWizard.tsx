@@ -243,14 +243,14 @@ export function CalibrateWizard({
 
   const stepLabel = updatingPose
     ? pairCount >= 6
-      ? "Updating pose + fx/fy…"
+      ? "Updating calibration…"
       : "Updating pose…"
     : pairCount < 4
       ? camPoints.length !== mapPoints.length
         ? `Step 2 · Pick points (cam ${camPoints.length} / map ${mapPoints.length})`
         : `Step 2 · Pick points (${pairCount}/4+)`
       : pairCount >= 6
-        ? "Step 3–4 · Pose + fx/fy updated · Save when ready"
+        ? "Step 3–4 · Calibration updated · Save when ready"
         : "Step 3–4 · Frustum updated · Save when ready";
 
   return (

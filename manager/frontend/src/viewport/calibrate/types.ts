@@ -8,6 +8,12 @@ export type CalibratePair = {
 };
 
 export type CalibrateStep = "select" | "pick" | "save";
+export type ManualIntrinsics = "dfov" | "focal" | "neither";
+
+export type CalibrationLocks = {
+  focal: boolean;
+  k1: boolean;
+};
 
 export type CameraOptics = {
   fx: number;

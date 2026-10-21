@@ -3,8 +3,78 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { CALIBRATION_HISTORY_LIMIT, getCalibrateState } from "./calibrateStore";
+import { parseCameraOptics } from "../../lib/cameraOptics";
+import { calibrationOpticsForFrame } from "./refineIntrinsics";
 
 beforeEach(() => getCalibrateState().enter({ cameraId: "1", sensorId: "camera1", cameraName: "Camera 1" }));
+
+describe("calibration optics controls", () => {
+  it("retains the manual diagonal angle across frame normalization", () => {
+    const optics = calibrationOpticsForFrame({ ...parseCameraOptics({}), fy: 400 }, 640, 480);
+    getCalibrateState().setOptics(optics);
+    getCalibrateState().setManualIntrinsics("dfov");
+    const angle = getCalibrateState().manualDiagonalFov!;
+    getCalibrateState().setOptics(calibrationOpticsForFrame(optics, 1280, 960, angle));
+    expect(getCalibrateState().manualDiagonalFov).toBe(angle);
+    expect(getCalibrateState().optics!.fy).toBeCloseTo(800, 10);
+    getCalibrateState().setOpticsLock("k1", false);
+    expect(getCalibrateState().manualIntrinsics).toBe("dfov");
+    expect(getCalibrateState().locks.focal).toBe(true);
+  });
+
+  it("switches manual sources without changing the projection or dirtying values", () => {
+    const optics = parseCameraOptics({});
+    getCalibrateState().setOptics(optics);
+    getCalibrateState().setManualIntrinsics("dfov");
+    expect(getCalibrateState().manualDiagonalFov).toBeGreaterThan(0);
+    expect(getCalibrateState().locks.focal).toBe(true);
+    expect(getCalibrateState().optics).toBe(optics);
+    getCalibrateState().setManualIntrinsics("neither");
+    expect(getCalibrateState().locks.focal).toBe(false);
+    expect(getCalibrateState().manualDiagonalFov).toBeNull();
+    getCalibrateState().setManualIntrinsics("focal");
+    expect(getCalibrateState().locks.focal).toBe(true);
+    expect(getCalibrateState().optics).toBe(optics);
+    expect(getCalibrateState().dirty).toBe(false);
+  });
+
+  it("restores clean state when a manual optics value is restored and resets locks on exit", () => {
+    const optics = parseCameraOptics({});
+    getCalibrateState().setOptics(optics);
+    getCalibrateState().editOptics({ ...optics, k1: 0.1 });
+    getCalibrateState().replacePoints([], [], false);
+    expect(getCalibrateState().dirty).toBe(true);
+    getCalibrateState().editOptics(optics);
+    expect(getCalibrateState().dirty).toBe(false);
+    getCalibrateState().setOpticsLock("k1", false);
+    getCalibrateState().exit();
+    expect(getCalibrateState().locks).toEqual({ focal: false, k1: true });
+    expect(getCalibrateState().manualIntrinsics).toBe("neither");
+  });
+
+  it("defaults to Neither and does not dirty saved camera values when choosing a manual source", () => {
+    expect(getCalibrateState().manualIntrinsics).toBe("neither");
+    expect(getCalibrateState().locks).toEqual({ focal: false, k1: true });
+    getCalibrateState().setManualIntrinsics("focal");
+    expect(getCalibrateState().locks.focal).toBe(true);
+    expect(getCalibrateState().dirty).toBe(false);
+    getCalibrateState().enter({ cameraId: "2", sensorId: "camera2", cameraName: "Camera 2" });
+    expect(getCalibrateState().manualIntrinsics).toBe("neither");
+  });
+
+  it("keeps manual optics dirty through point undo and clears them on save", () => {
+    const optics = parseCameraOptics({});
+    getCalibrateState().setOptics(optics);
+    getCalibrateState().editOptics({ ...optics, fx: 900, fy: 900 });
+    expect(getCalibrateState().opticsRevision).toBe(1);
+    getCalibrateState().addCamPoint([10, 20]);
+    getCalibrateState().undoPoint();
+    expect(getCalibrateState().dirty).toBe(true);
+    getCalibrateState().markClean();
+    expect(getCalibrateState().dirty).toBe(false);
+    expect(getCalibrateState().opticsDirty).toBe(false);
+  });
+});
 
 describe("calibration point history", () => {
   it("undoes and redoes additions on either side", () => {
