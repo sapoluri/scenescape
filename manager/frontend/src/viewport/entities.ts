@@ -599,7 +599,7 @@ export function buildCamera(e: CameraEntity): EntityNodes {
   // would not align with the camera body.
   // Visual size matches legacy CustomCameraHelper (near 0.2, far 1). This
   // camera is never rendered; the drawn frustum is one meter along -Z.
-  const persp = new PerspectiveCamera(e.fov, 4 / 3, 0.2, 1);
+  const persp = new PerspectiveCamera(e.fov, e.aspect ?? 4 / 3, 0.2, 1);
   const helper = new CameraHelper(persp);
   rig.add(persp);
 
@@ -661,8 +661,9 @@ export function buildCamera(e: CameraEntity): EntityNodes {
           "XYZ",
         ),
       );
-      if (persp.fov !== ent.fov) {
+      if (persp.fov !== ent.fov || persp.aspect !== (ent.aspect ?? 4 / 3)) {
         persp.fov = ent.fov;
+        persp.aspect = ent.aspect ?? 4 / 3;
         persp.updateProjectionMatrix();
         helper.update();
       }
@@ -920,13 +921,14 @@ function isFiniteTriple(v: unknown): v is [number, number, number] {
   );
 }
 
-function parseCameraPose(row: Record<string, unknown>): {
+export function parseCameraPose(row: Record<string, unknown>): {
   position: [number, number, number];
   /** Rig euler for frustum meshes. */
   rotation: [number, number, number];
   /** REST / solve euler for map projection. */
   restRotation: [number, number, number];
   fov: number;
+  aspect?: number;
 } | null {
   if (!isFiniteTriple(row.translation)) {
     return null;
@@ -945,6 +947,8 @@ function parseCameraPose(row: Record<string, unknown>): {
         vfov?: unknown;
         fx?: unknown;
         fy?: unknown;
+        cx?: unknown;
+        cy?: unknown;
       }
     | null
     | undefined;
@@ -960,12 +964,23 @@ function parseCameraPose(row: Record<string, unknown>): {
     num(resObj?.height) ??
     num(resObj?.h) ??
     (Array.isArray(res) ? num(res[1]) : null);
+  const width =
+    num(resObj?.width) ??
+    num(resObj?.w) ??
+    (Array.isArray(res) ? num(res[0]) : null);
+  const cx = num(intr?.cx);
+  const cy = num(intr?.cy);
   const fy = num(intr?.fy) ?? num(intr?.fx);
-  // Prefer fy→vfov (legacy scenecamera.js); fall back to explicit vfov/fov.
-  let fov = num(intr?.vfov) ?? num(intr?.fov) ?? null;
-  if (fov == null && fy != null && height != null && fy > 0 && height > 0) {
-    fov = (2 * Math.atan(height / (2 * fy)) * 180) / Math.PI;
-  }
+  // Centered cx/cy describe the actual calibrated frame and supersede stale resolution metadata.
+  const calibratedHeight = cy != null && cy > 0 ? 2 * cy : height;
+  const aspect = cx != null && cy != null && cx > 0 && cy > 0
+    ? cx / cy
+    : width != null && height != null && width > 0 && height > 0
+      ? width / height
+      : undefined;
+  let fov = fy != null && calibratedHeight != null && fy > 0 && calibratedHeight > 0
+    ? (2 * Math.atan(calibratedHeight / (2 * fy)) * 180) / Math.PI
+    : num(intr?.vfov) ?? num(intr?.fov) ?? null;
   if (fov == null) {
     const hfov = num(intr?.hfov);
     fov = hfov != null ? hfov * 0.75 : 60;
@@ -983,6 +998,7 @@ function parseCameraPose(row: Record<string, unknown>): {
     rotation: restPoseToRigEuler(restRot),
     restRotation: restRot,
     fov,
+    aspect,
   };
 }
 
@@ -1010,6 +1026,7 @@ async function seedCameras(
         rotation: [number, number, number];
         restRotation: [number, number, number];
         fov: number;
+        aspect?: number;
       } | null = null;
       if (authToken) {
         try {
@@ -1032,6 +1049,7 @@ async function seedCameras(
         restRotation: pose?.restRotation ?? [0, 0, 0],
         posed: pose != null,
         fov: pose?.fov ?? 60,
+        aspect: pose?.aspect,
         color: "#0a84ff",
       } satisfies CameraEntity;
     }),

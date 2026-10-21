@@ -588,6 +588,7 @@ export function useCalibrateSession(
             restRotation: withFov.rotation,
             posed: true,
             fov,
+            aspect: working.width / working.height,
           });
           getViewportState().setProjectCamera(cameraId);
         } catch (err) {

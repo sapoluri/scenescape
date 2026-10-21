@@ -6,7 +6,7 @@ import type { CameraEntity } from "./types";
 
 vi.mock("../mqtt", () => ({ refreshCameraStrip: vi.fn() }));
 
-import { projectionCameraIds } from "./useLiveCameraProjection";
+import { liveProjectionOptions, projectionCameraIds } from "./useLiveCameraProjection";
 
 const camera = (id: string, visible = true): CameraEntity => ({
   id,
@@ -23,6 +23,12 @@ const camera = (id: string, visible = true): CameraEntity => ({
 });
 
 describe("projectionCameraIds", () => {
+  it("keeps the calibrated aspect instead of deriving it from the live JPEG", () => {
+    const entity = { ...camera("retail"), fov: 38.29, aspect: 4 / 3 };
+    expect(liveProjectionOptions(entity)).toMatchObject({ fov: 38.29, aspect: 4 / 3 });
+    expect(liveProjectionOptions(camera("legacy"))).not.toHaveProperty("aspect");
+  });
+
   it("isolates calibration and restores normal projection choices on exit", () => {
     const selected = ["first", "second"];
     const entities = { first: camera("first"), second: camera("second") };

@@ -52,6 +52,17 @@ export function projectionCameraIds(
   });
 }
 
+export function liveProjectionOptions(entity: CameraEntity) {
+  return {
+    fov: entity.fov,
+    ...(entity.aspect != null && Number.isFinite(entity.aspect)
+      ? { aspect: entity.aspect }
+      : {}),
+    position: entity.position,
+    rotationDeg: entity.rotation,
+  };
+}
+
 /**
  * Live map coverage when posed cameras have "Project frame" / "project all
  * frames" enabled (legacy scenecamera.js projectFrame). Calibrate owns the
@@ -87,7 +98,7 @@ export function useLiveCameraProjection(
         id,
         sensorId: boot.sensorId,
         entity: e,
-        poseKey: `${e.position.join(",")}|${e.rotation.join(",")}|${e.fov}`,
+        poseKey: `${e.position.join(",")}|${e.rotation.join(",")}|${e.fov}|${e.aspect ?? "frame"}`,
       });
     }
     return out;
@@ -159,9 +170,7 @@ export function useLiveCameraProjection(
       lastPose.set(cam.id, cam.poseKey);
       handle
         .updateFrame(src, {
-          fov: cam.entity.fov,
-          position: cam.entity.position,
-          rotationDeg: cam.entity.rotation,
+          ...liveProjectionOptions(cam.entity),
           reproject: poseChanged || firstFrame,
         })
         .then(() => {

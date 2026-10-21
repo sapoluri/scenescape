@@ -68,6 +68,8 @@ export interface CameraEntity extends ViewportEntityBase {
   /** True when REST calibration translation is known (projection eligible). */
   posed: boolean;
   fov: number;
+  /** Calibrated image aspect, derived from centered cx/cy when available. */
+  aspect?: number;
   color: string;
 }
 

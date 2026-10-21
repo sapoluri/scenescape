@@ -34,6 +34,7 @@ import {
   childViewportId,
   entityLabelAnchor,
   lookAtOriginEuler,
+  parseCameraPose,
   restPoseToRigEuler,
   seedSensors,
   TRIPWIRE_CURTAIN_HEIGHT,
@@ -137,7 +138,7 @@ describe("buildCamera frustum alignment", () => {
   }
 
   it("renders the CameraHelper frustum at the camera world transform (no double transform)", () => {
-    const nodes = buildCamera(makeCamEntity());
+    const nodes = buildCamera({ ...makeCamEntity(), aspect: 4 / 3 });
     try {
       nodes.group.updateMatrixWorld(true);
       const helper = nodes.group.getObjectByProperty("type", "CameraHelper");
@@ -147,6 +148,7 @@ describe("buildCamera frustum alignment", () => {
       );
       expect(helper).toBeTruthy();
       expect(persp).toBeTruthy();
+      expect((persp as PerspectiveCamera).aspect).toBeCloseTo(4 / 3);
       // CameraHelper bakes the camera's matrixWorld into its own matrix; its
       // world matrix must equal the camera's — not the rig transform squared.
       const h = helper!.matrixWorld.elements;
@@ -201,6 +203,32 @@ describe("buildCamera frustum alignment", () => {
     } finally {
       nodes.dispose();
     }
+  });
+
+  it("updates the visible frustum aspect with calibrated camera intrinsics", () => {
+    const entity = { ...makeCamEntity(), aspect: 4 / 3 };
+    const nodes = buildCamera(entity);
+    try {
+      nodes.applyPose!({ ...entity, aspect: 16 / 9 });
+      const persp = nodes.group.getObjectByProperty("type", "PerspectiveCamera") as PerspectiveCamera;
+      expect(persp.aspect).toBeCloseTo(16 / 9);
+    } finally {
+      nodes.dispose();
+    }
+  });
+});
+
+describe("camera projection calibration metadata", () => {
+  it("derives vertical FOV and aspect from centered intrinsics rather than stale resolution", () => {
+    const pose = parseCameraPose({
+      translation: [1, 2, 3],
+      rotation: [0, 0, 0],
+      resolution: { width: 1280, height: 720 },
+      intrinsics: { fx: 690, fy: 690, cx: 320, cy: 240 },
+    });
+    expect(pose).not.toBeNull();
+    expect(pose!.aspect).toBeCloseTo(4 / 3, 10);
+    expect(pose!.fov).toBeCloseTo(2 * Math.atan(240 / 690) * 180 / Math.PI, 10);
   });
 });
 
