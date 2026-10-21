@@ -153,6 +153,22 @@ Entity types carried over 1:1: **Scene → Regions (ROIs) → Tripwires → Came
 - MQTT: existing scene topics for telemetry, camera frames, marks — same subscriptions as `src/mqtt/useSceneMqtt`.
 - Bootstrap JSON stays the initial scene-graph seed (replaces the 2D map bootstrap).
 
+### Scene lighting
+
+The Outliner's Lighting section exposes one Ambient intensity slider, matching
+the released viewer: default `1.0`, range `0.1` to `3.0`, step `0.01`. It changes
+ambient-light intensity and renderer exposure locally, without publishing or
+saving scene configuration. Opening a different scene restores the default.
+
+MQTT readings on `scenescape/data/sensor/{sensor_id}` can override the slider.
+The sensor must belong to the open scene and have full-scene coverage
+(`area: "scene"`). A payload with `subtype: "light"`, or a sensor ID containing
+`_light` (case-insensitive), is interpreted as illuminance in lux: intensity is
+`value / 500`, clamped to the slider range. Circular/polygon coverage sensors,
+unknown sensors, and non-finite readings do not affect lighting. MQTT updates
+and manual slider changes share the same displayed value. Multiple editable
+lights are not part of this initial implementation.
+
 ## Phase 2 — Rerun integration & replayability
 
 **Status: complete** (shipped October 2026), including Phase 2.3 in-viewport

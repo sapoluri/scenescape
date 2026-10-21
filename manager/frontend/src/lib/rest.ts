@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { tokenAuthHeaders } from "./session";
+import { handleExpiredSession, tokenAuthHeaders } from "./session";
 
 export type RestError = {
   status: number;
@@ -70,6 +70,7 @@ export async function restJson<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!resp.ok) {
+    handleExpiredSession(resp, token);
     throw await parseError(resp);
   }
   if (resp.status === 204) {
@@ -94,6 +95,7 @@ export async function restForm<T>(
     body: form,
   });
   if (!resp.ok) {
+    handleExpiredSession(resp, token);
     throw await parseError(resp);
   }
   if (resp.status === 204) {

@@ -3,7 +3,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCalibrateStore } from "./calibrateStore";
-import { calibrationPointColor } from "./colors";
+import { calibrationPointColor, CALIBRATION_POINT_RADIUS_PX, CALIBRATION_POINT_HIT_PX } from "./colors";
 import { useCalibrationImage } from "./useCalibrationImage";
 import "./CalibrateFeedPane.css";
 
@@ -86,8 +86,6 @@ export function CalibrateFeedPane(): React.JSX.Element {
   const { imageUrl, naturalSize } = useCalibrationImage(sensorId, true);
   const imgW = naturalSize?.w || optics?.width || 1000;
   const imgH = naturalSize?.h || optics?.height || 1000;
-  const markR = Math.max(imgW, imgH) * 0.008;
-  const hitR = Math.max(markR * 4, Math.max(imgW, imgH) * 0.02);
 
   const paneRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragMode | null>(null);
@@ -96,7 +94,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
   const baseFitRef = useRef(1);
   const [view, setView] = useState<ViewState>({ scale: 1, panX: 0, panY: 0 });
   const [paneSize, setPaneSize] = useState({ w: 0, h: 0 });
-  const [cursor, setCursor] = useState<"crosshair" | "grabbing">("crosshair");
+  const [cursor, setCursor] = useState<"default" | "crosshair" | "grabbing">("default");
 
   viewRef.current = view;
 
@@ -206,11 +204,12 @@ export function CalibrateFeedPane(): React.JSX.Element {
       useCalibrateStore.getState().camPoints,
       x,
       y,
-      hitR,
+      CALIBRATION_POINT_HIT_PX / (baseFitRef.current * viewRef.current.scale),
     );
     if (idx >= 0) {
+      useCalibrateStore.getState().beginPointEdit();
       dragRef.current = { kind: "point", index: idx };
-      setCursor("crosshair");
+      setCursor("grabbing");
     } else {
       const { panX, panY } = viewRef.current;
       dragRef.current = {
@@ -229,6 +228,12 @@ export function CalibrateFeedPane(): React.JSX.Element {
   const onPointerMove = (ev: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag) {
+      const [x, y] = clientToImage(ev.clientX, ev.clientY);
+      const index = nearestCamIndex(
+        useCalibrateStore.getState().camPoints, x, y,
+        CALIBRATION_POINT_HIT_PX / (baseFitRef.current * viewRef.current.scale),
+      );
+      setCursor(index >= 0 ? "crosshair" : "default");
       return;
     }
     if (drag.kind === "pan") {
@@ -253,8 +258,13 @@ export function CalibrateFeedPane(): React.JSX.Element {
     if (!dragRef.current) {
       return;
     }
+    if (dragRef.current.kind === "point") useCalibrateStore.getState().endPointEdit();
     dragRef.current = null;
-    setCursor("crosshair");
+    const [x, y] = clientToImage(ev.clientX, ev.clientY);
+    setCursor(nearestCamIndex(
+      useCalibrateStore.getState().camPoints, x, y,
+      CALIBRATION_POINT_HIT_PX / (baseFitRef.current * viewRef.current.scale),
+    ) >= 0 ? "crosshair" : "default");
     try {
       ev.currentTarget.releasePointerCapture(ev.pointerId);
     } catch {
@@ -270,7 +280,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
       useCalibrateStore.getState().camPoints,
       x,
       y,
-      hitR,
+      CALIBRATION_POINT_HIT_PX / (baseFitRef.current * viewRef.current.scale),
     );
     if (idx >= 0) {
       removeCamPointAt(idx);
@@ -289,6 +299,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
   const base = baseFitRef.current;
   const fittedW = imgW * base;
   const fittedH = imgH * base;
+  const markR = CALIBRATION_POINT_RADIUS_PX / (base * view.scale);
 
   return (
     <div className="ss-cal-feed" role="region" aria-label="Camera calibration feed">
@@ -296,7 +307,18 @@ export function CalibrateFeedPane(): React.JSX.Element {
         <span className="ss-cal-feed-title">Camera feed</span>
         <span className="ss-cal-feed-hint">{hint}</span>
       </div>
-      <div className="ss-cal-feed-body" ref={paneRef}>
+      <div
+        className="ss-cal-feed-body"
+        ref={paneRef}
+        style={{ cursor }}
+        onDoubleClick={onDblClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onPointerLeave={() => { if (!dragRef.current) setCursor("default"); }}
+        onContextMenu={onContextMenu}
+      >
         {imageUrl ? (
           <div
             className="ss-cal-feed-stack is-active"
@@ -306,12 +328,6 @@ export function CalibrateFeedPane(): React.JSX.Element {
               transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.scale})`,
               cursor,
             }}
-            onDoubleClick={onDblClick}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onContextMenu={onContextMenu}
             role="presentation"
           >
             <img src={imageUrl} alt="Calibration frame" draggable={false} />
@@ -328,15 +344,6 @@ export function CalibrateFeedPane(): React.JSX.Element {
                     r={markR}
                     fill={calibrationPointColor(i)}
                   />
-                  <text
-                    x={pt[0] + markR * 1.2}
-                    y={pt[1] - markR}
-                    fill="#e9eaee"
-                    fontSize={markR * 3.2}
-                    fontWeight="700"
-                  >
-                    {i + 1}
-                  </text>
                 </g>
               ))}
             </svg>
@@ -344,6 +351,20 @@ export function CalibrateFeedPane(): React.JSX.Element {
         ) : (
           <div className="ss-cal-feed-empty">Waiting for calibration frame…</div>
         )}
+        {imageUrl && camPoints.map((point, index) => (
+          <div
+            key={`label-${index}`}
+            className="ss-vlabel ss-vlabel--cal"
+            style={{
+              left: view.panX + point[0] * base * view.scale,
+              top: view.panY + (point[1] - markR) * base * view.scale - 4,
+              transform: "translate(-50%, -100%)",
+              borderColor: calibrationPointColor(index),
+            }}
+          >
+            {index + 1}
+          </div>
+        ))}
       </div>
     </div>
   );

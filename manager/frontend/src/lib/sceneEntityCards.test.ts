@@ -2,11 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { childCardFromRest } from "./sceneEntityCards";
+import { cameraSceneAfterSave, childCardFromRest } from "./sceneEntityCards";
 
 const scenes = [
   { id: "17efd356-8858-4bf7-80fa-5bc58b2175f8", name: "Parking Lot" },
 ];
+
+describe("camera save destination", () => {
+  it("opens the scene for a newly created camera", () => {
+    expect(cameraSceneAfterSave("destination", null, true)).toBe("/destination/");
+    expect(cameraSceneAfterSave("current", "current", true)).toBe("/current/");
+  });
+  it("opens a scene when assigning an orphan or moving an existing camera", () => {
+    expect(cameraSceneAfterSave("destination", null, false)).toBe("/destination/");
+    expect(cameraSceneAfterSave("destination", "source", false)).toBe("/destination/");
+  });
+  it("does not navigate for ordinary same-scene edits or no destination", () => {
+    expect(cameraSceneAfterSave("current", "current", false)).toBeNull();
+    expect(cameraSceneAfterSave("", null, true)).toBeNull();
+  });
+});
 
 describe("childCardFromRest", () => {
   it("keys a local child by its scene uuid, not the link pk", () => {

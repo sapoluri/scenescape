@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef } from "react";
+import { useAppToast } from "../components/ToastProvider";
 import {
   BufferGeometry,
   Euler,
@@ -31,7 +32,8 @@ import {
 } from "./geometrySync";
 import { scenePoseFromObject } from "../placement/poseThree";
 import { getViewportState, useViewportStore } from "./store";
-import { CREATION_TOOLS, entityCanScale } from "./tools";
+import { attachPlacementGuidance, CREATION_TOOLS, entityCanScale } from "./tools";
+import { attachShapeHandles, replaceShapePoints } from "./shapeHandles";
 import type {
   CameraEntity,
   RegionEntity,
@@ -198,6 +200,7 @@ function sensorNeedsPolyDraw(): SensorEntity | null {
 }
 
 export function useViewportTools(world: ViewportWorld | null): void {
+  useEffect(() => world ? attachShapeHandles(world) : undefined, [world]);
   const draftRef = useRef<Draft | null>(null);
   const finishDraftRef = useRef<(() => void) | null>(null);
   const measureRef = useRef<{
@@ -270,11 +273,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
       world.scene.remove(draft.preview);
       disposeGroup(draft.preview);
       const g = new Group();
+      const sensor = draft.sensorId ? getViewportState().entities[draft.sensorId] : undefined;
       const color =
         draft.tool === "region"
           ? 0x30d158
           : draft.tool === "sensor-poly"
-            ? 0xbf5af2
+            ? sensor?.type === "sensor" ? sensor.color : 0xbf5af2
             : 0xff9f0a;
       const mat = new MeshBasicMaterial({ color });
       for (const [x, y] of draft.points) {
@@ -341,12 +345,8 @@ export function useViewportTools(world: ViewportWorld | null): void {
         if (!cur || cur.type !== "sensor") {
           return;
         }
-        const [cx, cy] = centroidOf(pts);
         s.commitHistory();
-        s.updateEntity(sensorId, {
-          points: pts.map(([x, y]) => [x, y] as [number, number]),
-          position: [cx, cy, cur.position[2]],
-        });
+        s.upsertEntities([replaceShapePoints(cur, pts)]);
         s.select(sensorId);
         return;
       }
@@ -576,6 +576,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerDown = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       if (ev.button !== 0) {
         return;
       }
@@ -633,6 +636,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerMove = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const draft = draftRef.current;
       const pt = floorPoint(world, ev);
       if (draft && pt) {
@@ -648,6 +654,11 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onPointerUp = (ev: PointerEvent) => {
+      if (useCalibrateStore.getState().active) {
+        downRef.current = null;
+        downPickRef.current = null;
+        return;
+      }
       const down = downRef.current;
       const downPick = downPickRef.current;
       downRef.current = null;
@@ -682,6 +693,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
     };
 
     const onDblClick = (ev: MouseEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const tool = getViewportState().activeTool;
       const draft = draftRef.current;
       if (
@@ -715,6 +729,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
 
   /* ---------------- gizmo attach + transform baking -------------------- */
   const activeTool = useViewportStore((s) => s.activeTool);
+  const { show: showToast, dismiss: dismissToast } = useAppToast();
   const selectedId = useViewportStore((s) => s.selectedId);
   const structVersion = useViewportStore((s) => s.structVersion);
   const selectedSensorPolyPending = useViewportStore((s) => {
@@ -723,6 +738,36 @@ export function useViewportTools(world: ViewportWorld | null): void {
       !!e && e.type === "sensor" && e.areaMode === "poly" && e.points.length < 3
     );
   });
+
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    let persistent = false;
+    const clearPlacement = attachPlacementGuidance(
+      world.host,
+      activeTool,
+      (message, keepVisible) => {
+        persistent = keepVisible;
+        showToast(message, "info", { timeoutMs: keepVisible ? 0 : undefined });
+      },
+    );
+    if (selectedSensorPolyPending) {
+      persistent = true;
+      world.host.setAttribute("data-placement", "sensor-poly");
+      showToast(
+        "Continue clicking the scene floor to add sensor polygon points. Press Enter to finish.",
+        "info",
+        { timeoutMs: 0 },
+      );
+    }
+    return () => {
+      clearPlacement();
+      if (persistent) {
+        dismissToast();
+      }
+    };
+  }, [world, activeTool, selectedSensorPolyPending, showToast, dismissToast]);
   // Calibrate uses double-click to add points; left-drag must still orbit.
   const calActive = useCalibrateStore((s) => s.active);
 
@@ -745,6 +790,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
     const drawingSensorPoly = selectedSensorPolyPending;
 
     const canTransform =
+      !calActive &&
       nodes &&
       entity &&
       !drawingSensorPoly &&
@@ -763,12 +809,12 @@ export function useViewportTools(world: ViewportWorld | null): void {
     // this via capture + no left-drag on markers). Middle/right still navigate.
     const drawingFloor = drawingSensorPoly || CREATION_TOOLS.includes(tool);
     const orbitLeftDrag =
-      !drawingFloor &&
-      (calActive ||
+      calActive || (!drawingFloor &&
+      (
         tool === "live" ||
         tool === "move" ||
         tool === "rotate" ||
-        tool === "scale");
+        tool === "scale"));
     if (orbitLeftDrag) {
       world.orbit.mouseButtons.LEFT = world.orbit.enableRotate
         ? MOUSE.ROTATE
@@ -864,6 +910,9 @@ export function useViewportTools(world: ViewportWorld | null): void {
       l: "live",
     };
     const onKey = (ev: KeyboardEvent) => {
+      if (useCalibrateStore.getState().active) {
+        return;
+      }
       const t = ev.target as HTMLElement | null;
       if (
         t &&

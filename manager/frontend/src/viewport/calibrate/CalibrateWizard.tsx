@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "../../components/Button";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAppToast } from "../../components/ToastProvider";
 import {
   frameToBase64,
@@ -49,6 +51,9 @@ export function CalibrateWizard({
   const priorPose = useCalibrateStore((s) => s.priorPose);
   const exit = useCalibrateStore((s) => s.exit);
   const undoPoint = useCalibrateStore((s) => s.undoPoint);
+  const redoPoint = useCalibrateStore((s) => s.redoPoint);
+  const canUndo = useCalibrateStore((s) => s.pastPoints.length > 0 && !s.pointEditStart);
+  const canRedo = useCalibrateStore((s) => s.futurePoints.length > 0 && !s.pointEditStart);
   const resetPoints = useCalibrateStore((s) => s.resetPoints);
   const markClean = useCalibrateStore((s) => s.markClean);
   const enter = useCalibrateStore((s) => s.enter);
@@ -56,6 +61,7 @@ export function CalibrateWizard({
     camPoints.length === mapPoints.length ? camPoints.length : 0;
   const hasPoints = camPoints.length > 0 || mapPoints.length > 0;
   const [busy, setBusy] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoReady, setAutoReady] = useState(false);
@@ -94,12 +100,18 @@ export function CalibrateWizard({
   };
 
   const onExit = () => {
-    if (dirty && !window.confirm("Discard unsaved calibration changes?")) {
+    if (dirty) {
+      setConfirmExit(true);
       return;
     }
     restorePrior();
     exit();
   };
+
+  const confirmExitRef = useRef(confirmExit);
+  confirmExitRef.current = confirmExit;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
 
   const onAutoCalibrate = async () => {
     if (!sensorId || !optics || autoBusy) {
@@ -221,13 +233,12 @@ export function CalibrateWizard({
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        onExit();
+      if (ev.key === "Escape" && !confirmExitRef.current) {
+        onExitRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- exit once
   }, []);
 
   const stepLabel = updatingPose
@@ -243,99 +254,133 @@ export function CalibrateWizard({
         : "Step 3–4 · Frustum updated · Save when ready";
 
   return (
-    <div className="ss-cal-wizard" role="toolbar" aria-label="Calibration wizard">
-      <span className="ss-cal-wizard-badge">Calibrate</span>
-      <label className="ss-cal-wizard-cam">
-        <span className="ss-viewport-bar-label">Camera</span>
-        <select
-          value={cameraId || ""}
-          onChange={(ev) => {
-            const id = ev.target.value;
-            const cam = cameras.find((c) => c.id === id);
-            if (!cam) {
-              return;
-            }
-            if (dirty && !window.confirm("Switch camera and discard points?")) {
-              return;
-            }
-            restorePrior();
-            enter({
-              cameraId: cam.id,
-              sensorId: cam.sensorId,
-              cameraName: cam.name,
-            });
-          }}
-          aria-label="Select camera to calibrate"
-        >
-          {cameras.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className="ss-cal-wizard-step" title={stepLabel}>
-        {stepLabel}
-      </span>
-      <ProjectionOpacitySlider cameraId={cameraId || undefined} />
-      <span className="ss-viewport-bar-sep" aria-hidden="true" />
-      <button
-        type="button"
-        className="ss-tool-btn"
-        disabled={!hasPoints || busy}
-        onClick={undoPoint}
-        title="Undo last point"
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn"
-        disabled={!hasPoints || busy}
-        onClick={resetPoints}
-        title="Clear all points"
-      >
-        Reset
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn"
-        id="auto-autocalibration"
-        disabled={!autoReady || autoBusy || !feedImageUrl || busy}
-        title={autoBusy ? "Waiting for AprilTag calibration…" : autoTitle}
-        onClick={() => void onAutoCalibrate()}
-      >
-        <i className="bi bi-lightning" aria-hidden="true" />
-        <span className="ss-tool-label">
-          {autoBusy ? "Calibrating…" : "Auto Calibrate"}
+    <div
+      className="ss-cal-wizard ss-cal-wizard--calibration"
+      role="toolbar"
+      aria-label="Calibration wizard"
+    >
+      <div className="ss-cal-wizard-main">
+        <label className="ss-cal-wizard-cam">
+          <span className="ss-viewport-bar-label">Calibrate Camera</span>
+          <select
+            value={cameraId || ""}
+            onChange={(ev) => {
+              const id = ev.target.value;
+              const cam = cameras.find((c) => c.id === id);
+              if (!cam) {
+                return;
+              }
+              if (
+                dirty &&
+                !window.confirm("Switch camera and discard points?")
+              ) {
+                return;
+              }
+              restorePrior();
+              enter({
+                cameraId: cam.id,
+                sensorId: cam.sensorId,
+                cameraName: cam.name,
+              });
+            }}
+            aria-label="Select camera to calibrate"
+          >
+            {cameras.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="ss-cal-wizard-step" title={stepLabel}>
+          {stepLabel}
         </span>
-      </button>
-      <button
-        type="button"
-        className={`ss-tool-btn ss-tool-save${dirty && pairCount >= 4 ? " is-dirty" : ""}`}
-        disabled={!canSave}
-        onClick={onSave}
-        title={
-          camPoints.length !== mapPoints.length
-            ? "Need an equal number of points in each view"
-            : pairCount < 4
-              ? "Need at least 4 point pairs"
-              : "Save calibration (PUT camera)"
-        }
+      </div>
+      <div className="ss-cal-wizard-actions">
+        <ProjectionOpacitySlider cameraId={cameraId || undefined} />
+        <span className="ss-viewport-bar-sep" aria-hidden="true" />
+        <div className="ss-cal-wizard-buttons">
+          <Button
+            variant="secondary"
+            className="ss-btn--sm ss-cal-wizard-history"
+            disabled={!canUndo || busy || autoBusy}
+            onClick={undoPoint}
+            title="Undo calibration edit"
+            aria-label="Undo calibration edit"
+          >
+            <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm ss-cal-wizard-history"
+            disabled={!canRedo || busy || autoBusy}
+            onClick={redoPoint}
+            title="Redo calibration edit"
+            aria-label="Redo calibration edit"
+          >
+            <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm"
+            disabled={!hasPoints || busy}
+            onClick={resetPoints}
+            title="Clear all points"
+          >
+            Reset
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm"
+            id="auto-autocalibration"
+            disabled={!autoReady || autoBusy || !feedImageUrl || busy}
+            title={autoBusy ? "Waiting for AprilTag calibration…" : autoTitle}
+            onClick={() => void onAutoCalibrate()}
+          >
+            <i className="bi bi-lightning" aria-hidden="true" />
+            {autoBusy ? "Calibrating…" : "Auto Calibrate"}
+          </Button>
+          <Button
+            variant="primary"
+            className={`ss-btn--sm ss-cal-wizard-save${dirty && pairCount >= 4 ? " ss-btn--dirty" : ""}`}
+            disabled={!canSave}
+            onClick={onSave}
+            title={
+              camPoints.length !== mapPoints.length
+                ? "Need an equal number of points in each view"
+                : pairCount < 4
+                  ? "Need at least 4 point pairs"
+                  : "Save calibration (PUT camera)"
+            }
+          >
+            <i className="bi bi-check-lg" aria-hidden="true" />
+            <span>{busy ? "Saving…" : savedFlash ? "Saved" : "Save"}</span>
+          </Button>
+          <button
+            type="button"
+            className="ss-sp-dock-props-close"
+            onClick={onExit}
+            title="Close calibration (Esc)"
+            aria-label="Close calibration"
+          >
+            <i className="bi bi-x" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <ConfirmDialog
+        open={confirmExit}
+        title="Discard calibration changes?"
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onConfirm={() => {
+          setConfirmExit(false);
+          restorePrior();
+          exit();
+        }}
+        onCancel={() => setConfirmExit(false)}
       >
-        <i className="bi bi-check-lg" aria-hidden="true" />
-        <span className="ss-tool-label">
-          {busy ? "Saving…" : savedFlash ? "Saved" : "Save"}
-        </span>
-      </button>
-      <button
-        type="button"
-        className="ss-tool-btn ss-cal-wizard-exit"
-        onClick={onExit}
-        title="Exit calibrate (Esc)"
-      >
-        Exit
-      </button>
+        <p>Your calibration changes have not been saved.</p>
+      </ConfirmDialog>
     </div>
   );
 }

@@ -32,6 +32,7 @@ export type TripwireEntity = {
 export type RoiLoadJson = {
   title?: string;
   uuid?: string;
+  color?: string;
   volumetric?: boolean;
   height?: number;
   buffer_size?: number;
@@ -45,6 +46,7 @@ export type RoiLoadJson = {
 export type TripwireLoadJson = {
   title?: string;
   uuid?: string;
+  color?: string;
   points?: number[][];
 };
 

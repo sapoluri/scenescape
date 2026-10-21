@@ -29,6 +29,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -181,9 +182,13 @@ def saveTripwireData(scene, form):
     # Use the provided title or default to "tripwire_<query_uuid>"
     trip_title = trip.title if trip.title else f"tripwire_{query_uuid}"
 
-    tripwire, _ = Tripwire.objects.update_or_create(uuid=query_uuid, defaults={
-        'scene':scene, 'name':trip_title,
-      })
+    defaults = {'scene': scene, 'name': trip_title}
+    if getattr(trip, 'color', None):
+      defaults['color'] = trip.color
+    tripwire, _ = Tripwire.objects.update_or_create(
+      uuid=query_uuid,
+      defaults=defaults,
+    )
     current_tripwire_ids.add(tripwire.uuid)
 
     current_tripwire_point_ids= set()
@@ -224,13 +229,19 @@ def saveRegionData(scene, form):
     # Use the provided title or default to "roi_<query_uuid>"
     roi_title = roi.title if roi.title else f"roi_{query_uuid}"
 
-    region, _ = Region.objects.update_or_create(uuid=query_uuid, defaults={
+    defaults = {
       'scene': scene,
       'name': roi_title,
       'volumetric': getattr(roi, 'volumetric', False),
       'height': getattr(roi, 'height', 1),
       'buffer_size': getattr(roi, 'buffer_size', 0)
-      })
+    }
+    if getattr(roi, 'color', None):
+      defaults['color'] = roi.color
+    region, _ = Region.objects.update_or_create(
+      uuid=query_uuid,
+      defaults=defaults,
+    )
     current_region_ids.add(region.uuid)
 
     current_region_point_ids= set()
@@ -578,6 +589,13 @@ def sign_in(request):
       return JsonResponse({"ok": False, "errors": errors}, status=400)
 
   return render(request, 'sscape/sign_in.html', {'form': form})
+
+@require_GET
+def session_status(request):
+  return HttpResponse(
+    status=204 if request.user.is_authenticated else 401,
+    headers={'Cache-Control': 'no-store'})
+
 
 def sign_out(request):
   logout(request)

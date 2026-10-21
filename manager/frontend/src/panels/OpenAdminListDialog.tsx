@@ -22,6 +22,7 @@ import {
   type AdminListRow,
 } from "../admin/AdminListApp";
 import { loadUiBootstrap, type UiBootstrapPage } from "../lib/uiBootstrap";
+import { SCENE_TAB_EVENT } from "../lib/sceneTab";
 import "./OpenSceneDialog.css";
 import "./OpenAdminListDialog.css";
 
@@ -125,6 +126,15 @@ export function OpenAdminListDialog({
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const page: UiBootstrapPage = kind;
+
+  useEffect(() => {
+    if (!open) return;
+    const onSheetOpen = (event: Event) => {
+      if ((event as CustomEvent<{ tabId?: string }>).detail?.tabId === kind) onClose();
+    };
+    window.addEventListener(SCENE_TAB_EVENT, onSheetOpen);
+    return () => window.removeEventListener(SCENE_TAB_EVENT, onSheetOpen);
+  }, [open, kind, onClose]);
 
   useEffect(() => {
     if (!open) {

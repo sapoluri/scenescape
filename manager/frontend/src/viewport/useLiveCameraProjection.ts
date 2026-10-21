@@ -10,7 +10,7 @@ import {
   getViewportState,
   useViewportStore,
 } from "./store";
-import type { CameraEntity } from "./types";
+import type { CameraEntity, ViewportEntity } from "./types";
 import type { ViewportWorld } from "./world";
 
 function frameSrcForSensor(sensorId: string): string | null {
@@ -37,6 +37,21 @@ type LiveCam = {
   poseKey: string;
 };
 
+export function projectionCameraIds(
+  projectIds: string[],
+  entities: Record<string, ViewportEntity>,
+  calibrating: boolean,
+  cameraId: string | null,
+): string[] {
+  if (calibrating) {
+    return cameraId ? [cameraId] : [];
+  }
+  return projectIds.filter((id) => {
+    const entity = entities[id];
+    return entity?.type === "camera" && entity.posed && entity.visible !== false;
+  });
+}
+
 /**
  * Live map coverage when posed cameras have "Project frame" / "project all
  * frames" enabled (legacy scenecamera.js projectFrame). Calibrate owns the
@@ -56,13 +71,12 @@ export function useLiveCameraProjection(
 
   const liveCams = useMemo((): LiveCam[] => {
     const out: LiveCam[] = [];
-    for (const id of projectCameraIds) {
-      // Calibrate session drives this camera's projector directly.
-      if (calibrating && id === calibrateCameraId) {
-        continue;
-      }
+    if (calibrating) {
+      return out;
+    }
+    for (const id of projectionCameraIds(projectCameraIds, entities, false, null)) {
       const e = entities[id];
-      if (!e || e.type !== "camera" || !e.posed) {
+      if (!e || e.type !== "camera" || !e.posed || e.visible === false) {
         continue;
       }
       const boot = cameras.find((c) => c.id === id);
@@ -82,7 +96,6 @@ export function useLiveCameraProjection(
     entities,
     cameras,
     calibrating,
-    calibrateCameraId,
   ]);
 
   const liveKey = liveCams.map((c) => `${c.id}:${c.poseKey}`).join(";");
@@ -111,14 +124,17 @@ export function useLiveCameraProjection(
       return;
     }
 
+    if (calibrating) {
+      pool.sync(projectionCameraIds(projectCameraIds, entities, true, calibrateCameraId));
+      world.cameraProjection = calibrateCameraId
+        ? pool.acquire(calibrateCameraId)
+        : null;
+      return;
+    }
+
     if (liveCams.length === 0) {
-      if (!calibrating && projectCameraIds.length === 0) {
-        pool.sync([]);
-        world.cameraProjection = null;
-      } else if (!calibrating) {
-        // Project ids exist but none are live-driven (all unposed / missing).
-        pool.sync(projectCameraIds);
-      }
+      pool.sync([]);
+      world.cameraProjection = null;
       return;
     }
 
@@ -179,10 +195,7 @@ export function useLiveCameraProjection(
         window.setTimeout(arm, 200);
         return;
       }
-      const keep = new Set(projectCameraIds);
-      if (calibrating && calibrateCameraId) {
-        keep.add(calibrateCameraId);
-      }
+      const keep = new Set(liveCams.map((camera) => camera.id));
       pool.sync(keep);
       const st = getViewportState();
       for (const id of keep) {
@@ -219,6 +232,7 @@ export function useLiveCameraProjection(
     projectCameraIds,
     calibrating,
     calibrateCameraId,
+    entities,
   ]);
 
   // Opacity-only updates without reloading textures.

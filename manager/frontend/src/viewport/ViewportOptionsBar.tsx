@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useViewportStore } from "./store";
 
 export type SceneChromeActions = {
@@ -19,6 +19,7 @@ type Props = {
   calibrating?: boolean;
   mode?: "live" | "replay";
   onModeChange?: (mode: "live" | "replay") => void;
+  onExportScene?: () => void;
   sceneChrome?: SceneChromeActions | null;
 };
 
@@ -47,7 +48,7 @@ function OverlayCheck({
  * second id — camera FPS + scene rate only update while it is checked.
  */
 function useShowTelemetry(): [boolean, () => void] {
-  const [on, setOn] = useState(false);
+  const on = useViewportStore((state) => state.showTelemetry);
 
   useEffect(() => {
     const el = document.getElementById(
@@ -56,9 +57,10 @@ function useShowTelemetry(): [boolean, () => void] {
     if (!el) {
       return;
     }
-    const sync = () => setOn(el.checked);
+    const sync = () => useViewportStore.setState({ showTelemetry: el.checked });
     sync();
     el.addEventListener("change", sync);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
     return () => el.removeEventListener("change", sync);
   }, []);
 
@@ -86,6 +88,7 @@ export function ViewportOptionsBar({
   calibrating = false,
   mode = "live",
   onModeChange,
+  onExportScene,
   sceneChrome = null,
 }: Props) {
   const ortho = useViewportStore((s) => s.ortho);
@@ -114,15 +117,17 @@ export function ViewportOptionsBar({
             <h2 className="ss-viewport-scene-name" id="scene_name">
               {sceneChrome.sceneName}
             </h2>
-            <a
+            <button
+              type="button"
               className="ss-viewport-bar-btn"
               id="export-scene"
-              href="#"
               title={`Export ${sceneChrome.sceneName}`}
+              aria-label={`Export ${sceneChrome.sceneName}`}
+              onClick={onExportScene}
             >
               <i className="bi bi-box-arrow-up" aria-hidden="true" />
               <span className="sr-only">Export</span>
-            </a>
+            </button>
             {sceneChrome.isSuperuser ? (
               <a
                 className="ss-viewport-bar-btn"
@@ -227,7 +232,7 @@ export function ViewportOptionsBar({
       {showScene ? (
         <>
           <div className="ss-viewport-bar-spacer" aria-hidden="true" />
-          <div className="scene-rate ss-scene-rate telemetry-hide">
+          <div className="scene-rate ss-scene-rate telemetry-hide" hidden={!showTelemetry}>
             Rate: &nbsp;
             <span id="scene-rate">{sceneChrome.sceneRate ?? "--"}</span>
             &nbsp; Hz

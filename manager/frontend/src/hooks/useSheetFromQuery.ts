@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useCallback, useEffect, useState } from "react";
+import { activateSceneTab, tabForSheetAction } from "../lib/sceneTab";
 import {
   clearSheetQuery,
   parseSheetQuery,
@@ -27,6 +28,8 @@ export function useSheetFromQuery() {
   const open = useCallback(
     (action: Exclude<SheetAction, null>, id: string | null = null) => {
       setSheet({ action, id });
+      const tab = tabForSheetAction(action);
+      if (tab) activateSceneTab(tab);
     },
     [],
   );

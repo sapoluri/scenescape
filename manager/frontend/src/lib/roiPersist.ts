@@ -13,6 +13,7 @@ import {
 type RoiDraft = {
   title?: string;
   uuid?: string;
+  color?: string;
   points?: number[][];
   volumetric?: boolean;
   height?: number;
@@ -29,6 +30,7 @@ type RoiDraft = {
 type TripDraft = {
   title?: string;
   uuid?: string;
+  color?: string;
   points?: number[][];
   height?: number;
 };
@@ -115,6 +117,9 @@ function regionPayload(
     height: typeof roi.height === "number" ? roi.height : 1,
     buffer_size: typeof roi.buffer_size === "number" ? roi.buffer_size : 0,
   };
+  if (roi.color) {
+    payload.color = roi.color;
+  }
   const occ = occupancyFromDraft(roi);
   if (occ) {
     payload.color_ranges = {
@@ -134,6 +139,7 @@ function tripPayload(
     name,
     scene: sceneId,
     points: trip.points || [],
+    ...(trip.color ? { color: trip.color } : {}),
     ...(typeof trip.height === "number" ? { height: trip.height } : {}),
   };
 }
@@ -171,6 +177,7 @@ export async function persistSceneGeometry(
     rois = getRoiList().map((r) => ({
       uuid: r.uuid,
       title: r.title,
+      color: r.color,
       points: r.points,
       volumetric: r.volumetric,
       height: r.height,
@@ -181,6 +188,7 @@ export async function persistSceneGeometry(
     trips = getTripwireList().map((t) => ({
       uuid: t.uuid,
       title: t.title,
+      color: t.color,
       points: t.points,
     }));
   }

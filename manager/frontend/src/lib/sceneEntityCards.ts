@@ -39,6 +39,8 @@ function areaJsonFromRest(data: Record<string, unknown>): string | null {
     radius: data.radius ?? null,
     x: center ? center[0] : null,
     y: center ? center[1] : null,
+    z: Array.isArray(data.translation) ? data.translation[2] : 0,
+    color: data.color ?? "#bf5af2",
     points: Array.isArray(data.points) ? data.points : [],
     sectors: {
       thresholds: colorRanges?.sectors ?? [],
@@ -52,6 +54,15 @@ export function restDestId(
   key: "scene" | "parent",
 ): string {
   return asStr(data[key]);
+}
+
+export function cameraSceneAfterSave(
+  sceneId: string,
+  originalSceneId: string | null,
+  isNew: boolean,
+): string | null {
+  return sceneId && (isNew || sceneId !== originalSceneId)
+    ? `/${encodeURIComponent(sceneId)}/` : null;
 }
 
 export function cameraCardFromRest(

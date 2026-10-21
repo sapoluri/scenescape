@@ -4,6 +4,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,14 +16,17 @@ import {
 } from "react";
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
+import { watchSessionExpiry } from "../lib/session";
 import { useChildStatusMqtt } from "../mqtt/useChildStatusMqtt";
 import type {
   SceneCameraBootstrap,
   SceneChildBootstrap,
   SceneSensorBootstrap,
 } from "../scene/types";
+import { SceneExportDialog } from "../scene/SceneExportDialog";
 import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
+import { attachLightingMqtt, DEFAULT_LIGHT_INTENSITY, useLightingStore } from "../viewport/lighting";
 import { useVisualizeStore } from "../viewport/visualize";
 import { SceneViewport } from "../viewport/SceneViewport";
 import { ViewportMenuBar } from "../viewport/ViewportMenuBar";
@@ -38,6 +42,7 @@ import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
 import { LivePreviewPane, ProjectionFeedHost } from "./LivePreviewPane";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
+import { clampDockWidth, DEFAULT_DOCK_WIDTH, readDockWidth, writeDockWidth } from "./dockSizing";
 import { Telemetry } from "./Telemetry";
 import { ReplayPanel } from "../replay/ReplayPanel";
 import "./Outliner.css";
@@ -121,6 +126,7 @@ function writeDockCollapsed(collapsed: boolean): void {
 export interface SinglePaneViewProps {
   sceneId: string;
   sceneName: string;
+  scenes?: { id: string; name: string }[];
   mapUrl?: string | null;
   mapScale?: number | null;
   cameras: SceneCameraBootstrap[];
@@ -154,6 +160,7 @@ export interface SinglePaneViewProps {
 export function SinglePaneView({
   sceneId,
   sceneName,
+  scenes = [],
   mapUrl = null,
   mapScale = null,
   cameras,
@@ -171,8 +178,23 @@ export function SinglePaneView({
   sceneChrome = null,
   directoryRefreshToken = 0,
 }: SinglePaneViewProps) {
+  useEffect(() => watchSessionExpiry(authToken), [authToken]);
+  useEffect(() => {
+    useLightingStore.getState().setIntensity(DEFAULT_LIGHT_INTENSITY);
+  }, [sceneId]);
+  useEffect(() => attachLightingMqtt(sensors), [sensors]);
   const [dockTab, setDockTab] = useState<DockTab>("outliner");
+  const showTelemetry = useViewportStore((state) => state.showTelemetry);
+  useEffect(() => {
+    if (!showTelemetry) setDockTab("outliner");
+  }, [showTelemetry]);
   const [dockCollapsed, setDockCollapsed] = useState(readDockCollapsed);
+  const [dockWidth, setDockWidth] = useState(readDockWidth);
+  const dockWidthRef = useRef(dockWidth);
+  dockWidthRef.current = dockWidth;
+  const preferredDockWidthRef = useRef(dockWidth);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [resizingDock, setResizingDock] = useState(false);
   const [propsHeightPx, setPropsHeightPx] = useState<number | null>(
     readPropsHeightPx,
   );
@@ -185,7 +207,7 @@ export function SinglePaneView({
   previewHeightRef.current = previewHeightPx;
   const editorRef = useRef<HTMLDivElement>(null);
   const dockMainRef = useRef<HTMLDivElement>(null);
-  const splitDrag = useRef<{ pointerId: number; kind: "props" | "preview" } | null>(
+  const splitDrag = useRef<{ pointerId: number; kind: "props" | "preview" | "width" } | null>(
     null,
   );
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -204,6 +226,7 @@ export function SinglePaneView({
   const [editorAsset, setEditorAsset] = useState<string | null | undefined>(
     undefined,
   );
+  const [exportOpen, setExportOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [adminListKind, setAdminListKind] = useState<OpenAdminListKind | null>(
     null,
@@ -264,6 +287,44 @@ export function SinglePaneView({
     setPropsHeightPx(px);
   }, []);
 
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const resize = () => {
+      const width = clampDockWidth(preferredDockWidthRef.current, body.getBoundingClientRect().width);
+      dockWidthRef.current = width;
+      setDockWidth(width);
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, []);
+
+  const applyDockWidth = (width: number) => {
+    const available = bodyRef.current?.getBoundingClientRect().width ?? 0;
+    const next = clampDockWidth(width, available);
+    preferredDockWidthRef.current = next;
+    dockWidthRef.current = next;
+    setDockWidth(next);
+  };
+
+  const onDockResizeDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    splitDrag.current = { pointerId: event.pointerId, kind: "width" };
+    setResizingDock(true);
+  };
+
+  const onDockResizeKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+    event.preventDefault();
+    applyDockWidth(event.key === "Home" ? DEFAULT_DOCK_WIDTH :
+      dockWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
+    writeDockWidth(dockWidthRef.current);
+  };
+
   const applyPreviewHeight = useCallback((clientY: number) => {
     const main = dockMainRef.current;
     if (!main) {
@@ -301,6 +362,9 @@ export function SinglePaneView({
     }
     if (splitDrag.current.kind === "preview") {
       applyPreviewHeight(ev.clientY);
+    } else if (splitDrag.current.kind === "width") {
+      const right = bodyRef.current?.getBoundingClientRect().right ?? 0;
+      applyDockWidth(right - ev.clientX - 16);
     } else {
       applyPropsHeight(ev.clientY);
     }
@@ -312,7 +376,10 @@ export function SinglePaneView({
     }
     const kind = splitDrag.current.kind;
     splitDrag.current = null;
-    if (kind === "preview") {
+    if (kind === "width") {
+      setResizingDock(false);
+      writeDockWidth(dockWidthRef.current);
+    } else if (kind === "preview") {
       writePreviewHeightPx(previewHeightRef.current);
     } else {
       writePropsHeightPx(propsHeightRef.current);
@@ -417,10 +484,11 @@ export function SinglePaneView({
           calibrating={(calibrating || visualizing) && !replayMode}
           mode={replayMode ? "replay" : "live"}
           onModeChange={(m) => setReplayMode(m === "replay")}
+          onExportScene={() => setExportOpen(true)}
           sceneChrome={sceneChrome}
         />
       </div>
-      <div className="ss-sp-body">
+      <div className="ss-sp-body" ref={bodyRef}>
         <div className="ss-sp-viewport">
           {replayMode ? (
             <ReplayPanel
@@ -434,6 +502,7 @@ export function SinglePaneView({
               mapUrl={mapUrl}
               mapScale={mapScale}
               assetMarkColors={assetMarkColors}
+              cameraRates={cameraRates}
               cameras={cameras}
               sensors={sensors}
               children={children}
@@ -451,9 +520,26 @@ export function SinglePaneView({
         </div>
 
         <aside
-          className={`ss-sp-dock${dockCollapsed ? " is-collapsed" : ""}`}
+          className={`ss-sp-dock${dockCollapsed ? " is-collapsed" : ""}${resizingDock ? " is-resizing" : ""}`}
           aria-label="Scene panels"
+          style={{ "--ss-sp-dock-width": `${dockWidth}px` } as CSSProperties}
         >
+          {!dockCollapsed ? (
+            <div
+              className="ss-sp-dock-resize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize side panel"
+              aria-valuenow={Math.round(dockWidth)}
+              title="Resize side panel"
+              tabIndex={0}
+              onPointerDown={onDockResizeDown}
+              onPointerMove={onSplitPointerMove}
+              onPointerUp={onSplitPointerUp}
+              onPointerCancel={onSplitPointerUp}
+              onKeyDown={onDockResizeKey}
+            />
+          ) : null}
           <div className="ss-sp-dock-rail">
             <div className="ss-sp-dock-rail-inner">
               <button
@@ -479,7 +565,7 @@ export function SinglePaneView({
                   aria-label="Outliner and Telemetry"
                   aria-orientation="vertical"
                 >
-                  {DOCK_TABS.map((t) => (
+                  {DOCK_TABS.filter(tab => showTelemetry || tab.id !== "telemetry").map((t) => (
                     <button
                       key={t.id}
                       type="button"
@@ -514,7 +600,7 @@ export function SinglePaneView({
                   role="tablist"
                   aria-label="Outliner and Telemetry"
                 >
-                  {DOCK_TABS.map((t) => (
+                  {DOCK_TABS.filter(tab => showTelemetry || tab.id !== "telemetry").map((t) => (
                     <button
                       key={t.id}
                       type="button"
@@ -531,7 +617,7 @@ export function SinglePaneView({
                   {/* Keep both mounted so MQTT event listeners stay live. */}
                   <div
                     className="ss-sp-dock-panel"
-                    hidden={dockTab !== "outliner"}
+                    hidden={dockTab !== "outliner" && showTelemetry}
                   >
                     <Outliner
                       isSuperuser={isSuperuser}
@@ -549,7 +635,7 @@ export function SinglePaneView({
                   </div>
                   <div
                     className="ss-sp-dock-panel"
-                    hidden={dockTab !== "telemetry"}
+                    hidden={dockTab !== "telemetry" || !showTelemetry}
                   >
                     <Telemetry
                       sceneId={sceneId}
@@ -599,6 +685,7 @@ export function SinglePaneView({
                   <Properties
                     sceneName={sceneName}
                     sceneId={sceneId}
+                    scenes={scenes}
                     cameras={cameras}
                     sensors={sensors}
                     children={children}
@@ -697,6 +784,13 @@ export function SinglePaneView({
         }}
         authToken={authToken}
         isSuperuser={isSuperuser}
+      />
+      <SceneExportDialog
+        open={exportOpen}
+        sceneId={sceneId}
+        sceneName={sceneName}
+        authToken={authToken}
+        onClose={() => setExportOpen(false)}
       />
       <OpenAdminListDialog
         open={adminListKind !== null}

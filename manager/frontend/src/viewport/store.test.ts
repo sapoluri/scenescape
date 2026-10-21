@@ -53,6 +53,7 @@ describe("useViewportStore", () => {
       showLabels: true,
       showTrails: true,
       showFrustums: true,
+      showTelemetry: false,
       activeTool: "live",
       editFocus: 0,
     });
@@ -64,6 +65,39 @@ describe("useViewportStore", () => {
     expect(Object.keys(useViewportStore.getState().entities)).toHaveLength(2);
     s.upsertEntities([{ ...region("a"), name: "Renamed" }]);
     expect(useViewportStore.getState().entities["a"].name).toBe("Renamed");
+  });
+
+  it("toggles telemetry visibility independently of static labels", () => {
+    expect(useViewportStore.getState().showTelemetry).toBe(false);
+    useViewportStore.getState().toggleOverlay("showTelemetry");
+    expect(useViewportStore.getState().showTelemetry).toBe(true);
+    expect(useViewportStore.getState().showLabels).toBe(true);
+    useViewportStore.getState().toggleOverlay("showTelemetry");
+    expect(useViewportStore.getState().showTelemetry).toBe(false);
+  });
+
+  it("toggles a whole object type without changing other types", () => {
+    const store = useViewportStore.getState();
+    store.upsertEntities([region("a"), region("b"), mark("tracked")]);
+    store.setTypeVisible("region", false);
+    expect(useViewportStore.getState().entities.a.visible).toBe(false);
+    expect(useViewportStore.getState().entities.b.visible).toBe(false);
+    expect(useViewportStore.getState().entities.tracked.visible).toBe(true);
+    store.setTypeVisible("region", true);
+    expect(useViewportStore.getState().entities.a.visible).toBe(true);
+    expect(useViewportStore.getState().entities.b.visible).toBe(true);
+  });
+
+  it("keeps tracked-object group visibility through incoming frames", () => {
+    const store = useViewportStore.getState();
+    store.upsertEntities([mark("first")], { fromMarks: true });
+    store.setTypeVisible("mark", false);
+    store.upsertEntities([mark("first"), mark("new")], { fromMarks: true });
+    expect(useViewportStore.getState().entities.first.visible).toBe(false);
+    expect(useViewportStore.getState().entities.new.visible).toBe(false);
+    store.setTypeVisible("mark", true);
+    store.upsertEntities([mark("first")], { fromMarks: true });
+    expect(useViewportStore.getState().entities.first.visible).toBe(true);
   });
 
   it("removes one entity and clears selection", () => {

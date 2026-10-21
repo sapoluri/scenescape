@@ -1,8 +1,74 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import legacySource from "../../../backend/manager/static/js/sscape.js?raw";
 import { mqttPayloadToString, setMqttConnected } from "./client";
+
+describe("legacy scene MQTT event routing", () => {
+  function attach(reactMap: boolean) {
+    const start = legacySource.indexOf("window.ssAttachSceneMqttClient = function");
+    const end = legacySource.indexOf("async function checkBrokerConnections", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const handlers = new Map<string, (topic: string, data: string) => void>();
+    const client = {
+      connected: false,
+      on: (event: string, handler: (topic: string, data: string) => void) => {
+        handlers.set(event, handler);
+      },
+    };
+    const window = {
+      ssUseReactMap: reactMap,
+      ssReactOwnsMqtt: true,
+      ssAttachSceneMqttClient: undefined as ((client: unknown) => void) | undefined,
+    };
+    const schedulePlot = vi.fn();
+    const drawSensor = vi.fn();
+    const drawRoi = vi.fn();
+    const newTripwire = vi.fn();
+    runInNewContext(legacySource.slice(start, end), {
+      window,
+      refreshSceneId: () => {},
+      $: () => ({ val: () => "", on: () => {} }),
+      APP_NAME: "scenescape",
+      CMD_CAMERA: "/cmd/camera/",
+      DATA_REGULATED: "/regulated/scene/",
+      show_telemetry: false,
+      mqttPayloadToJson: JSON.parse,
+      schedulePlot,
+      drawSensor,
+      drawRoi,
+      newTripwire,
+      setROIColor: vi.fn(),
+    });
+    window.ssAttachSceneMqttClient!(client);
+    return { onMessage: handlers.get("message")!, schedulePlot, drawSensor, drawRoi, newTripwire };
+  }
+
+  it.each([
+    ["region", { fromSensor: true, title: "Sensor 1" }],
+    ["region", { title: "Region 1", uuid: "region-1" }],
+    ["tripwire", { title: "Tripwire 1", uuid: "tripwire-1" }],
+  ])("keeps tracks flowing after a React %s event", (kind, metadata) => {
+    const bridge = attach(true);
+    bridge.onMessage(`scenescape/event/${kind}/scene/entity/count`, JSON.stringify({ metadata }));
+    const objects = [{ id: "person-1", translation: [1, 2] }];
+    bridge.onMessage("scenescape/regulated/scene/scene", JSON.stringify({ objects }));
+    expect(bridge.drawSensor).not.toHaveBeenCalled();
+    expect(bridge.drawRoi).not.toHaveBeenCalled();
+    expect(bridge.newTripwire).not.toHaveBeenCalled();
+    expect(bridge.schedulePlot).toHaveBeenCalledWith(objects);
+  });
+
+  it("retains sensor event drawing for the legacy 2D map", () => {
+    const bridge = attach(false);
+    const metadata = { fromSensor: true, title: "Sensor 1", uuid: "sensor-1" };
+    bridge.onMessage("scenescape/event/region/scene/sensor-1/count", JSON.stringify({ metadata }));
+    expect(bridge.drawSensor).toHaveBeenCalledWith(metadata, "Sensor 1", "child_sensor");
+  });
+});
 
 describe("mqttPayloadToString", () => {
   it("returns empty for nullish", () => {
@@ -57,6 +123,14 @@ describe("setMqttConnected", () => {
 
   it("marks mqtt_status connected and dispatches ss-mqtt-status", () => {
     class FakeHTMLElement {}
+    class FakeCustomEvent extends Event {
+      detail: unknown;
+
+      constructor(type: string, options: { detail: unknown }) {
+        super(type);
+        this.detail = options.detail;
+      }
+    }
     const classes = new Set<string>();
     const attrs: Record<string, string> = {};
     const el = Object.assign(Object.create(FakeHTMLElement.prototype), {
@@ -89,6 +163,7 @@ describe("setMqttConnected", () => {
     });
 
     vi.stubGlobal("HTMLElement", FakeHTMLElement);
+    vi.stubGlobal("CustomEvent", FakeCustomEvent);
     vi.stubGlobal("document", {
       getElementById: (id: string) => (id === "mqtt_status" ? el : null),
       querySelectorAll: () => [el],

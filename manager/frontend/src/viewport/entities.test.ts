@@ -2,28 +2,56 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
+  BoxGeometry,
+  CircleGeometry,
+  ExtrudeGeometry,
+  FrontSide,
+  ConeGeometry,
   Euler,
+  LineBasicMaterial,
+  LineLoop,
+  LineSegments,
   Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
+  SphereGeometry,
   Vector3,
 } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { loadSceneObject } from "../placement/loadSceneObject";
+import { api } from "../lib/rest";
+import { sceneGeometryFromRest } from "../placement/sceneGeometry";
 import { CHILD_FOOTPRINT_COLOR, CHILD_FOOTPRINT_SIZE } from "./childPose";
 import {
   buildCamera,
   buildChild,
+  buildRegion,
+  buildSensor,
   buildTripwire,
   childViewportId,
+  entityLabelAnchor,
   lookAtOriginEuler,
   restPoseToRigEuler,
+  seedSensors,
   TRIPWIRE_CURTAIN_HEIGHT,
   tripwirePlusNormal,
 } from "./entities";
-import type { CameraEntity, ChildSceneEntity, TripwireEntity } from "./types";
+import type {
+  CameraEntity,
+  ChildSceneEntity,
+  RegionEntity,
+  SensorEntity,
+  TripwireEntity,
+} from "./types";
 
 const D2R = Math.PI / 180;
+
+vi.mock("../placement/loadSceneObject", () => ({
+  loadSceneObject: vi.fn(),
+}));
 
 function quatFromDeg([x, y, z]: [number, number, number]): Quaternion {
   return new Quaternion().setFromEuler(
@@ -193,7 +221,7 @@ describe("childViewportId", () => {
   });
 });
 
-describe("buildChild footprint", () => {
+describe("buildChild map", () => {
   function makeChild(): ChildSceneEntity {
     return {
       id: "child1",
@@ -223,9 +251,74 @@ describe("buildChild footprint", () => {
       expect(nodes.group.position.y).toBeCloseTo(3, 9);
       expect(nodes.group.position.z).toBeCloseTo(0.5, 9);
       expect(nodes.group.rotation.z).toBeCloseTo(Math.PI / 4, 9);
+      expect(nodes.group.children).toEqual([]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([]);
     } finally {
       nodes.dispose();
     }
+  });
+
+  it.each(["annex.glb", "annex.png"])("attaches %s beneath the child pose", async (file) => {
+    const geometry = sceneGeometryFromRest({ map: `/media/${file}`, scale: 50 });
+    const mesh = new Mesh(new BoxGeometry(12, 8, 3), new MeshBasicMaterial());
+    mesh.position.set(20, 30, 10);
+    vi.mocked(loadSceneObject).mockResolvedValueOnce(mesh);
+    const nodes = buildChild({ ...makeChild(), geometry });
+    try {
+      expect(nodes.group.children).toEqual([]);
+      await nodes.ready;
+      expect(mesh.parent).toBe(nodes.group);
+      expect(loadSceneObject).toHaveBeenLastCalledWith(geometry);
+      expect(nodes.group.children).toEqual([mesh]);
+      expect(mesh.position.toArray()).toEqual([20, 30, 10]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([mesh]);
+      nodes.setSelected(false);
+      expect(nodes.group.children).toEqual([mesh]);
+      expect(mesh.visible).toBe(true);
+      nodes.applyPose?.({ ...makeChild(), position: [10, 20, 2] });
+      expect(nodes.group.position.toArray()).toEqual([10, 20, 2]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("does not create placeholder geometry if the child map cannot load", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(loadSceneObject).mockRejectedValueOnce(new Error("Map unavailable"));
+    const nodes = buildChild({
+      ...makeChild(),
+      geometry: sceneGeometryFromRest({ map: "/media/missing.glb" }),
+    });
+    try {
+      await nodes.ready;
+      expect(nodes.group.children).toEqual([]);
+      nodes.setSelected(true);
+      expect(nodes.group.children).toEqual([]);
+      expect(warning).toHaveBeenCalledOnce();
+    } finally {
+      nodes.dispose();
+      warning.mockRestore();
+    }
+  });
+
+  it("disposes a map that finishes loading after its child is removed", async () => {
+    let finishLoad!: (object: Object3D) => void;
+    vi.mocked(loadSceneObject).mockReturnValueOnce(new Promise((resolve) => {
+      finishLoad = resolve;
+    }));
+    const mesh = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
+    const dispose = vi.spyOn(mesh.geometry, "dispose");
+    const nodes = buildChild({
+      ...makeChild(),
+      geometry: sceneGeometryFromRest({ map: "/media/annex.glb" }),
+    });
+    nodes.dispose();
+    finishLoad(mesh);
+    await nodes.ready;
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(mesh.parent).toBeNull();
   });
 });
 
@@ -242,6 +335,158 @@ describe("tripwirePlusNormal", () => {
 
   it("returns null for a zero-length segment", () => {
     expect(tripwirePlusNormal([1, 2], [1, 2])).toBeNull();
+  });
+});
+
+describe("buildRegion", () => {
+  it("renders ROI geometry at its configured height independent of volumetric", () => {
+    const region: RegionEntity = {
+      id: "roi-height",
+      type: "region",
+      name: "Height check",
+      visible: true,
+      points: [
+        [0, 0],
+        [4, 0],
+        [4, 3],
+      ],
+      min: [0, 0],
+      max: [4, 3],
+      height: 2.75,
+      color: "#30d158",
+      volumetric: false,
+      bufferSize: 0,
+    };
+    const nodes = buildRegion(region);
+    try {
+      const fill = nodes.gizmoTarget.children.find(
+        (node): node is Mesh =>
+          node instanceof Mesh && node.geometry instanceof ExtrudeGeometry,
+      );
+      expect(fill).toBeDefined();
+      fill!.geometry.computeBoundingBox();
+      expect(fill!.geometry.boundingBox!.max.z).toBeCloseTo(region.height);
+      const material = fill!.material as MeshStandardMaterial;
+      expect(material.side).toBe(FrontSide);
+      expect(material.depthWrite).toBe(false);
+      expect(material.depthTest).toBe(true);
+      expect(fill!.renderOrder).toBeGreaterThan(0);
+      const edges = nodes.gizmoTarget.children.find(
+        (node): node is LineSegments => node instanceof LineSegments,
+      );
+      expect(edges).toBeDefined();
+      expect((edges!.material as LineBasicMaterial).depthWrite).toBe(false);
+      expect(edges!.renderOrder).toBeGreaterThan(fill!.renderOrder);
+    } finally {
+      nodes.dispose();
+    }
+  });
+});
+
+describe("buildSensor", () => {
+  function sensor(): SensorEntity {
+    return {
+      id: "sensor", type: "sensor", name: "Infrared", visible: true,
+      position: [15, 20, 2], areaMode: "poly", radius: 5,
+      points: [[0, 0], [4, 0], [4, 4], [0, 4]],
+      singletonType: "environmental", color: "#bf5af2",
+    };
+  }
+
+  it("uses only a half-sized sphere marker and anchors its label to that marker", () => {
+    const nodes = buildSensor(sensor());
+    try {
+      const sphere = nodes.group.getObjectByName("sensor-sphere") as Mesh;
+      expect(sphere.geometry).toBeInstanceOf(SphereGeometry);
+      expect((sphere.geometry as SphereGeometry).parameters.radius).toBe(0.11);
+      expect(nodes.gizmoTarget.position.toArray()).toEqual([15, 20, 2]);
+      expect(nodes.gizmoTarget.children).toHaveLength(2);
+      expect(nodes.labelRoot).toBe(nodes.gizmoTarget);
+      const label = entityLabelAnchor(nodes.labelRoot!, nodes.labelPos);
+      expect(label.x).toBeCloseTo(15);
+      expect(label.y).toBeCloseTo(20);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("keeps polygon coverage fixed on the floor when its sensor moves", () => {
+    const entity = sensor();
+    const nodes = buildSensor(entity);
+    try {
+      const coverage = nodes.group.getObjectByName("sensor-coverage")!;
+      expect(coverage.position.toArray()).toEqual([2, 2, 0]);
+      nodes.applyPose?.({ ...entity, position: [30, 40, 5] });
+      expect(nodes.gizmoTarget.position.toArray()).toEqual([30, 40, 5]);
+      expect(coverage.position.toArray()).toEqual([2, 2, 0]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("keeps circular coverage centered below the sphere and reflects its radius", () => {
+    const entity = { ...sensor(), areaMode: "circle" as const, radius: 8 };
+    const nodes = buildSensor(entity);
+    try {
+      const coverage = nodes.group.getObjectByName("sensor-coverage")!;
+      expect(coverage.position.toArray()).toEqual([15, 20, 0]);
+      expect(((coverage.children[1] as Mesh).geometry as CircleGeometry).parameters).toMatchObject({ radius: 8 });
+      const outline = coverage.getObjectByName("sensor-coverage-outline") as LineLoop;
+      expect(outline).toBeInstanceOf(LineLoop);
+      expect((outline.material as LineBasicMaterial).linewidth).toBe(1);
+      expect((outline.material as LineBasicMaterial).color.getHexString()).toBe("bf5af2");
+      nodes.applyPose?.({ ...entity, position: [30, 40, 5] });
+      expect(coverage.position.toArray()).toEqual([30, 40, 0]);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("reloads configured color and all three position coordinates", async () => {
+    const card = {
+      id: "1", sensorId: "infrared", name: "Infrared", iconUrl: null,
+      areaJson: JSON.stringify({ area: "poly", x: 1, y: 2, z: 3, color: "#112233", points: [[0, 0], [1, 0], [1, 1]] }),
+      calibrateHref: "", editHref: "", deleteUrl: null,
+    };
+    const request = vi.spyOn(api, "getSensor").mockResolvedValueOnce({
+      translation: [15, 20, 4.5], color: "#ff9900", singleton_type: "environmental",
+    });
+    try {
+      const [sensor] = await seedSensors([card], "test-token");
+      expect(sensor.position).toEqual([15, 20, 4.5]);
+      expect(sensor.color).toBe("#ff9900");
+      const [fallback] = await seedSensors([card], "");
+      expect(fallback.position).toEqual([1, 2, 3]);
+      expect(fallback.color).toBe("#112233");
+    } finally {
+      request.mockRestore();
+    }
+  });
+});
+
+describe("entityLabelAnchor", () => {
+  it("anchors labels to the top center of world-space bounds", () => {
+    const root = new Object3D();
+    const geometry = new BoxGeometry(2, 4, 6);
+    const material = new MeshBasicMaterial();
+    const mesh = new Mesh(geometry, material);
+    mesh.position.set(4, -2, 3);
+    root.add(mesh);
+    const proxyGeometry = new BoxGeometry(10, 10, 20);
+    const proxyMaterial = new MeshBasicMaterial({ colorWrite: false });
+    const proxy = new Mesh(proxyGeometry, proxyMaterial);
+    proxy.position.z = 10;
+    root.add(proxy);
+    try {
+      expect(entityLabelAnchor(root, new Vector3()).toArray()).toEqual([
+        4, -2, 6,
+      ]);
+    } finally {
+      geometry.dispose();
+      material.dispose();
+      proxyGeometry.dispose();
+      proxyMaterial.dispose();
+    }
   });
 });
 
@@ -311,6 +556,61 @@ describe("buildTripwire light curtain", () => {
       expect(axis.x).toBeCloseTo(1, 5);
       expect(axis.y).toBeCloseTo(0, 5);
       expect(arrow!.position.x).toBeGreaterThan(0);
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("fills each segment with a pane and draws no interior vertical bars", () => {
+    const points: [number, number][] = [[0, 0], [10, 0], [10, 8]];
+    const nodes = buildTripwire(wire(points));
+    try {
+      const curtain = nodes.group.getObjectByName("tripwire-curtain") as Mesh;
+      expect(curtain.geometry.getIndex()!.count).toBe(12);
+      expect(curtain.geometry.getAttribute("position").count).toBe(8);
+      expect((curtain.material as MeshBasicMaterial).transparent).toBe(true);
+      const edges = nodes.group.getObjectByName("tripwire-beams") as LineSegments;
+      const positions = edges.geometry.getAttribute("position");
+      expect(positions.count).toBe(14);
+      for (let index = 0; index < positions.count; index++) {
+        const x = positions.getX(index) + nodes.gizmoTarget.position.x;
+        const y = positions.getY(index) + nodes.gizmoTarget.position.y;
+        expect(points.some(([pointX, pointY]) =>
+          Math.abs(pointX - x) < 1e-5 && Math.abs(pointY - y) < 1e-5,
+        )).toBe(true);
+      }
+    } finally {
+      nodes.dispose();
+    }
+  });
+
+  it("uses the tripwire color and exposes +1 as an entity label", () => {
+    const nodes = buildTripwire(
+      wire([
+        [0, 0],
+        [10, 0],
+      ]),
+    );
+    try {
+      const arrow = nodes.group.getObjectByName("tripwire-plus") as Mesh;
+      expect((arrow.material as MeshBasicMaterial).color.getHex()).toBe(
+        0xff9f0a,
+      );
+      expect(nodes.extraLabels).toHaveLength(1);
+      expect(nodes.extraLabels?.[0]).toMatchObject({
+        key: "plus",
+        text: "+1",
+        color: "#ff9f0a",
+      });
+      expect((arrow.geometry as ConeGeometry).parameters.radius).toBeCloseTo(
+        0.054,
+      );
+      expect((arrow.geometry as ConeGeometry).parameters.height).toBeCloseTo(
+        0.24,
+      );
+      expect(nodes.extraLabels?.[0].position.x).toBeCloseTo(5);
+      expect(nodes.extraLabels?.[0].position.y).toBeCloseTo(-0.4);
+      expect(nodes.extraLabels?.[0].position.z).toBeCloseTo(1.1);
     } finally {
       nodes.dispose();
     }

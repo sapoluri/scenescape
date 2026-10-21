@@ -161,3 +161,20 @@
   );
   background: color-mix(in srgb, var(--ss-status-bad) 10%, var(--ss-card-bg));
 }
+
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-webkit-slider-runnable-track {
+  border-radius: 0 !important;
+}
+
+input[type="range"]::-moz-range-thumb,
+input[type="range"]::-moz-range-track,
+input[type="range"]::-moz-range-progress {
+  border-radius: 0 !important;
+}

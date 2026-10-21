@@ -8,7 +8,6 @@ import {
   BufferAttribute,
   BufferGeometry,
   CameraHelper,
-  CanvasTexture,
   CircleGeometry,
   Color,
   ConeGeometry,
@@ -19,7 +18,7 @@ import {
   ExtrudeGeometry,
   Group,
   LineBasicMaterial,
-  LineDashedMaterial,
+  LineLoop,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -27,17 +26,16 @@ import {
   Object3D,
   PerspectiveCamera,
   Quaternion,
-  RingGeometry,
   Shape,
   ShapeGeometry,
   SphereGeometry,
-  Sprite,
-  SpriteMaterial,
   Vector2,
   Vector3,
 } from "three";
 import { api } from "../lib/rest";
+import { loadSceneObject } from "../placement/loadSceneObject";
 import { applyScenePoseToObject } from "../placement/poseThree";
+import { sceneGeometryFromRest } from "../placement/sceneGeometry";
 import { subscribeGeometry } from "../scene/map/geometryModel";
 import type {
   SceneCameraBootstrap,
@@ -53,6 +51,7 @@ import {
 import { bboxOf, centroidOf, seedEntitiesFromGeometry } from "./geometrySync";
 import { getPersistState } from "./persistStore";
 import { getViewportState, useViewportStore } from "./store";
+import { useCalibrateStore } from "./calibrate/calibrateStore";
 import type {
   CameraEntity,
   ChildSceneEntity,
@@ -75,10 +74,18 @@ import type { ViewportWorld } from "./world";
 
 export interface EntityNodes {
   group: Group;
+  labelRoot?: Object3D;
+  ready?: Promise<void>;
   /** Object the TransformControls gizmo attaches to. */
   gizmoTarget: Object3D;
   /** World-space anchor for the name label. */
   labelPos: Vector3;
+  extraLabels?: {
+    key: string;
+    text: string;
+    position: Vector3;
+    color?: string;
+  }[];
   setSelected: (on: boolean) => void;
   setFrustumVisible?: (visible: boolean) => void;
   /**
@@ -123,14 +130,47 @@ function proxyMaterial(): MeshBasicMaterial {
   });
 }
 
+export function entityLabelAnchor(
+  root: Object3D,
+  fallback: Vector3,
+): Vector3 {
+  root.updateWorldMatrix(true, true);
+  const bounds = new Box3();
+  root.traverse((object) => {
+    if (!object.visible) {
+      return;
+    }
+    const renderable = object as Mesh;
+    if (!renderable.geometry) {
+      return;
+    }
+    const materials = Array.isArray(renderable.material)
+      ? renderable.material
+      : [renderable.material];
+    if (
+      materials.length > 0 &&
+      materials.every((material) => material.colorWrite === false)
+    ) {
+      return;
+    }
+    bounds.union(new Box3().setFromObject(object));
+  });
+  if (bounds.isEmpty()) {
+    return fallback.clone();
+  }
+  return new Vector3(
+    (bounds.min.x + bounds.max.x) / 2,
+    (bounds.min.y + bounds.max.y) / 2,
+    bounds.max.z,
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Regions                                                             */
-/* ------------------------------------------------------------------ */
+/** Fallback slab height for malformed ROI height data. */
+const DEFAULT_REGION_HEIGHT = 0.15;
 
-/** Visible slab height (m) for non-volumetric ROIs — avoids a near-invisible floor sheet. */
-const FLAT_REGION_HEIGHT = 0.15;
-
-function buildRegion(e: RegionEntity): EntityNodes {
+export function buildRegion(e: RegionEntity): EntityNodes {
   const group = new Group();
   const baseColor = new Color(e.color);
   const [cx, cy] = centroidOf(e.points);
@@ -140,10 +180,12 @@ function buildRegion(e: RegionEntity): EntityNodes {
   const shape = new Shape(
     e.points.map(([x, y]) => new Vector2(x - cx, y - cy)),
   );
-  const isVolumetric = e.volumetric && e.height > 0.01;
-  const solidHeight = isVolumetric ? e.height : FLAT_REGION_HEIGHT;
-  const idleOpacity = isVolumetric ? 0.22 : 0.45;
-  const selectedOpacity = isVolumetric ? 0.42 : 0.62;
+  const solidHeight =
+    Number.isFinite(e.height) && e.height > 0
+      ? e.height
+      : DEFAULT_REGION_HEIGHT;
+  const idleOpacity = 0.22;
+  const selectedOpacity = 0.42;
   // Thin extrusion (not ShapeGeometry) so flat ROIs keep side faces from oblique views.
   const geo = new ExtrudeGeometry(shape, {
     depth: solidHeight,
@@ -152,32 +194,27 @@ function buildRegion(e: RegionEntity): EntityNodes {
   const fillMat = new MeshStandardMaterial({
     color: baseColor.clone(),
     emissive: baseColor.clone(),
-    emissiveIntensity: isVolumetric ? 0.05 : 0.22,
+    emissiveIntensity: 0.05,
     transparent: true,
     opacity: idleOpacity,
     roughness: 0.85,
-    side: DoubleSide,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   });
   const fill = new Mesh(geo, fillMat);
+  fill.renderOrder = 1;
   const edgeMat = new LineBasicMaterial({
     color: baseColor.clone(),
     transparent: true,
-    opacity: isVolumetric ? 0.9 : 1,
+    opacity: 0.9,
+    depthWrite: false,
   });
   const edges = new LineSegments(new EdgesGeometry(geo), edgeMat);
-  // Lift flat slabs slightly above the map plane to reduce z-fighting.
-  if (!isVolumetric) {
-    fill.position.z = 0.04;
-    edges.position.z = 0.04;
-  }
+  edges.renderOrder = 2;
   const { min, max } = bboxOf(e.points);
-  const proxyH = isVolumetric
-    ? Math.max(e.height, 0.5)
-    : Math.max(FLAT_REGION_HEIGHT, 0.35);
+  const proxyH = Math.max(solidHeight, 0.5);
   const proxy = new Mesh(
     new BoxGeometry(
       Math.max(max[0] - min[0], 0.5),
@@ -203,12 +240,8 @@ function buildRegion(e: RegionEntity): EntityNodes {
       edgeMat.color.set(on ? "#ffffff" : e.color);
       fillMat.opacity = on ? selectedOpacity : idleOpacity;
       fillMat.emissiveIntensity = on
-        ? isVolumetric
-          ? 0.12
-          : 0.35
-        : isVolumetric
-          ? 0.05
-          : 0.22;
+        ? 0.12
+        : 0.05;
     },
     dispose: () => disposeObject(group),
   };
@@ -222,8 +255,8 @@ function buildRegion(e: RegionEntity): EntityNodes {
 export const TRIPWIRE_CURTAIN_HEIGHT = 2;
 
 const TRIPWIRE_CURTAIN_FLOOR = 0.02;
-const TRIPWIRE_BEAM_SPACING = 0.22;
 const TRIPWIRE_PLUS_OFFSET = 0.28;
+const TRIPWIRE_PLUS_ARROW_SCALE = 0.6;
 const TRIPWIRE_CURTAIN_OPACITY = 0.26;
 const TRIPWIRE_CURTAIN_OPACITY_SELECTED = 0.42;
 
@@ -251,6 +284,8 @@ interface CurtainMaterials {
   curtain: MeshBasicMaterial;
   beams: LineBasicMaterial;
   posts: MeshBasicMaterial;
+  arrow: MeshBasicMaterial;
+  plusLabelPosition?: Vector3;
 }
 
 /** Point and +1 normal at half the polyline length. Skips zero-length spans. */
@@ -297,30 +332,6 @@ function curtainMidpoint(points: [number, number][]): {
   return { point: [...last.b], normal: last.normal };
 }
 
-function plusOneTexture(): CanvasTexture | null {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return null;
-  }
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(20, 20, 24, 0.78)";
-  ctx.fillRect(4, 8, 120, 48);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 40px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("+1", 64, 34);
-  const tex = new CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
-}
-
 /**
  * Vertical light curtain for a floor polyline, in the parent's local XY.
  * One small arrow sits on the +1 side at the path midpoint.
@@ -341,6 +352,7 @@ export function addTripwireCurtain(
   });
   const beamMat = new LineBasicMaterial({ color: base.clone() });
   const postMat = new MeshBasicMaterial({ color: base.clone() });
+  const arrowMat = new MeshBasicMaterial({ color: base.clone() });
   const z0 = TRIPWIRE_CURTAIN_FLOOR;
   const z1 = TRIPWIRE_CURTAIN_HEIGHT;
 
@@ -389,14 +401,6 @@ export function addTripwireCurtain(
       beamed = true;
     }
     beams.push(a[0], a[1], z0, b[0], b[1], z0, a[0], a[1], z1, b[0], b[1], z1);
-    for (
-      let dist = TRIPWIRE_BEAM_SPACING;
-      dist < len - 1e-4;
-      dist += TRIPWIRE_BEAM_SPACING
-    ) {
-      const t = dist / len;
-      pushBeam(a[0] + dx * t, a[1] + dy * t);
-    }
     pushBeam(b[0], b[1]);
   }
 
@@ -439,11 +443,16 @@ export function addTripwireCurtain(
   }
 
   const mid = curtainMidpoint(points);
+  let plusLabelPosition: Vector3 | undefined;
   if (mid) {
     const [nx, ny] = mid.normal;
     const cone = new Mesh(
-      new ConeGeometry(0.09, 0.4, 10),
-      new MeshBasicMaterial({ color: 0xffffff }),
+      new ConeGeometry(
+        0.09 * TRIPWIRE_PLUS_ARROW_SCALE,
+        0.4 * TRIPWIRE_PLUS_ARROW_SCALE,
+        10,
+      ),
+      arrowMat,
     );
     cone.name = "tripwire-plus";
     cone.quaternion.setFromUnitVectors(
@@ -459,29 +468,23 @@ export function addTripwireCurtain(
     parent.add(cone);
 
     if (options?.showLabel !== false) {
-      const tex = plusOneTexture();
-      if (tex) {
-        const sprite = new Sprite(
-          new SpriteMaterial({
-            map: tex,
-            transparent: true,
-            depthWrite: false,
-          }),
-        );
-        sprite.name = "tripwire-plus-label";
-        sprite.position.set(
-          mid.point[0] + nx * (TRIPWIRE_PLUS_OFFSET + 0.34),
-          mid.point[1] + ny * (TRIPWIRE_PLUS_OFFSET + 0.34),
-          z1 * 0.55 + 0.28,
-        );
-        sprite.scale.set(0.5, 0.25, 1);
-        sprite.renderOrder = 5;
-        parent.add(sprite);
-      }
+      const labelOffset =
+        TRIPWIRE_PLUS_OFFSET + (0.4 * TRIPWIRE_PLUS_ARROW_SCALE) / 2;
+      plusLabelPosition = new Vector3(
+        mid.point[0] + nx * labelOffset,
+        mid.point[1] + ny * labelOffset,
+        z1 * 0.55,
+      );
     }
   }
 
-  return { curtain: curtainMat, beams: beamMat, posts: postMat };
+  return {
+    curtain: curtainMat,
+    beams: beamMat,
+    posts: postMat,
+    arrow: arrowMat,
+    plusLabelPosition,
+  };
 }
 
 export function buildTripwire(e: TripwireEntity): EntityNodes {
@@ -509,11 +512,22 @@ export function buildTripwire(e: TripwireEntity): EntityNodes {
   pivot.add(proxy);
   group.add(pivot);
   group.userData.entityId = e.id;
+  const extraLabels = mats.plusLabelPosition
+    ? [
+        {
+          key: "plus",
+          text: "+1",
+          position: mats.plusLabelPosition.clone().add(pivot.position),
+          color: e.color,
+        },
+      ]
+    : undefined;
 
   return {
     group,
     gizmoTarget: pivot,
     labelPos: new Vector3(cx, cy, TRIPWIRE_CURTAIN_HEIGHT + 0.35),
+    extraLabels,
     setSelected: (on: boolean) => {
       mats.curtain.opacity = on
         ? TRIPWIRE_CURTAIN_OPACITY_SELECTED
@@ -521,6 +535,7 @@ export function buildTripwire(e: TripwireEntity): EntityNodes {
       const c = on ? "#ffffff" : e.color;
       mats.beams.color.set(c);
       mats.posts.color.set(c);
+      mats.arrow.color.set(c);
     },
     dispose: () => disposeObject(group),
   };
@@ -664,29 +679,28 @@ export function buildCamera(e: CameraEntity): EntityNodes {
 /* Sensors                                                             */
 /* ------------------------------------------------------------------ */
 
-function buildSensor(e: SensorEntity): EntityNodes {
+export function buildSensor(e: SensorEntity): EntityNodes {
   const group = new Group();
+  const marker = new Group();
+  marker.name = "sensor-marker";
   const base = new Color(e.color);
   const [x, y, z] = e.position;
   const polyPoints = e.areaMode === "poly" ? e.points : [];
   const showPoly = polyPoints.length >= 3;
-  const radius = e.areaMode === "circle" ? Math.max(e.radius, 0.5) : 1.2;
-
-  const poleGeo = new CylinderGeometry(0.09, 0.12, 2.2, 10);
-  poleGeo.rotateX(Math.PI / 2); // axis Y -> Z (Z-up)
-  const pole = new Mesh(
-    poleGeo,
-    new MeshStandardMaterial({ color: 0x3a3b45, roughness: 0.6 }),
-  );
-  pole.position.z = 1.1;
+  const radius = Math.max(e.radius, 0.5);
   const headMat = new MeshStandardMaterial({
     color: base.clone(),
     emissive: base.clone(),
     emissiveIntensity: 0.6,
     roughness: 0.4,
   });
-  const head = new Mesh(new SphereGeometry(0.22, 14, 10), headMat);
-  head.position.z = 2.3;
+  const head = new Mesh(new SphereGeometry(0.11, 16, 12), headMat);
+  head.name = "sensor-sphere";
+  head.position.z = 0.11;
+  const proxy = new Mesh(new SphereGeometry(0.16, 12, 8), proxyMaterial());
+  proxy.position.z = 0.11;
+  marker.add(head, proxy);
+  marker.position.set(x, y, z);
 
   const coverage = new Group();
   coverage.name = "sensor-coverage";
@@ -712,19 +726,22 @@ function buildSensor(e: SensorEntity): EntityNodes {
       new LineBasicMaterial({ color: base.clone() }),
     );
     edges.position.z = 0.06;
-    coverage.position.set(cx - x, cy - y, 0);
+    coverage.position.set(cx, cy, 0);
     coverage.add(fill, edges);
   } else if (e.areaMode === "circle") {
     // RingGeometry/CircleGeometry already lie in the XY plane = Z-up floor.
-    const ring = new Mesh(
-      new RingGeometry(Math.max(radius - 0.25, 0.1), radius, 48),
-      new MeshBasicMaterial({
+    const ring = new LineLoop(
+      new BufferGeometry().setFromPoints(Array.from({ length: 64 }, (_, index) => {
+        const angle = index * Math.PI * 2 / 64;
+        return new Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+      })),
+      new LineBasicMaterial({
         color: base.clone(),
-        transparent: true,
-        opacity: 0.35,
-        side: DoubleSide,
+        depthWrite: false,
       }),
     );
+    ring.name = "sensor-coverage-outline";
+    ring.renderOrder = 2;
     ring.position.z = 0.06;
     const disc = new Mesh(
       new CircleGeometry(radius, 48),
@@ -737,33 +754,19 @@ function buildSensor(e: SensorEntity): EntityNodes {
       }),
     );
     disc.position.z = 0.05;
+    coverage.position.set(x, y, 0);
     coverage.add(ring, disc);
-  } else if (e.areaMode === "poly") {
-    // Waiting for vertices — faint ring so the sensor stays findable.
-    const ring = new Mesh(
-      new RingGeometry(0.95, 1.2, 32),
-      new MeshBasicMaterial({
-        color: base.clone(),
-        transparent: true,
-        opacity: 0.22,
-        side: DoubleSide,
-      }),
-    );
-    ring.position.z = 0.06;
-    coverage.add(ring);
   }
 
-  const proxy = new Mesh(new BoxGeometry(1.5, 1.5, 2.6), proxyMaterial());
-  proxy.position.z = 1.3;
-  group.add(pole, head, coverage, proxy);
-  group.position.set(x, y, z);
+  group.add(marker, coverage);
   group.userData.entityId = e.id;
 
-  const labelPos = new Vector3(x, y, z + 2.9);
+  const labelPos = new Vector3(x, y, z + 0.45);
 
   return {
     group,
-    gizmoTarget: group,
+    labelRoot: marker,
+    gizmoTarget: marker,
     labelPos,
     setSelected: (on: boolean) => {
       headMat.emissiveIntensity = on ? 1.6 : 0.6;
@@ -772,8 +775,11 @@ function buildSensor(e: SensorEntity): EntityNodes {
       if (ent.type !== "sensor") {
         return;
       }
-      group.position.set(ent.position[0], ent.position[1], ent.position[2]);
-      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 2.9);
+      marker.position.set(ent.position[0], ent.position[1], ent.position[2]);
+      if (ent.areaMode === "circle") {
+        coverage.position.set(ent.position[0], ent.position[1], 0);
+      }
+      labelPos.set(ent.position[0], ent.position[1], ent.position[2] + 0.45);
     },
     dispose: () => disposeObject(group),
   };
@@ -783,32 +789,10 @@ function buildSensor(e: SensorEntity): EntityNodes {
 /* Dispatcher + seeding                                              */
 /* ------------------------------------------------------------------ */
 
-/** Dashed yellow AABB footprint for a linked child scene. */
+/** Linked scene map beneath its child-to-parent pose. */
 export function buildChild(e: ChildSceneEntity): EntityNodes {
   const group = new Group();
-  const [sx, sy, sz] = e.size;
-  const edgeSrc = new BoxGeometry(sx, sy, sz);
-  const edges = new EdgesGeometry(edgeSrc);
-  edgeSrc.dispose();
-  const lineMat = new LineDashedMaterial({
-    color: new Color(e.color || CHILD_FOOTPRINT_COLOR),
-    dashSize: 0.45,
-    gapSize: 0.28,
-    linewidth: 1,
-  });
-  const lines = new LineSegments(edges, lineMat);
-  lines.computeLineDistances();
-  group.add(lines);
-
-  // Invisible fill so ray picks hit the footprint volume, not only edges.
-  const hitMat = new MeshBasicMaterial({
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    side: DoubleSide,
-  });
-  const hit = new Mesh(new BoxGeometry(sx, sy, sz), hitMat);
-  group.add(hit);
+  let disposed = false;
 
   applyChildPoseToObject(group, {
     position: e.position,
@@ -820,23 +804,30 @@ export function buildChild(e: ChildSceneEntity): EntityNodes {
   const labelPos = new Vector3(
     e.position[0],
     e.position[1],
-    e.position[2] + Math.max(sz * e.scale[2], 0.5) + 0.4,
+    e.position[2] + Math.max(e.size[2] * e.scale[2], 0.5) + 0.4,
   );
 
-  const selectedMat = new LineDashedMaterial({
-    color: new Color("#ffffff"),
-    dashSize: 0.45,
-    gapSize: 0.28,
-  });
+  let ready: Promise<void> | undefined;
+  if (e.geometry?.mapUrl) {
+    ready = loadSceneObject(e.geometry).then((object) => {
+      if (disposed) {
+        disposeObject(object);
+        return;
+      }
+      group.add(object);
+    }).catch((error) => {
+      if (!disposed) {
+        console.warn(`Failed to load child scene map: ${e.name}`, error);
+      }
+    });
+  }
 
   return {
     group,
+    ready,
     gizmoTarget: group,
     labelPos,
-    setSelected: (on: boolean) => {
-      lines.material = on ? selectedMat : lineMat;
-      lines.computeLineDistances();
-    },
+    setSelected: () => {},
     applyPose: (ent) => {
       if (ent.type !== "child") {
         return;
@@ -853,14 +844,8 @@ export function buildChild(e: ChildSceneEntity): EntityNodes {
       );
     },
     dispose: () => {
-      const attached = lines.material;
+      disposed = true;
       disposeObject(group);
-      if (attached !== selectedMat) {
-        selectedMat.dispose();
-      }
-      if (attached !== lineMat) {
-        lineMat.dispose();
-      }
     },
   };
 }
@@ -1057,6 +1042,8 @@ type SensorArea = {
   area?: string;
   x?: unknown;
   y?: unknown;
+  z?: unknown;
+  color?: unknown;
   radius?: unknown;
   points?: unknown;
 };
@@ -1079,7 +1066,7 @@ function parseSensorPolyPoints(area: SensorArea | null): [number, number][] {
   return out;
 }
 
-async function seedSensors(
+export async function seedSensors(
   sensors: SceneSensorBootstrap[],
   authToken: string,
 ): Promise<SensorEntity[]> {
@@ -1096,6 +1083,8 @@ async function seedSensors(
           ? Number(area.radius)
           : 5;
       let position: [number, number, number] | null = null;
+      let color = typeof area?.color === "string" && /^#[0-9a-f]{6}$/i.test(area.color)
+        ? area.color : "#bf5af2";
       let singletonType: SensorEntity["singletonType"] = "environmental";
       if (authToken) {
         try {
@@ -1104,8 +1093,11 @@ async function seedSensors(
             position = [
               Number(row.translation[0]),
               Number(row.translation[1]),
-              0,
+              Number(row.translation[2]),
             ];
+          }
+          if (typeof row.color === "string" && /^#[0-9a-f]{6}$/i.test(row.color)) {
+            color = row.color;
           }
           if (
             row.singleton_type === "attribute" ||
@@ -1125,7 +1117,7 @@ async function seedSensors(
           Number.isFinite(Number(area?.x)) &&
           Number.isFinite(Number(area?.y))
         ) {
-          position = [Number(area?.x), Number(area?.y), 0];
+          position = [Number(area?.x), Number(area?.y), Number.isFinite(Number(area?.z)) ? Number(area?.z) : 0];
         } else if (points.length >= 3) {
           const [cx, cy] = centroidOf(points);
           position = [cx, cy, 0];
@@ -1144,7 +1136,7 @@ async function seedSensors(
         radius: areaRadius,
         points,
         singletonType,
-        color: "#bf5af2",
+        color,
       } satisfies SensorEntity;
     }),
   );
@@ -1194,6 +1186,11 @@ async function seedChildren(
     children.map(async (c) => {
       let pose = parseChildPose({});
       let transformSource: string | null = null;
+      let geometry = sceneGeometryFromRest({
+        uid: c.restUid,
+        name: c.name,
+        map: c.mapUrl,
+      });
       if (authToken && c.restUid) {
         try {
           const row = await api.getChild(authToken, c.restUid);
@@ -1202,6 +1199,13 @@ async function seedChildren(
             row.transform_source != null ? String(row.transform_source) : null;
         } catch {
           /* keep identity pose */
+        }
+      }
+      if (authToken && c.restUid && c.childType !== "remote") {
+        try {
+          geometry = sceneGeometryFromRest(await api.getScene(authToken, c.restUid));
+        } catch (error) {
+          console.warn(`Failed to fetch child scene map metadata: ${c.name}`, error);
         }
       }
       return {
@@ -1221,6 +1225,7 @@ async function seedChildren(
         editHref: c.editHref || `?ss=child-edit&id=${c.restUid}`,
         transformSource,
         deleteUrl: c.deleteUrl,
+        geometry,
       } satisfies ChildSceneEntity;
     }),
   );
@@ -1407,14 +1412,40 @@ export function useViewportEntities(
     if (!world) {
       return;
     }
-    const labelEls = new Map<string, { el: HTMLDivElement; pos: Vector3 }>();
+    const labelEls = new Map<
+      string,
+      { entityId: string; el: HTMLDivElement; pos: Vector3 }
+    >();
+    const labelKey = (id: string, key: string) => `${id}\u0000${key}`;
 
-    const ensureLabel = (id: string, name: string, pos: Vector3) => {
-      let entry = labelEls.get(id);
+    const removeLabels = (id: string) => {
+      for (const [key, entry] of labelEls) {
+        if (entry.entityId === id) {
+          entry.el.remove();
+          labelEls.delete(key);
+        }
+      }
+    };
+
+    const ensureLabel = (
+      id: string,
+      key: string,
+      name: string,
+      pos: Vector3,
+      color?: string,
+    ) => {
+      const entryKey = labelKey(id, key);
+      let entry = labelEls.get(entryKey);
       if (!entry) {
         const el = document.createElement("div");
         el.className = "ss-vlabel ss-vlabel--entity";
-        labelEls.set(id, (entry = { el, pos: pos.clone() }));
+        if (!getViewportState().showLabels) {
+          el.style.display = "none";
+        }
+        labelEls.set(
+          entryKey,
+          (entry = { entityId: id, el, pos: pos.clone() }),
+        );
         world.labelLayer.appendChild(el);
       } else {
         entry.pos.copy(pos);
@@ -1422,6 +1453,8 @@ export function useViewportEntities(
       if (entry.el.textContent !== name) {
         entry.el.textContent = name;
       }
+      entry.el.style.color = color ?? "";
+      entry.el.style.borderColor = color ?? "";
       return entry.el;
     };
 
@@ -1460,17 +1493,16 @@ export function useViewportEntities(
       nodes.setSelected(e.id === selectedId);
       if (e.visible !== false) {
         nodes.applyPose?.(e);
-        ensureLabel(e.id, e.name, nodes.labelPos);
+        ensureLabel(e.id, "name", e.name, nodes.labelPos);
       } else {
-        const entry = labelEls.get(e.id);
-        entry?.el.remove();
-        labelEls.delete(e.id);
+        removeLabels(e.id);
       }
       return true;
     };
 
     const reconcile = () => {
       const { entities, selectedId, showFrustums } = getViewportState();
+      const calibration = useCalibrateStore.getState();
       const seen = new Set<string>();
       for (const e of Object.values(entities)) {
         if (e.type === "map") {
@@ -1479,7 +1511,7 @@ export function useViewportEntities(
           }
           continue;
         }
-        if (e.visible === false) {
+        if (calibration.active ? e.id !== calibration.cameraId : e.visible === false) {
           continue;
         }
         const nodes = buildEntityNodes(e);
@@ -1494,11 +1526,36 @@ export function useViewportEntities(
           }
           prev.dispose();
         }
+        removeLabels(e.id);
         world.entityRoot.add(nodes.group);
         world.entityNodes.set(e.id, nodes);
         nodes.setSelected(e.id === selectedId);
         nodes.setFrustumVisible?.(showFrustums);
-        ensureLabel(e.id, e.name, nodes.labelPos);
+        ensureLabel(
+          e.id,
+          "name",
+          e.name,
+          entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos),
+        );
+        void nodes.ready?.then(() => {
+          if (world.entityNodes.get(e.id) === nodes) {
+            ensureLabel(
+              e.id,
+              "name",
+              e.name,
+              entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos),
+            );
+          }
+        });
+        for (const label of nodes.extraLabels ?? []) {
+          ensureLabel(
+            e.id,
+            label.key,
+            label.text,
+            label.position,
+            label.color,
+          );
+        }
       }
       for (const [id, nodes] of world.entityNodes) {
         if (!seen.has(id)) {
@@ -1507,9 +1564,7 @@ export function useViewportEntities(
           }
           nodes.dispose();
           world.entityNodes.delete(id);
-          const entry = labelEls.get(id);
-          entry?.el.remove();
-          labelEls.delete(id);
+          removeLabels(id);
         }
       }
     };
@@ -1528,8 +1583,8 @@ export function useViewportEntities(
           continue;
         }
         nodes.applyPose(e);
-        const entry = labelEls.get(id);
-        entry?.pos.copy(nodes.labelPos);
+        const entry = labelEls.get(labelKey(id, "name"));
+        entry?.pos.copy(entityLabelAnchor(nodes.labelRoot ?? nodes.group, nodes.labelPos));
       }
     };
 
@@ -1554,6 +1609,11 @@ export function useViewportEntities(
         }
       }
     });
+    const unsubscribeCalibration = useCalibrateStore.subscribe((state, previous) => {
+      if (state.active !== previous.active || state.cameraId !== previous.cameraId) {
+        reconcile();
+      }
+    });
     reconcile();
 
     const projV = new Vector3();
@@ -1565,19 +1625,24 @@ export function useViewportEntities(
       const w = world.host.clientWidth;
       const h = world.host.clientHeight;
       for (const { el, pos } of labelEls.values()) {
+        if (useCalibrateStore.getState().active) {
+          el.style.display = "none";
+          continue;
+        }
         projV.copy(pos).project(cam);
         if (projV.z > 1 || projV.z < -1) {
           el.style.display = "none";
           continue;
         }
         el.style.display = "";
-        el.style.transform = `translate(-50%, -100%) translate(${(projV.x * 0.5 + 0.5) * w}px, ${(-projV.y * 0.5 + 0.5) * h}px)`;
+        el.style.transform = `translate(-50%, -100%) translate(${(projV.x * 0.5 + 0.5) * w}px, ${(-projV.y * 0.5 + 0.5) * h - 4}px)`;
       }
     };
     world.onFrame.add(updateLabels);
 
     return () => {
       unsubscribe();
+      unsubscribeCalibration();
       world.onFrame.delete(updateLabels);
       clearNodes();
     };

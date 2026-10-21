@@ -11,11 +11,13 @@
 }
 
 .ss-outliner-group-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-height: 28px;
-  padding: 2px 4px 2px 2px;
+  padding: 2px 6px;
+  background: var(--ss-fill-secondary, rgba(120, 120, 128, 0.12));
 }
 
 .ss-outliner-group-toggle {
@@ -25,7 +27,7 @@
   align-items: center;
   gap: 6px;
   height: 24px;
-  padding: 0 6px;
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -40,13 +42,39 @@
   text-align: left;
 }
 
+.ss-outliner-group-chevron {
+  justify-content: center;
+  width: 18px;
+}
+
 .ss-outliner-group-actions {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 22px 22px 36px 22px;
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
   flex: none;
   height: 24px;
+}
+
+.ss-outliner-group-actions .ss-outliner-preview {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.ss-outliner-group-actions .ss-outliner-project-all {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.ss-outliner-group-actions .ss-outliner-badge {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.ss-outliner-group-actions .ss-outliner-add {
+  grid-column: 4;
+  grid-row: 1;
 }
 
 .ss-outliner-group-toggle:hover {
@@ -100,11 +128,32 @@
   display: none;
 }
 
+.ss-outliner-light-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--ss-text-muted);
+}
+
+.ss-outliner-light-control input {
+  min-width: 0;
+  width: 100%;
+  accent-color: var(--ss-brand);
+}
+
+.ss-outliner-light-control output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .ss-outliner-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 4px 6px;
   border-radius: 6px;
   cursor: pointer;
   color: var(--ss-text, #f5f5f7);
@@ -124,13 +173,31 @@
 }
 
 .ss-outliner-eye {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 22px;
+  margin: 0;
   border: none;
   background: none;
-  padding: 2px;
+  padding: 0;
   color: var(--ss-text-muted, #8e8e93);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
+}
+
+.ss-outliner-eye .bi {
+  display: block;
+  line-height: 1;
+}
+
+.ss-outliner-eye:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .ss-outliner-eye:hover {
@@ -138,7 +205,13 @@
 }
 
 .ss-outliner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
   color: var(--ss-text-muted, #8e8e93);
+  opacity: 0.55;
   font-size: 12px;
   flex: none;
 }
@@ -308,6 +381,7 @@
   outline: 2px solid var(--ss-accent, #0a84ff);
   outline-offset: -2px;
 }
+
 
 .ss-outliner-status {
   width: 8px;

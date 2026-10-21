@@ -125,3 +125,15 @@ details.ss-form-section.is-forced-open
 .ss-drawer-form .ss-form-section-body {
   margin-top: 0.65rem;
 }
+
+.ss-drawer-body details.ss-form-section {
+  padding-inline-start: 0.5rem;
+}
+
+.ss-drawer-body details.ss-form-section > .ss-form-section-summary {
+  list-style-position: inside;
+}
+
+.ss-drawer-body details.ss-form-section > .ss-form-section-body {
+  margin-inline-start: 1rem;
+}

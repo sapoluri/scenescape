@@ -99,6 +99,60 @@ const POSE_EPS_POS = 1e-4;
 const POSE_EPS_DEG = 1e-3;
 const POSE_EPS_FOV = 1e-3;
 
+type ProjectionPoseState = {
+  fov: number;
+  aspect: number;
+  position: [number, number, number];
+  rotationDeg: [number, number, number];
+};
+
+type ProjectionPoseOptions = Partial<ProjectionPoseState>;
+
+export function projectionInputsChanged(
+  opts: ProjectionPoseOptions,
+  previous: ProjectionPoseState,
+): boolean {
+  if (
+    opts.fov != null &&
+    Number.isFinite(opts.fov) &&
+    !(Math.abs(opts.fov - previous.fov) < POSE_EPS_FOV)
+  ) {
+    return true;
+  }
+  if (
+    opts.aspect != null &&
+    Number.isFinite(opts.aspect) &&
+    !(Math.abs(opts.aspect - previous.aspect) < POSE_EPS_FOV)
+  ) {
+    return true;
+  }
+  if (opts.position) {
+    for (let i = 0; i < 3; i++) {
+      if (!(Math.abs(opts.position[i] - previous.position[i]) < POSE_EPS_POS)) {
+        return true;
+      }
+    }
+  }
+  if (opts.rotationDeg) {
+    for (let i = 0; i < 3; i++) {
+      if (
+        !(Math.abs(opts.rotationDeg[i] - previous.rotationDeg[i]) < POSE_EPS_DEG)
+      ) {
+        return true;
+      }
+    }
+  }
+  return !Number.isFinite(previous.fov);
+}
+
+export function shouldReprojectFrame(
+  requested: boolean | undefined,
+  opts: ProjectionPoseOptions,
+  previous: ProjectionPoseState,
+): boolean {
+  return requested !== false || projectionInputsChanged(opts, previous);
+}
+
 function disposeProjectionTexture(
   texture: Texture | null,
   placeholder: Texture,
@@ -242,7 +296,7 @@ export function createCameraProjection(
   };
 
   let currentTexture: Texture | null = null;
-  let lastProjected = {
+  const lastProjected = {
     fov: Number.NaN,
     aspect: Number.NaN,
     position: [Number.NaN, Number.NaN, Number.NaN] as [
@@ -258,47 +312,8 @@ export function createCameraProjection(
   };
   let frameSeq = 0;
 
-  const poseChangedEnough = (opts: {
-    fov?: number;
-    aspect?: number;
-    position?: [number, number, number];
-    rotationDeg?: [number, number, number];
-  }): boolean => {
-    if (
-      opts.fov != null &&
-      Number.isFinite(opts.fov) &&
-      !(Math.abs(opts.fov - lastProjected.fov) < POSE_EPS_FOV)
-    ) {
-      return true;
-    }
-    if (
-      opts.aspect != null &&
-      Number.isFinite(opts.aspect) &&
-      !(Math.abs(opts.aspect - lastProjected.aspect) < POSE_EPS_FOV)
-    ) {
-      return true;
-    }
-    if (opts.position) {
-      for (let i = 0; i < 3; i++) {
-        if (!(Math.abs(opts.position[i] - lastProjected.position[i]) < POSE_EPS_POS)) {
-          return true;
-        }
-      }
-    }
-    if (opts.rotationDeg) {
-      for (let i = 0; i < 3; i++) {
-        if (
-          !(
-            Math.abs(opts.rotationDeg[i] - lastProjected.rotationDeg[i]) <
-            POSE_EPS_DEG
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return !Number.isFinite(lastProjected.fov);
-  };
+  const poseChangedEnough = (opts: ProjectionPoseOptions): boolean =>
+    projectionInputsChanged(opts, lastProjected);
 
   const rememberProjected = (opts: {
     fov?: number;
@@ -406,7 +421,7 @@ export function createCameraProjection(
     currentTexture = texture;
     projectedMaterial.texture = texture;
     // Texture-only refreshes skip project() — camera matrices stay valid.
-    if (opts.reproject !== false && poseChangedEnough(poseOpts)) {
+    if (shouldReprojectFrame(opts.reproject, poseOpts, lastProjected)) {
       projectedMaterial.project(mesh);
       rememberProjected({
         fov: projCam.fov,

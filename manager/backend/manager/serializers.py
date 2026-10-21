@@ -3,6 +3,7 @@
 
 from collections import OrderedDict
 import json
+import math
 import os
 
 from django.contrib.auth import authenticate
@@ -20,6 +21,7 @@ from manager.models import Asset3D, Cam, ChildScene, Region, RegionPoint, Scene,
   RegionOccupancyThreshold, SingletonScalarThreshold, CalibrationMarker, SceneImport
 from manager.validators import validate_camerachain
 from scene_common.options import *
+from scene_common.camera import Camera as ScenescapeCamera
 from scene_common.timestamp import DATETIME_FORMAT
 from scene_common.transform import CameraPose, CameraIntrinsics
 from scene_common.cam_fields import CAM_SERIALIZER_FIELDS
@@ -117,9 +119,12 @@ class ResolutionSerializerField(serializers.DictField):
     return None
 
   def to_internal_value(self, data):
-    if isinstance(data, (list, tuple)):
-      return {'width': data[0], 'height': data[1]}
-    return None
+    if isinstance(data, (list, tuple)) and len(data) == 2:
+      data = {'width': data[0], 'height': data[1]}
+    if not isinstance(data, dict) or 'width' not in data or 'height' not in data:
+      raise serializers.ValidationError("Resolution requires width and height.")
+    dimension = serializers.IntegerField(min_value=1)
+    return {key: dimension.run_validation(data[key]) for key in ('width', 'height')}
 
 class RegionOccupancyThresholdSerializer(serializers.ModelSerializer):
   sectors = serializers.JSONField()
@@ -188,6 +193,20 @@ class SingletonScalarThresholdSerializer(RegionOccupancyThresholdSerializer):
     instance.__dict__.pop('singleton_scalar_threshold', None)
     return
 
+class SensorTranslationField(serializers.ListField):
+  def __init__(self, **kwargs):
+    super().__init__(child=serializers.FloatField(), min_length=3, max_length=3, **kwargs)
+
+  def to_representation(self, obj):
+    return [obj.map_x, obj.map_y, obj.map_z]
+
+  def to_internal_value(self, data):
+    coordinates = super().to_internal_value(data)
+    if not all(math.isfinite(value) for value in coordinates):
+      raise serializers.ValidationError("Coordinates must be finite numbers.")
+    return dict(zip(('map_x', 'map_y', 'map_z'), coordinates))
+
+
 class SingletonSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)
   id = serializers.IntegerField(source="pk", read_only=True)
@@ -195,11 +214,9 @@ class SingletonSerializer(NonNullSerializer):
   scene = serializers.CharField(source='scene.pk', allow_null=True, required=False)
   center = CenterSerializerField(source='*', required=False)
   points = PointsSerializerField(required=False)
-  translation = serializers.SerializerMethodField('get_translation')
+  translation = SensorTranslationField(source='*', required=False)
+  color = serializers.RegexField(r'^#[0-9a-fA-F]{6}$', required=False)
   color_ranges = SingletonScalarThresholdSerializer(source='singleton_scalar_threshold', required=False)
-
-  def get_translation(self, obj):
-    return [obj.map_x, obj.map_y, 0.0]
 
   def validate(self, data):
     area = data.get('area')
@@ -241,7 +258,7 @@ class SingletonSerializer(NonNullSerializer):
     if scene_uid is not None:
       validated_data['scene_id'] = scene_uid['pk']
     center = validated_data.pop('center', None)
-    if center is not None:
+    if center is not None and 'map_x' not in validated_data:
       validated_data['map_x'] = center[0]
       validated_data['map_y'] = center[1]
     validated_data['type'] = "generic"
@@ -277,7 +294,7 @@ class SingletonSerializer(NonNullSerializer):
   class Meta:
     model = SingletonSensor
     fields = ['id', 'uid', 'scene', 'sensor_id', 'name', 'area', 'points', 'radius',
-              'center', 'translation', 'singleton_type', 'color_ranges', 'visible']
+              'center', 'translation', 'color', 'singleton_type', 'color_ranges', 'visible']
 
 class CamSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)
@@ -289,7 +306,7 @@ class CamSerializer(NonNullSerializer):
   translation = serializers.SerializerMethodField('get_translation')
   rotation = serializers.SerializerMethodField('get_rotation')
   scale = serializers.SerializerMethodField('get_scale')
-  resolution = ResolutionSerializerField(source='cam', required=False)
+  resolution = ResolutionSerializerField(source='*', required=False)
   transforms = serializers.SerializerMethodField('get_transform')
   scene = serializers.CharField(source="scene.pk", allow_null=True, required=False)
   transform_type = serializers.SerializerMethodField('get_transform_type')
@@ -360,7 +377,7 @@ class CamSerializer(NonNullSerializer):
     resolution = self.initial_data.get('resolution', None)
     if not resolution:
       return
-    extended_data = {'width': resolution['width'], 'height': resolution['height']}
+    extended_data = ResolutionSerializerField().to_internal_value(resolution)
     validated_data.update(extended_data)
     return
 
@@ -393,9 +410,12 @@ class CamSerializer(NonNullSerializer):
       raise serializers.ValidationError({"distortion": "invalid distortion: \""
                                          + str(distortion) + "\""})
 
-    extended_data = {'distortion_' + key: None for key in CameraIntrinsics.DISTORTION_KEYS}
+    model_fields = {field.name for field in Cam._meta.concrete_fields}
+    extended_data = {'distortion_' + key: None for key in CameraIntrinsics.DISTORTION_KEYS
+                     if 'distortion_' + key in model_fields}
     for key, val in zip(CameraIntrinsics.DISTORTION_KEYS, array):
-      extended_data['distortion_' + key] = val
+      if 'distortion_' + key in model_fields:
+        extended_data['distortion_' + key] = val
     validated_data.update(extended_data)
 
     return
@@ -477,24 +497,12 @@ class CamSerializer(NonNullSerializer):
     return distortion
 
   def get_translation(self, obj):
-    if not obj.scene:
-      return None
-
-    self.create_camera_instance(obj)
-
-    camera = obj.scene.scenescapeScene.cameraWithID(obj.sensor_id)
-    return camera.pose.translation.asNumpyCartesian.tolist() if camera \
-      and hasattr(camera, 'pose') else None
+    pose = self._pose_from_row(obj)
+    return pose.translation.asNumpyCartesian.tolist() if pose is not None else None
 
   def get_rotation(self, obj):
-    if not obj.scene:
-      return None
-
-    self.create_camera_instance(obj)
-
-    camera = obj.scene.scenescapeScene.cameraWithID(obj.sensor_id)
-    return getattr(camera.pose, 'euler_rotation', None) \
-      if camera and hasattr(camera, 'pose') else None
+    pose = self._pose_from_row(obj)
+    return getattr(pose, 'euler_rotation', None) if pose is not None else None
 
   def get_transform(self, obj):
     if not obj.scene:
@@ -507,10 +515,26 @@ class CamSerializer(NonNullSerializer):
     return obj.cam.transform_type
 
   def get_scale(self, obj):
-    if not obj.scene:
+    pose = self._pose_from_row(obj)
+    return pose.scale if pose is not None else None
+
+  def _pose_from_row(self, obj):
+    if not obj.scene_id or obj.transforms is None:
       return None
-    camera = obj.scene.scenescapeScene.cameraWithID(obj.sensor_id)
-    return camera.pose.scale if camera and hasattr(camera, 'pose') else None
+    if not hasattr(self, '_camera_poses'):
+      self._camera_poses = {}
+    key = (obj.pk, obj.sensor_id)
+    if key not in self._camera_poses:
+      info = obj.transformation
+      intrinsics = self.get_intrinsics(obj)
+      if intrinsics is not None:
+        info['intrinsics'] = CameraIntrinsics.intrinsicsDictToList(intrinsics)
+      distortion = self.get_distortion(obj)
+      if distortion is not None:
+        info['distortion'] = CameraIntrinsics.distortionDictToList(distortion)
+      camera = ScenescapeCamera(obj.sensor_id, info, resolution=(obj.width, obj.height))
+      self._camera_poses[key] = getattr(camera, 'pose', None)
+    return self._camera_poses[key]
 
   def validate(self, data):
     is_relink_only = self.partial and set(self.initial_data.keys()) <= {'scene'}
@@ -529,6 +553,7 @@ class CamSerializer(NonNullSerializer):
 
 class RegionSerializer(NonNullSerializer):
   name = serializers.CharField(max_length=150)
+  color = serializers.CharField(max_length=7, required=False, allow_blank=True)
   uid = serializers.SerializerMethodField('get_uuid')
   points = PointsSerializerField()
   scene = serializers.CharField(source='scene.pk')
@@ -577,13 +602,13 @@ class RegionSerializer(NonNullSerializer):
 
   class Meta:
     model = Region
-    fields = ['uid', 'name', 'points', 'scene', 'buffer_size', 'height', 'volumetric', 'color_ranges',
+    fields = ['uid', 'name', 'color', 'points', 'scene', 'buffer_size', 'height', 'volumetric', 'color_ranges',
               'visible']
 
 class TripwireSerializer(RegionSerializer):
   class Meta:
     model = Tripwire
-    fields = ['uid', 'name', 'points', 'height', 'scene', 'visible']
+    fields = ['uid', 'name', 'color', 'points', 'height', 'scene', 'visible']
 
 class MapCornersLLAField(serializers.JSONField):
   """Accept a parsed list or a JSON string (multipart form posts)."""
@@ -906,24 +931,24 @@ class SceneSerializer(NonNullSerializer):
 
     for trans_type in transform_types:
       key = f'mesh_{trans_type}'
-      popped_data = data.pop(key, None)
+      transform_data = data.get(key, None)
 
       # Skip if not provided
-      if popped_data is None:
+      if transform_data is None:
         continue
 
       # Must be a list or tuple of exactly 3 elements
-      if not isinstance(popped_data, (list, tuple)) or len(popped_data) != 3:
+      if not isinstance(transform_data, (list, tuple)) or len(transform_data) != 3:
         raise serializers.ValidationError({
           key: 'Must be a list of exactly 3 numeric values [x, y, z].'
         })
-      if len(popped_data) != 3:
+      if len(transform_data) != 3:
         raise serializers.ValidationError({
-          key: f'Must have exactly 3 values, got {len(popped_data)}.'
+          key: f'Must have exactly 3 values, got {len(transform_data)}.'
         })
 
       for axis, index in axes.items():
-        value = popped_data[index]
+        value = transform_data[index]
 
         # Must be int or float
         if not isinstance(value, (int, float)):

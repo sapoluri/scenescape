@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatCameraFps } from "../../scene/useLiveChrome";
+import { useViewportStore } from "../store";
 import { useLiveCameraImage } from "./useLiveCameraImage";
 import { useVisualizeStore } from "./visualizeStore";
 import "./VisualizeFeedPane.css";
@@ -48,8 +50,9 @@ function centerPan(
  * Right pane of the visualization split: annotated live JPEG (getimage).
  * Wheel zooms; drag pans. No point editing.
  */
-export function VisualizeFeedPane(): React.JSX.Element {
+export function VisualizeFeedPane({ cameraRates = {} }: { cameraRates?: Record<string, string> }): React.JSX.Element {
   const sensorId = useVisualizeStore((s) => s.sensorId);
+  const showTelemetry = useViewportStore((state) => state.showTelemetry);
   const cameraName = useVisualizeStore((s) => s.cameraName);
   const setFeedImageUrl = useVisualizeStore((s) => s.setFeedImageUrl);
   const { imageUrl, naturalSize } = useLiveCameraImage(sensorId, true);
@@ -222,6 +225,12 @@ export function VisualizeFeedPane(): React.JSX.Element {
           </p>
         )}
       </div>
+      {showTelemetry ? (
+        <div className="ss-viz-feed-telemetry" role="group" aria-label="Active camera telemetry">
+          <span>{cameraName || "Camera"}</span>
+          <span>{formatCameraFps(sensorId ? cameraRates[sensorId] : undefined)}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

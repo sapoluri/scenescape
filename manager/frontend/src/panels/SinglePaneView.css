@@ -32,6 +32,7 @@
 
 .ss-sp-viewport {
   flex: 1;
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   position: relative;
@@ -47,7 +48,7 @@
 
 /* Right dock — thin handle when open; slim vertical-tab rail when collapsed. */
 .ss-sp-dock {
-  --ss-sp-dock-width: 300px;
+  --ss-sp-dock-width: 360px;
   --ss-sp-dock-rail: 0.875rem;
   --ss-sp-dock-rail-collapsed: 1.35rem;
   width: calc(var(--ss-sp-dock-width) + var(--ss-sp-dock-rail));
@@ -59,6 +60,26 @@
   border-left: 1px solid var(--ss-border, rgba(120, 120, 128, 0.25));
   transition: width 180ms ease;
   overflow: hidden;
+  position: relative;
+}
+
+.ss-sp-dock.is-resizing {
+  transition: none;
+}
+
+.ss-sp-dock-resize {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 3;
+}
+
+.ss-sp-dock-resize:hover,
+.ss-sp-dock-resize:focus-visible {
+  background: var(--ss-brand);
+  outline: none;
 }
 
 .ss-sp-dock.is-collapsed {

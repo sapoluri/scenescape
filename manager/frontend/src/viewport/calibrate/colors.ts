@@ -25,6 +25,9 @@ export function calibrationPointColor(index: number): string {
   return CALIBRATION_POINT_COLORS[i];
 }
 
+export const CALIBRATION_POINT_RADIUS_PX = 5;
+export const CALIBRATION_POINT_HIT_PX = 10;
+
 export function calibrationPointColorHex(index: number): number {
   return Number.parseInt(calibrationPointColor(index).slice(1), 16);
 }

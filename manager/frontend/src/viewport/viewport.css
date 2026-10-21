@@ -71,7 +71,7 @@
   height: var(--ss-bar-control-h);
   background: var(--ss-fill-secondary, var(--ss-input-bg));
   border: 1px solid var(--ss-border, var(--ss-card-border));
-  border-radius: 8px;
+  border-radius: 0;
   padding: 2px;
   gap: 2px;
 }
@@ -83,7 +83,7 @@
   border: 0;
   background: transparent;
   color: var(--ss-text-muted);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0 10px;
   font-size: 12px;
   line-height: 1;
@@ -141,9 +141,18 @@
 }
 
 .ss-viewport-bar .vchk .box::after {
-  content: "✓";
+  content: "";
+  width: 4px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
   opacity: 0;
-  font-weight: 700;
+}
+
+.ss-viewport-stats[hidden],
+.ss-scene-rate[hidden] {
+  display: none !important;
 }
 
 .ss-viewport-bar .vchk.on {
@@ -194,6 +203,10 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.ss-viewport-host[data-placement] canvas {
+  cursor: crosshair;
 }
 
 .ss-viewport-labels {
@@ -247,6 +260,26 @@
 .ss-vlabel--mark-row span {
   color: #fff;
   font-weight: 500;
+}
+
+.ss-vlabel--mark-dwell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ss-vlabel--mark-dwell-list .ss-vlabel--mark-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.ss-vlabel--mark-region-name {
+  min-width: 0;
+  max-width: 20rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ss-viewport-error {
@@ -377,7 +410,9 @@
 }
 
 .ss-viewport-tools.is-vertical .ss-tool-btn .bi {
+  display: block;
   font-size: 22px;
+  line-height: 1;
 }
 
 .ss-viewport-tools.is-vertical .ss-viewport-bar-sep {
@@ -418,10 +453,19 @@
 }
 
 .ss-vlabel--cal {
-  min-width: 1.1rem;
-  text-align: center;
-  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 3px;
+  background: rgb(0 0 0 / 0.75);
+  color: #fff;
   font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   border-width: 2px;
   pointer-events: none;
 }

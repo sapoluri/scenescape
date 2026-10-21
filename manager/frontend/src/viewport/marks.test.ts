@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MeshBasicMaterial } from "three";
+import { createMarkLabelElement, createTrailRibbon, updateMarkDwellLabel } from "./renderMarks";
 import {
   buildMarkEntities,
   colorFromTrackId,
@@ -9,8 +11,78 @@ import {
   markKeysLeftScene,
   markLabel,
   parseMarkPosition,
+  parseRegionDwells,
+  regionDwellRows,
   trackIdFromMarkKey,
 } from "./marks";
+import type { RegionEntity, SensorEntity } from "./types";
+
+describe("region dwell labels", () => {
+  class Element {
+    className = "";
+    textContent = "";
+    hidden = false;
+    dataset: Record<string, string> = {};
+    children: Element[] = [];
+    append(...children: Element[]) { this.children.push(...children); }
+    replaceChildren(...children: Element[]) { this.children = children; }
+    querySelector(selector: string): Element | null {
+      for (const child of this.children) {
+        if (child.className.split(" ").includes(selector.slice(1))) return child;
+        const nested = child.querySelector(selector);
+        if (nested) return nested;
+      }
+      return null;
+    }
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("lists named regions independently, updates seconds, and removes stale entries", () => {
+    vi.stubGlobal("document", { createElement: () => new Element() });
+    const label = createMarkLabelElement("person #one");
+    const dwell = label.querySelector<HTMLDivElement>(".ss-vlabel--mark-dwell")!;
+    const list = label.querySelector(".ss-vlabel--mark-dwell-list")!;
+    expect(dwell.hidden).toBe(true);
+    expect(dwell.children[0].textContent).toBe("Dwell Time:");
+    updateMarkDwellLabel(label, [
+      { regionId: "one", name: "Checkout", seconds: 12.34 },
+      { regionId: "two", name: "Queue", seconds: 3.5 },
+    ]);
+    expect(dwell.hidden).toBe(false);
+    expect(list.children).toHaveLength(2);
+    expect(list.children[0].children[0].textContent).toBe("Checkout");
+    expect(list.children[0].children[1].textContent).toBe("12.3 s");
+    expect(list.children[1].children[0].textContent).toBe("Queue");
+    expect(list.children[1].children[1].textContent).toBe("3.5 s");
+    updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }]);
+    expect(list.children).toHaveLength(1);
+    expect(list.children[0].children[1].textContent).toBe("4.7 s");
+    updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }], false);
+    expect(dwell.hidden).toBe(true);
+    updateMarkDwellLabel(label, [{ regionId: "two", name: "Queue", seconds: 4.7 }], true);
+    expect(dwell.hidden).toBe(false);
+    updateMarkDwellLabel(label, []);
+    expect(dwell.hidden).toBe(true);
+    expect(list.children).toHaveLength(0);
+  });
+});
+
+describe("trail rendering", () => {
+  it("renders beneath object bodies and respects scene depth", () => {
+    const trail = createTrailRibbon("#ff0000");
+    const material = trail.material as MeshBasicMaterial;
+    try {
+      expect(material.depthTest).toBe(true);
+      expect(material.depthWrite).toBe(false);
+      expect(material.transparent).toBe(true);
+      expect(trail.renderOrder).toBe(-1);
+    } finally {
+      trail.geometry.dispose();
+      material.dispose();
+    }
+  });
+});
 
 describe("parseMarkPosition", () => {
   it("parses array translations", () => {
@@ -45,10 +117,11 @@ describe("deriveHeading", () => {
 });
 
 describe("markLabel", () => {
-  it("matches legacy 3D category #id format", () => {
+  it("shows only the id characters used for the track color", () => {
     expect(markLabel("person", "a1b2c3d4-e5f6")).toBe(
-      "person #a1b2c3d4-e5f6",
+      "person #a1b2c3",
     );
+    expect(markLabel("person", "a1b2c3d4-e5f6")).toBe(`person ${colorFromTrackId("a1b2c3d4-e5f6")}`);
     expect(markLabel("vehicle", 42)).toBe("vehicle #42");
   });
 });
@@ -92,6 +165,54 @@ describe("markKeysLeftScene", () => {
 });
 
 describe("buildMarkEntities", () => {
+  it("keeps independent dwell times for overlapping regions and clears them on exit", () => {
+    const seen = new Map();
+    const mark = { id: "t1", type: "person", translation: [1, 2, 0] };
+    const [inside] = buildMarkEntities([{
+      ...mark,
+      regions: {
+        first: { entered: "2026-10-20T10:00:00Z", dwell: 12.5 },
+        second: { entered: "2026-10-20T10:00:10Z", dwell: 2.5 },
+      },
+    }], seen, {}, 1000);
+    expect(inside.regionDwells).toEqual([
+      { regionId: "first", seconds: 12.5 },
+      { regionId: "second", seconds: 2.5 },
+    ]);
+    const [outside] = buildMarkEntities([mark], seen, {}, 2000);
+    expect(outside.regionDwells).toEqual([]);
+  });
+
+  it("ignores exited regions and invalid dwell values but keeps zero seconds", () => {
+    expect(parseRegionDwells({
+      zero: { entered: "now", dwell: 0 },
+      exited: { dwell: 10 },
+      negative: { entered: "now", dwell: -1 },
+      invalid: { entered: "now", dwell: NaN },
+      string: { entered: "now", dwell: "12" },
+      empty: null,
+    })).toEqual([{ regionId: "zero", seconds: 0 }]);
+    expect(parseRegionDwells(undefined)).toEqual([]);
+  });
+
+  it("resolves region and sensor-region names without combining their dwell times", () => {
+    const [mark] = buildMarkEntities([{
+      id: "t1", translation: [1, 2], regions: {
+        "region-id": { entered: "now", dwell: 12.5 },
+        Sensor_1: { entered: "now", dwell: 8 },
+        unknown: { entered: "now", dwell: 1 },
+      },
+    }], new Map(), {}, 1000);
+    expect(regionDwellRows(mark, {
+      "region-id": { type: "region", id: "region-id", name: "Checkout" } as RegionEntity,
+      "sensor-id": { type: "sensor", id: "sensor-id", name: "Sensor 1" } as SensorEntity,
+    })).toEqual([
+      { regionId: "region-id", name: "Checkout", seconds: 12.5 },
+      { regionId: "Sensor_1", name: "Sensor 1", seconds: 8 },
+      { regionId: "unknown", name: "unknown", seconds: 1 },
+    ]);
+  });
+
   it("upserts positions and records seen state", () => {
     const seen = new Map();
     const entities = buildMarkEntities(

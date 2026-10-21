@@ -3,6 +3,25 @@
 
 import { useEffect, useState } from "react";
 
+export function formatCameraFps(value?: string): string {
+  const rate = (value ?? "--").replace(/(?:\s*fps)+\s*$/i, "").trim();
+  return `${rate || "--"} FPS`;
+}
+
+export function attachTelemetryCallbacks(
+  callbacks: NonNullable<Window["ssSceneTelemetry"]>,
+): () => void {
+  window.ssSceneTelemetry = { ...(window.ssSceneTelemetry || {}), ...callbacks };
+  return () => {
+    const current = window.ssSceneTelemetry;
+    if (!current) return;
+    for (const key of Object.keys(callbacks) as (keyof typeof callbacks)[]) {
+      if (current[key] === callbacks[key]) delete current[key];
+    }
+    if (Object.keys(current).length === 0) delete window.ssSceneTelemetry;
+  };
+}
+
 /**
  * MQTT connected flag from ss-mqtt-status / live client, mirrored onto #mqtt_status.
  */
@@ -82,11 +101,10 @@ export function useCameraRates(): Record<string, string> {
     };
     const clearRates = () => setRates({});
 
-    window.ssSceneTelemetry = {
-      ...(window.ssSceneTelemetry || {}),
+    const detachCallbacks = attachTelemetryCallbacks({
       setCameraRate,
       clearRates,
-    };
+    });
 
     const onRate = (ev: Event) => {
       const detail = (
@@ -101,6 +119,7 @@ export function useCameraRates(): Record<string, string> {
     window.addEventListener("ss-camera-rate", onRate);
     window.addEventListener("ss-telemetry-clear", onClear);
     return () => {
+      detachCallbacks();
       window.removeEventListener("ss-camera-rate", onRate);
       window.removeEventListener("ss-telemetry-clear", onClear);
     };

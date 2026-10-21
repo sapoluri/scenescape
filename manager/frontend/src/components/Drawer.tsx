@@ -25,6 +25,8 @@ type Props = {
    * already dismisses (with the same dirty-leave confirm).
    */
   showCancel?: boolean;
+  /** Keep the sheet open when the stage backdrop is clicked. */
+  closeOnBackdrop?: boolean;
   /** Optional extra bottom bar (prefer header Cancel + Save instead). */
   footer?: ReactNode;
   wide?: boolean;
@@ -45,6 +47,7 @@ export function Drawer({
   children,
   actions,
   showCancel,
+  closeOnBackdrop = true,
   footer,
   wide = false,
   dirty = false,
@@ -140,7 +143,10 @@ export function Drawer({
       className={`ss-drawer-root is-open${stage ? " is-stage" : ""}`}
       role="presentation"
     >
-      <div className="ss-drawer-backdrop" onClick={requestClose} />
+      <div
+        className="ss-drawer-backdrop"
+        onClick={closeOnBackdrop ? requestClose : undefined}
+      />
       <aside
         className={`ss-drawer-panel${wide ? " ss-drawer-panel--wide" : ""}`}
         role="dialog"

@@ -120,16 +120,17 @@ class CacheManager:
 
   def _applySceneResults(self, found):
     """Apply fetched scene results. Caller must hold self._lock."""
+    retired_scenes = getattr(self, '_old_scene_cache', None) or {}
     if not hasattr(self, 'cached_scenes_by_uid') or self.cached_scenes_by_uid is None:
       self.cached_scenes_by_uid = {}
     self._cached_scenes_by_cameraID = {}
     self._cached_scenes_by_sensorID = {}
 
-    old = set(self.cached_scenes_by_uid.keys())
+    old = set(self.cached_scenes_by_uid.keys()) | set(retired_scenes.keys())
     new = set(x['uid'] for x in found)
     deleted = old - new
     for uid in deleted:
-      self._teardownScene(self.cached_scenes_by_uid.pop(uid, None))
+      self._teardownScene(self.cached_scenes_by_uid.pop(uid, None) or retired_scenes.get(uid))
 
     for scene_data in found:
       if self.tracker_config_data:
@@ -155,6 +156,7 @@ class CacheManager:
           scene = old_scene
           scene.updateScene(scene_data)
         else:
+          self._teardownScene(retired_scenes.get(uid))
           scene_cls = getattr(self, '_scene_cls', None)
           if scene_cls is None:
             from controller.scene import Scene

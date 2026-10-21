@@ -10,6 +10,7 @@ import { FormSection } from "../components/FormSection";
 import { FormShell } from "../components/FormShell";
 import { useFormDirty } from "../components/useFormDirty";
 import { api, type RestError } from "../lib/rest";
+import { cameraSceneAfterSave } from "../lib/sceneEntityCards";
 import { useAppToast } from "../components/ToastProvider";
 
 export type SceneOption = { id: string; name: string };
@@ -40,6 +41,7 @@ export function CameraSheet({
   const [sensorId, setSensorId] = useState("");
   const [name, setName] = useState("");
   const [scene, setScene] = useState(sceneId);
+  const [originalSceneId, setOriginalSceneId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(mode === "create");
@@ -51,6 +53,7 @@ export function CameraSheet({
     }
     setError(null);
     setScene(sceneId);
+    setOriginalSceneId(null);
     resetDirty();
     if (mode === "create") {
       setSensorId("");
@@ -72,9 +75,8 @@ export function CameraSheet({
         }
         setSensorId(String(cam.sensor_id || cam.uid || sensorUid));
         setName(String(cam.name || ""));
-        if (cam.scene) {
-          setScene(String(cam.scene));
-        }
+        setOriginalSceneId(cam.scene ? String(cam.scene) : null);
+        setScene(cam.scene ? String(cam.scene) : "");
         setLoaded(true);
         resetDirty();
       })
@@ -121,6 +123,12 @@ export function CameraSheet({
       resetDirty();
       onSaved(saved);
       onClose();
+      const destination = cameraSceneAfterSave(
+        saved?.scene ? String(saved.scene) : scene.trim(),
+        originalSceneId,
+        mode === "create",
+      );
+      if (destination) window.location.assign(destination);
     } catch (err) {
       const re = err as RestError;
       setError(re.message || "Save failed");

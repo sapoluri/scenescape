@@ -195,8 +195,7 @@ button.ss-open-scene-card {
   aspect-ratio: 4 / 3;
   width: 100%;
   overflow: hidden;
-  background:
-    linear-gradient(135deg, var(--ss-brand) 0%, var(--ss-brand-soft) 100%);
+  background: #1e1e21;
 }
 
 .ss-open-scene-thumb.has-image {
@@ -215,6 +214,12 @@ button.ss-open-scene-card {
   font-weight: 700;
   color: var(--ss-on-brand);
   letter-spacing: 0.05em;
+}
+
+.ss-open-scene-thumb-icon {
+  color: #c5cdd6;
+  font-size: 2.5rem;
+  opacity: 0.8;
 }
 
 .ss-open-scene-card-tools {

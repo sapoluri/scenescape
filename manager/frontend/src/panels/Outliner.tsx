@@ -25,6 +25,12 @@ import {
   removeTripwireFromModel,
 } from "../viewport/geometrySync";
 import { ProjectionOpacitySlider } from "../viewport/ProjectionOpacitySlider";
+import {
+  LIGHT_INTENSITY_STEP,
+  MAX_LIGHT_INTENSITY,
+  MIN_LIGHT_INTENSITY,
+  useLightingStore,
+} from "../viewport/lighting";
 import { getViewportState, useViewportStore } from "../viewport/store";
 import type {
   CameraEntity,
@@ -51,6 +57,12 @@ const GROUPS: {
   addHref?: string;
   addLabel?: string;
 }[] = [
+  {
+    type: "camera",
+    label: "Cameras",
+    addTool: "camera",
+    addLabel: "Add camera",
+  },
   { type: "map", label: "Scene map" },
   {
     type: "region",
@@ -63,12 +75,6 @@ const GROUPS: {
     label: "Tripwires",
     addTool: "tripwire",
     addLabel: "Add tripwire",
-  },
-  {
-    type: "camera",
-    label: "Cameras",
-    addTool: "camera",
-    addLabel: "Add camera",
   },
   {
     type: "sensor",
@@ -87,8 +93,8 @@ const GROUPS: {
 
 const TYPE_ICON: Record<ViewportEntityType, string> = {
   map: "bi-box",
-  region: "bi-square",
-  tripwire: "bi-slash-lg",
+  region: "bi-bounding-box-circles",
+  tripwire: "bi-arrow-bar-right",
   camera: "bi-camera-video",
   sensor: "bi-broadcast",
   mark: "bi-person-walking",
@@ -96,6 +102,7 @@ const TYPE_ICON: Record<ViewportEntityType, string> = {
 };
 
 const COLLAPSED_KEY = "ss-outliner-collapsed";
+type OutlinerGroupType = ViewportEntityType | "lighting";
 
 type DeleteTarget = {
   id: string;
@@ -105,7 +112,7 @@ type DeleteTarget = {
   isDraft: boolean;
 };
 
-function readCollapsed(): Set<ViewportEntityType> {
+function readCollapsed(): Set<OutlinerGroupType> {
   try {
     const raw = sessionStorage.getItem(COLLAPSED_KEY);
     if (!raw) {
@@ -116,14 +123,14 @@ function readCollapsed(): Set<ViewportEntityType> {
       return new Set();
     }
     return new Set(
-      list.filter((t): t is ViewportEntityType => typeof t === "string"),
+      list.filter((t): t is OutlinerGroupType => typeof t === "string"),
     );
   } catch {
     return new Set();
   }
 }
 
-function writeCollapsed(collapsed: Set<ViewportEntityType>): void {
+function writeCollapsed(collapsed: Set<OutlinerGroupType>): void {
   try {
     sessionStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
   } catch {
@@ -269,6 +276,10 @@ function OutlinerRow({
         }
       }}
     >
+      <i
+        className={`bi ${TYPE_ICON[entity.type]} ss-outliner-icon`}
+        aria-hidden="true"
+      />
       <button
         type="button"
         className="ss-outliner-eye"
@@ -286,10 +297,6 @@ function OutlinerRow({
           aria-hidden="true"
         />
       </button>
-      <i
-        className={`bi ${TYPE_ICON[entity.type]} ss-outliner-icon`}
-        aria-hidden="true"
-      />
       <span className="ss-outliner-name" title={entity.name}>
         {entity.name}
       </span>
@@ -419,6 +426,7 @@ export function Outliner({
 }: OutlinerProps) {
   const toast = useAppToast();
   const entities = useViewportStore((s) => s.entities);
+  const lightIntensity = useLightingStore((s) => s.intensity);
   const projectAllActive = useViewportStore((s) => s.projectAllActive);
   const selectedType = useViewportStore((s) => {
     const id = s.selectedId;
@@ -431,7 +439,7 @@ export function Outliner({
       return e?.type === "camera" && e.posed;
     });
   const [collapsed, setCollapsed] =
-    useState<Set<ViewportEntityType>>(readCollapsed);
+    useState<Set<OutlinerGroupType>>(readCollapsed);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -450,7 +458,7 @@ export function Outliner({
     });
   }, [selectedType]);
 
-  const toggleGroup = useCallback((type: ViewportEntityType) => {
+  const toggleGroup = useCallback((type: OutlinerGroupType) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(type)) {
@@ -582,16 +590,15 @@ export function Outliner({
   const deleteConfirmLabel =
     deleteTarget?.type === "child" ? "Unlink" : "Delete";
 
-  return (
-    <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
-      {GROUPS.map(({ type, label, addTool, addHref, addLabel }) => {
+  const renderGroup = ({ type, label, addTool, addHref, addLabel }: (typeof GROUPS)[number]) => {
         const items = Object.values(entities).filter((e) => e.type === type);
         const showSheetAdd = Boolean(isSuperuser && addHref);
         const showToolAdd = Boolean(addTool);
-        if (items.length === 0 && !showSheetAdd && !showToolAdd) {
+        if (type !== "mark" && items.length === 0 && !showSheetAdd && !showToolAdd) {
           return null;
         }
         const isCollapsed = collapsed.has(type);
+        const anyVisible = items.some((item) => item.visible !== false);
         const bodyId = `ss-outliner-body-${type}`;
         return (
           <div
@@ -601,9 +608,10 @@ export function Outliner({
             <div className="ss-outliner-group-header">
               <button
                 type="button"
-                className="ss-outliner-group-toggle"
+                className="ss-outliner-group-toggle ss-outliner-group-chevron"
                 aria-expanded={!isCollapsed}
                 aria-controls={bodyId}
+                aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${label}`}
                 onClick={() => toggleGroup(type)}
                 title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
               >
@@ -611,8 +619,27 @@ export function Outliner({
                   className={`bi ${isCollapsed ? "bi-chevron-right" : "bi-chevron-down"}`}
                   aria-hidden="true"
                 />
+              </button>
+              <button
+                type="button"
+                className="ss-outliner-eye"
+                disabled={items.length === 0}
+                title={`${anyVisible ? "Hide" : "Show"} all ${label.toLowerCase()}`}
+                aria-label={`${anyVisible ? "Hide" : "Show"} all ${label.toLowerCase()}`}
+                aria-pressed={anyVisible}
+                onClick={() => getViewportState().setTypeVisible(type, !anyVisible)}
+              >
+                <i className={`bi ${anyVisible ? "bi-eye" : "bi-eye-slash"}`} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="ss-outliner-group-toggle"
+                aria-expanded={!isCollapsed}
+                aria-controls={bodyId}
+                onClick={() => toggleGroup(type)}
+                title={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+              >
                 <span className="ss-outliner-group-label">{label}</span>
-                <span className="ss-outliner-badge">{items.length}</span>
               </button>
               <div className="ss-outliner-group-actions">
                 {type === "camera" &&
@@ -664,6 +691,7 @@ export function Outliner({
                     <i className="bi bi-cast" aria-hidden="true" />
                   </button>
                 ) : null}
+                <span className="ss-outliner-badge">{items.length}</span>
                 {showToolAdd && addTool ? (
                   <button
                     type="button"
@@ -740,7 +768,61 @@ export function Outliner({
             </div>
           </div>
         );
-      })}
+      };
+
+  return (
+    <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
+      {GROUPS.filter(group => group.type !== "mark").map(renderGroup)}
+      <div className={`ss-outliner-group${collapsed.has("lighting") ? " is-collapsed" : ""}`}>
+        <div className="ss-outliner-group-header">
+          <button
+            type="button"
+            className="ss-outliner-group-toggle ss-outliner-group-chevron"
+            aria-expanded={!collapsed.has("lighting")}
+            aria-controls="ss-outliner-body-lighting"
+            aria-label={`${collapsed.has("lighting") ? "Expand" : "Collapse"} Lighting`}
+            title={`${collapsed.has("lighting") ? "Expand" : "Collapse"} Lighting`}
+            onClick={() => toggleGroup("lighting")}
+          >
+            <i className={`bi ${collapsed.has("lighting") ? "bi-chevron-right" : "bi-chevron-down"}`} aria-hidden="true" />
+          </button>
+          <i className="bi bi-lightbulb ss-outliner-icon" aria-hidden="true" />
+          <button
+            type="button"
+            className="ss-outliner-group-toggle"
+            aria-expanded={!collapsed.has("lighting")}
+            aria-controls="ss-outliner-body-lighting"
+            onClick={() => toggleGroup("lighting")}
+          >
+            <span className="ss-outliner-group-label">Lighting</span>
+          </button>
+          <div className="ss-outliner-group-actions">
+            <span className="ss-outliner-badge">1</span>
+          </div>
+        </div>
+        <div
+          id="ss-outliner-body-lighting"
+          className="ss-outliner-group-body"
+          hidden={collapsed.has("lighting")}
+          role="group"
+          aria-label="Lighting"
+        >
+          <label className="ss-outliner-light-control">
+            <span>Ambient</span>
+            <input
+              type="range"
+              aria-label="Ambient light intensity"
+              min={MIN_LIGHT_INTENSITY}
+              max={MAX_LIGHT_INTENSITY}
+              step={LIGHT_INTENSITY_STEP}
+              value={lightIntensity}
+              onChange={(event) => useLightingStore.getState().setIntensity(Number(event.target.value))}
+            />
+            <output>{lightIntensity.toFixed(2)}</output>
+          </label>
+        </div>
+      </div>
+      {GROUPS.filter(group => group.type === "mark").map(renderGroup)}
       <ConfirmDialog
         open={deleteTarget != null}
         title={deleteTitle}

@@ -31,6 +31,7 @@ import {
 import { api, type RestError } from "../lib/rest";
 import {
   cameraCardFromRest,
+  cameraSceneAfterSave,
   sensorCardFromRest,
   upsertCameraCard,
   upsertSensorCard,
@@ -107,6 +108,7 @@ function NumField({
   value,
   step = 0.1,
   digits,
+  onPreview,
   onCommit,
 }: {
   label: string;
@@ -114,6 +116,7 @@ function NumField({
   step?: number;
   /** When set, display and commit are rounded to this many fractional digits. */
   digits?: number;
+  onPreview?: (v: number) => void;
   onCommit: (v: number) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -130,7 +133,16 @@ function NumField({
         step={inputStep}
         className="ss-prop-input"
         value={text ?? display}
-        onChange={(ev) => setText(ev.target.value)}
+        onChange={(ev) => {
+          const next = ev.target.value;
+          setText(next);
+          if (next.trim() !== "") {
+            const v = Number(next);
+            if (Number.isFinite(v)) {
+              onPreview?.(digits !== undefined ? roundDigits(v, digits) : v);
+            }
+          }
+        }}
         onBlur={() => {
           if (text !== null) {
             const v = Number(text);
@@ -486,6 +498,11 @@ function RegionProps({ e }: { e: RegionEntity }) {
       <NumField
         label="Height (m)"
         value={e.height}
+        onPreview={(v) =>
+          getViewportState().updateEntity(e.id, {
+            height: Math.max(0.1, v),
+          })
+        }
         onCommit={(v) => patch({ height: Math.max(0.1, v) })}
       />
       <NumField
@@ -573,6 +590,7 @@ function CameraProps({
   e,
   sensorId,
   sceneId,
+  scenes,
   calibrateHref,
   authToken,
   onCalibrate,
@@ -581,6 +599,7 @@ function CameraProps({
   e: CameraEntity;
   sensorId?: string;
   sceneId?: string;
+  scenes: { id: string; name: string }[];
   calibrateHref?: string;
   authToken?: string;
   onCalibrate?: () => void;
@@ -596,13 +615,15 @@ function CameraProps({
     s.active && s.cameraId === e.id ? s.optics : null,
   );
   const poseDirty = useEntityDirty(e);
+  const [destinationSceneId, setDestinationSceneId] = useState(sceneId || "");
+  useEffect(() => setDestinationSceneId(sceneId || ""), [sceneId, e.id]);
   const [optics, setOptics] = useState<CameraOptics | null>(null);
   const [opticsBaseline, setOpticsBaseline] = useState<string | null>(null);
   const opticsDirty =
     optics != null &&
     opticsBaseline != null &&
     opticsPersistKey(optics) !== opticsBaseline;
-  const dirty = poseDirty || opticsDirty;
+  const dirty = poseDirty || opticsDirty || destinationSceneId !== sceneId;
   const [saveBusy, setSaveBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -691,7 +712,7 @@ function CameraProps({
   };
 
   const onSave = async () => {
-    if (!dirty || saveBusy || !authToken || !sceneId) {
+    if (!dirty || saveBusy || !authToken || !sceneId || !destinationSceneId) {
       return;
     }
     setSaveBusy(true);
@@ -722,7 +743,7 @@ function CameraProps({
         const payload: Record<string, unknown> = {
           name: cur.name,
           sensor_id,
-          scene: sceneId,
+          scene: destinationSceneId,
           transform_type: "euler",
           translation: cur.position,
           rotation: restRotation,
@@ -752,18 +773,29 @@ function CameraProps({
         if (!card) {
           throw new Error("Camera create returned no id");
         }
-        remapGeometryEntityIds({ [e.id]: card.id });
-        onCamerasChange?.((prev) => upsertCameraCard(prev, card));
+        if (destinationSceneId === sceneId) {
+          remapGeometryEntityIds({ [e.id]: card.id });
+          onCamerasChange?.((prev) => upsertCameraCard(prev, card));
+        }
         persistId = card.id;
         persistSensorId = card.sensorId;
       } else {
         await persistCameraEntity(
           authToken,
-          sceneId,
+          destinationSceneId,
           persistSensorId,
           cur,
           optics ?? undefined,
         );
+      }
+
+      const destination = cameraSceneAfterSave(destinationSceneId, sceneId, isDraft || !sensorId);
+      if (destinationSceneId !== sceneId) {
+        getViewportState().removeEntity(e.id);
+        onCamerasChange?.((previous) => previous.filter(camera => camera.id !== e.id && camera.id !== persistId));
+        toast.show("Camera moved to selected scene", "ok");
+        if (destination) window.location.assign(destination);
+        return;
       }
 
       getViewportState().updateEntity(persistId, {
@@ -777,6 +809,7 @@ function CameraProps({
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       toast.show("Camera saved", "ok");
+      if (destination) window.location.assign(destination);
     } catch (err) {
       toast.show((err as RestError).message || "Save failed", "bad");
     } finally {
@@ -790,6 +823,21 @@ function CameraProps({
   return (
     <>
       <NameRow entity={e} />
+      <label className="ss-prop-field">
+        <span className="ss-prop-label">Scene</span>
+        <select
+          className="ss-prop-input ss-prop-select"
+          aria-label="Camera scene"
+          value={destinationSceneId}
+          disabled={saveBusy || calibrating}
+          onChange={(event) => setDestinationSceneId(event.target.value)}
+        >
+          {sceneId && !scenes.some(scene => scene.id === sceneId) ? (
+            <option value={sceneId}>Current scene</option>
+          ) : null}
+          {scenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
+        </select>
+      </label>
       <span className="ss-prop-section">Position</span>
       <div className="ss-prop-grid3">
         <NumField
@@ -1056,6 +1104,8 @@ function SensorProps({
           area: cur.areaMode,
           singleton_type: cur.singletonType || "environmental",
           center: [cur.position[0], cur.position[1]],
+          translation: [...cur.position],
+          color: cur.color,
         };
         if (cur.areaMode === "circle") {
           payload.radius = cur.radius;
@@ -1164,11 +1214,31 @@ function SensorProps({
         </select>
       </label>
       {e.areaMode === "circle" ? (
-        <NumField
-          label="Radius (m)"
-          value={e.radius}
-          onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
-        />
+        <>
+          <NumField
+            label="Radius (m)"
+            value={e.radius}
+            onPreview={(v) => patch({ radius: Math.max(0.5, v) })}
+            onCommit={(v) => patch({ radius: Math.max(0.5, v) })}
+          />
+          <input
+            type="range"
+            className="ss-prop-range ss-prop-radius-slider"
+            aria-label="Coverage radius"
+            min={0.5}
+            max={Math.max(50, Math.ceil(e.radius / 10) * 10)}
+            step={0.1}
+            value={e.radius}
+            disabled={busy}
+            onPointerDown={() => getViewportState().commitHistory()}
+            onKeyDown={(event) => {
+              if (!event.repeat && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+                getViewportState().commitHistory();
+              }
+            }}
+            onChange={(event) => patch({ radius: Number(event.target.value) })}
+          />
+        </>
       ) : null}
       {e.areaMode === "poly" ? (
         <div className="ss-prop-actions">
@@ -1213,7 +1283,7 @@ function SensorProps({
             : e.areaMode === "circle"
               ? "Circle uses X/Y as center. Save writes type, area, and radius to the database."
               : e.points.length >= 3
-                ? "Polygon is ready. Save writes type, vertices, and center to the database."
+                ? "Save writes polygon coverage and the independent sensor position to the database."
                 : "Click the floor to place vertices. Click the first point (or Enter / double-click) to close."}
       </p>
     </>
@@ -1221,9 +1291,11 @@ function SensorProps({
 }
 
 function MarkProps({ e }: { e: MarkEntity }) {
+  const showTelemetry = useViewportStore((state) => state.showTelemetry);
   return (
     <>
       <ReadField label="Class" value={e.className} />
+      {showTelemetry ? <>
       <ReadField
         label="Position"
         value={`${fmt(e.position[0])}, ${fmt(e.position[1])}, ${fmt(e.position[2])}`}
@@ -1237,6 +1309,7 @@ function MarkProps({ e }: { e: MarkEntity }) {
         }
       />
       <ReadField label="Speed" value={`${fmt(e.speed)} m/frame`} />
+      </> : null}
       <p className="ss-prop-hint">
         Live tracked object — values update from the tracker feed. Mark shape
         and color come from the Object Library (B).
@@ -1496,6 +1569,7 @@ function EmptyProps({ sceneName }: { sceneName: string }) {
 export function Properties({
   sceneName,
   sceneId,
+  scenes = [],
   cameras = [],
   sensors = [],
   children = [],
@@ -1506,6 +1580,7 @@ export function Properties({
 }: {
   sceneName: string;
   sceneId?: string;
+  scenes?: { id: string; name: string }[];
   cameras?: SceneCameraBootstrap[];
   sensors?: SceneSensorBootstrap[];
   children?: SceneChildBootstrap[];
@@ -1541,6 +1616,7 @@ export function Properties({
           e={e}
           sensorId={camBoot?.sensorId}
           sceneId={sceneId}
+          scenes={scenes}
           calibrateHref={camBoot?.calibrateHref}
           authToken={authToken}
           onCamerasChange={onCamerasChange}

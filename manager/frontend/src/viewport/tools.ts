@@ -31,7 +31,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "rotate",
     label: "Rotate",
-    icon: "bi-arrow-clockwise",
+    icon: "bi-arrow-repeat",
     shortcut: "E",
     hint: "Drag the gizmo to rotate the selection",
   },
@@ -45,21 +45,21 @@ export const TOOLS: ToolDef[] = [
   {
     id: "region",
     label: "Region",
-    icon: "bi-bounding-box",
+    icon: "bi-bounding-box-circles",
     shortcut: "G",
     hint: "Click floor points, double-click/Enter to finish (Esc cancels)",
   },
   {
     id: "tripwire",
     label: "Tripwire",
-    icon: "bi-slash-lg",
+    icon: "bi-arrow-bar-right",
     shortcut: "T",
     hint: "Click 2+ floor points, double-click/Enter to finish (Esc cancels)",
   },
   {
     id: "camera",
     label: "Camera",
-    icon: "bi-camera",
+    icon: "bi-camera-video",
     shortcut: "C",
     hint: "Click the floor to place a camera marker",
   },
@@ -79,6 +79,15 @@ export const TOOLS: ToolDef[] = [
   },
 ];
 
+export function isToolEnabledInScene(toolId: ToolId, hasScene: boolean): boolean {
+  return (
+    hasScene ||
+    toolId === "live" ||
+    toolId === "move" ||
+    toolId === "rotate"
+  );
+}
+
 /** Tools that attach the TransformControls gizmo to the selection. */
 export const TRANSFORM_TOOLS: ToolId[] = ["move", "rotate", "scale"];
 
@@ -90,6 +99,26 @@ export const CREATION_TOOLS: ToolId[] = [
   "sensor",
   "measure",
 ];
+
+export function attachPlacementGuidance(
+  host: Pick<HTMLElement, "setAttribute" | "removeAttribute">,
+  tool: ToolId,
+  notify: (message: string, persistent: boolean) => void,
+): () => void {
+  if (!CREATION_TOOLS.includes(tool)) {
+    host.removeAttribute("data-placement");
+    return () => undefined;
+  }
+  const persistent = tool === "region" || tool === "tripwire";
+  const message = persistent
+    ? `Continue clicking the scene floor to add ${tool} points. Press Enter to finish.`
+    : tool === "measure"
+      ? "Click the scene floor to start measuring."
+      : `Click the scene floor to place a ${tool}.`;
+  host.setAttribute("data-placement", tool);
+  notify(message, persistent);
+  return () => host.removeAttribute("data-placement");
+}
 
 /** Entities the scale gizmo can edit (planar geometry + scene map GLB). */
 export function entityCanScale(

@@ -93,10 +93,6 @@ export function SceneWorkspaceSheets({
 
   const openSheet = useCallback(
     (action: Exclude<SheetAction, null>, id: string | null = null) => {
-      const tab = tabForSheetAction(action);
-      if (tab) {
-        activateSceneTab(tab);
-      }
       open(action, id);
     },
     [open],

@@ -24,6 +24,13 @@
   color: var(--ss-text);
 }
 
+.ss-cal-wizard--calibration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
 .ss-cal-wizard-badge {
   font-size: 10px;
   font-weight: 800;
@@ -41,6 +48,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  flex: none;
+  margin: 0;
 }
 
 .ss-cal-wizard-cam select {
@@ -67,18 +76,143 @@
   white-space: nowrap;
 }
 
+.ss-cal-wizard--calibration .ss-cal-wizard-cam,
+.ss-cal-wizard--calibration .ss-cal-wizard-opacity {
+  align-items: baseline;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-step {
+  flex: 1 1 0;
+  line-height: 1.2;
+}
+
+.ss-cal-wizard-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.ss-cal-wizard-actions {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 0.45rem;
+  min-width: max-content;
+}
+
+.ss-cal-wizard-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.ss-cal-wizard--calibration .ss-btn {
+  align-items: center;
+  height: 28px;
+  box-sizing: border-box;
+  line-height: 1.2;
+}
+
+.ss-cal-wizard-buttons .ss-sp-dock-props-close {
+  width: 28px;
+  height: 28px;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-history {
+  width: 28px;
+  padding: 0;
+  align-items: center;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-save {
+  position: relative;
+  min-width: 4.5rem;
+  padding-inline: 0.65rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-cal-wizard-save.ss-btn--dirty:not(:disabled)::after {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+}
+
+.ss-viz-bar.ss-cal-wizard--calibration {
+  align-items: center;
+}
+
+.ss-viz-bar .ss-cal-wizard-main {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ss-viz-opacity-slot {
+  display: flex;
+  align-items: center;
+  flex: none;
+  width: 12rem;
+  height: 24px;
+}
+
+.ss-viz-opacity-slot .ss-cal-wizard-opacity {
+  transform: translateY(3px);
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-opacity {
+  transform: translateY(3px);
+}
+
+@container (max-width: 700px) {
+  .ss-viz-bar.ss-cal-wizard--calibration {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ss-viz-bar .ss-cal-wizard-actions {
+    grid-column: 1;
+    justify-self: end;
+  }
+}
+
 .ss-cal-wizard-opacity {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   flex: none;
+  margin: 0;
   font-size: 12px;
   color: var(--ss-text-secondary, var(--ss-text-muted));
+}
+
+.ss-cal-wizard-opacity-track {
+  display: contents;
 }
 
 .ss-cal-wizard-opacity input[type="range"] {
   width: 5.5rem;
   accent-color: var(--ss-accent, var(--ss-brand));
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-opacity-track {
+  position: relative;
+  display: inline-block;
+  align-self: center;
+  flex: none;
+  width: 5.5rem;
+  height: 24px;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-opacity-track input[type="range"] {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  transform: translateY(-50%);
 }
 
 .ss-cal-wizard-opacity-val {
@@ -87,23 +221,30 @@
   color: var(--ss-text);
 }
 
-/* Same tool-button language as the edit toolbar; slightly stronger idle text. */
-.ss-cal-wizard .ss-tool-btn {
-  color: var(--ss-text-secondary, var(--ss-text));
+@media (max-width: 900px) {
+  .ss-cal-wizard--calibration {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ss-cal-wizard-actions {
+    grid-column: 1;
+    justify-self: stretch;
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
-.ss-cal-wizard .ss-tool-btn:hover:not(:disabled) {
-  color: var(--ss-text);
-  background: var(--ss-hover-bg);
-}
+@media (max-width: 560px) {
+  .ss-cal-wizard-actions {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
 
-.ss-cal-wizard .ss-tool-btn.ss-tool-save.is-dirty {
-  color: var(--ss-brand);
-  font-weight: 700;
-}
-
-.ss-cal-wizard-exit {
-  margin-left: auto;
+  .ss-cal-wizard-buttons {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* Calibrate and Live visualize share the same 3D | feed grid. */

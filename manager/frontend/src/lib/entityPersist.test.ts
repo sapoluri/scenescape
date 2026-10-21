@@ -6,10 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.stubGlobal("document", { getElementById: () => null });
 vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 
-import { remapGeometryEntityIds } from "./entityPersist";
+import { persistCameraEntity, persistSensorEntity, remapGeometryEntityIds } from "./entityPersist";
+import { api } from "./rest";
 import { getPersistState, usePersistStore } from "../viewport/persistStore";
 import { getViewportState, useViewportStore } from "../viewport/store";
-import type { RegionEntity } from "../viewport/types";
+import type { CameraEntity, RegionEntity, SensorEntity } from "../viewport/types";
 
 function region(id: string, name = "Region"): RegionEntity {
   return {
@@ -68,5 +69,76 @@ describe("remapGeometryEntityIds", () => {
     getViewportState().upsertEntities([region(uid)]);
     remapGeometryEntityIds({ [uid]: uid });
     expect(getViewportState().entities[uid]).toBeDefined();
+  });
+});
+
+describe("camera scene persistence", () => {
+  it("saves an existing camera to the selected scene without changing its sensor id", async () => {
+    const camera: CameraEntity = {
+      id: "42", type: "camera", name: "Camera", visible: true,
+      position: [1, 2, 3], target: [0, 0, 0], rotation: [0, 0, 0],
+      restRotation: [0, 0, 0], posed: true, fov: 60, color: "#0a84ff",
+    };
+    const update = vi.spyOn(api, "updateCamera").mockResolvedValueOnce({});
+    try {
+      await persistCameraEntity("test-token", "destination-scene", "camera-id", camera);
+      expect(update).toHaveBeenCalledWith("test-token", "camera-id", expect.objectContaining({
+        scene: "destination-scene", sensor_id: "camera-id", name: "Camera", translation: [1, 2, 3],
+      }));
+    } finally {
+      update.mockRestore();
+    }
+  });
+});
+
+describe("sensor coverage persistence", () => {
+  function sensor(): SensorEntity {
+    return {
+      id: "sensor", type: "sensor", name: "Infrared", visible: true,
+      position: [15, 20, 3], areaMode: "poly", radius: 7.5,
+      points: [[0, 0], [4, 0], [4, 3]],
+      singletonType: "environmental", color: "#bf5af2",
+    };
+  }
+
+  it("saves the sensor position independently from polygon coverage", async () => {
+    const update = vi.spyOn(api, "updateSensor").mockResolvedValueOnce({});
+    const entity = sensor();
+    try {
+      await persistSensorEntity("test-token", "scene", "infrared", entity);
+      expect(update).toHaveBeenCalledWith("test-token", "infrared", expect.objectContaining({
+        center: [15, 20],
+        translation: [15, 20, 3],
+        color: "#bf5af2",
+        points: entity.points,
+        area: "poly",
+      }));
+    } finally {
+      update.mockRestore();
+    }
+  });
+
+  it("saves circular radius and sensor center together", async () => {
+    const update = vi.spyOn(api, "updateSensor").mockResolvedValueOnce({});
+    try {
+      await persistSensorEntity("test-token", "scene", "infrared", { ...sensor(), areaMode: "circle" });
+      expect(update).toHaveBeenCalledWith("test-token", "infrared", expect.objectContaining({
+        center: [15, 20], translation: [15, 20, 3], color: "#bf5af2", radius: 7.5, area: "circle",
+      }));
+    } finally {
+      update.mockRestore();
+    }
+  });
+
+  it("rejects incomplete polygon coverage without sending an update", async () => {
+    const update = vi.spyOn(api, "updateSensor");
+    try {
+      await expect(persistSensorEntity("test-token", "scene", "infrared", {
+        ...sensor(), points: [[0, 0], [1, 1]],
+      })).rejects.toThrow("at least 3 vertices");
+      expect(update).not.toHaveBeenCalled();
+    } finally {
+      update.mockRestore();
+    }
   });
 });

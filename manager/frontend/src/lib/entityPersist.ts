@@ -164,6 +164,8 @@ export async function persistSensorEntity(
     scene: sceneId,
     area: e.areaMode,
     singleton_type: e.singletonType || "environmental",
+    translation: [...e.position],
+    color: e.color,
   };
   if (e.areaMode === "circle") {
     payload.center = [e.position[0], e.position[1]];

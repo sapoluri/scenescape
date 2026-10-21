@@ -3,7 +3,9 @@
 
 import json
 
+from django.http import QueryDict
 from django.test import TestCase
+from rest_framework.exceptions import ValidationError
 
 from manager.models import Scene
 from manager.serializers import SceneSerializer
@@ -12,6 +14,35 @@ from manager.serializers import SceneSerializer
 class SceneUpdateTestCase(TestCase):
   def setUp(self):
     self.scene = Scene.objects.create(name="test_scene")
+
+  def test_create_scene_with_only_name(self):
+    serializer = SceneSerializer(data=QueryDict("name=mapless_scene"))
+    self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    scene = serializer.save()
+
+    scene.refresh_from_db()
+    self.assertEqual(scene.name, "mapless_scene")
+    self.assertFalse(scene.map)
+    self.assertFalse(serializer.data.get('map'))
+    self.assertEqual(str(serializer.data['uid']), str(scene.pk))
+
+  def test_mesh_transform_does_not_modify_request_data(self):
+    data = {'mesh_translation': [1.0, 2.0, 3.0]}
+    validated_data = {}
+
+    SceneSerializer().handleMeshTransform(data, validated_data)
+
+    self.assertEqual(data, {'mesh_translation': [1.0, 2.0, 3.0]})
+    self.assertEqual(validated_data, {
+      'translation_x': 1.0,
+      'translation_y': 2.0,
+      'translation_z': 3.0,
+    })
+
+  def test_invalid_mesh_transform_is_rejected(self):
+    with self.assertRaises(ValidationError):
+      SceneSerializer().handleMeshTransform({'mesh_translation': [1.0, 2.0]}, {})
 
   def test_map_corners_lla_json_string_is_parsed(self):
     corners = [

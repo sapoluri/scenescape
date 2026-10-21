@@ -613,3 +613,20 @@ body.ss-embed .ss-form-back {
     var(--ss-nav-bg)
   );
 }
+
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-webkit-slider-runnable-track {
+  border-radius: 0 !important;
+}
+
+input[type="range"]::-moz-range-thumb,
+input[type="range"]::-moz-range-track,
+input[type="range"]::-moz-range-progress {
+  border-radius: 0 !important;
+}

@@ -3,11 +3,11 @@
 
 import { useEffect, useRef } from "react";
 import {
-  Mesh,
-  MeshBasicMaterial,
+  BufferGeometry,
+  Points,
+  PointsMaterial,
   Plane,
   Raycaster,
-  SphereGeometry,
   Vector2,
   Vector3,
 } from "three";
@@ -21,16 +21,14 @@ import {
 } from "../store";
 import type { ViewportWorld } from "../world";
 import { getCalibratePairs, useCalibrateStore } from "./calibrateStore";
-import { calibrationPointColor, calibrationPointColorHex } from "./colors";
+import { calibrationPointColor, calibrationPointColorHex, CALIBRATION_POINT_RADIUS_PX, CALIBRATION_POINT_HIT_PX } from "./colors";
 import { preloadOpenCv, solveCameraPose } from "./poseSolve";
 import { fovFromOptics, refineIntrinsics } from "./refineIntrinsics";
 import { transformsToPairs } from "./types";
 
 const FLOOR = new Plane(new Vector3(0, 0, 1), 0);
-/** World-space marker radius (legacy `SPHERE_RADIUS` ≈ 0.05). */
-const MARKER_RADIUS = 0.05;
 /** Screen-space pick radius for hit / drag / remove (px). */
-const MARKER_HIT_PX = 18;
+const MARKER_HIT_PX = CALIBRATION_POINT_HIT_PX;
 
 /**
  * Scene point under the cursor on the z=0 floor plane.
@@ -78,7 +76,7 @@ function nearestMapIndex(
   let best = -1;
   let bestD2 = MARKER_HIT_PX * MARKER_HIT_PX;
   mapPoints.forEach((map, i) => {
-    tmp.set(map[0], map[1], map[2] + MARKER_RADIUS);
+    tmp.set(map[0], map[1], map[2]);
     tmp.project(cam);
     if (tmp.z < -1 || tmp.z > 1) {
       return;
@@ -153,8 +151,6 @@ export function useCalibrateSession(
         });
       }
     }
-    // Coverage overlay on while calibrating.
-    getViewportState().setProjectCamera(cameraId);
     (async () => {
       try {
         const row = (await api.getCamera(authToken, sensorId)) ?? {};
@@ -200,6 +196,9 @@ export function useCalibrateSession(
     const host = world.host;
     const orbit = world.orbit;
     let dragIndex: number | null = null;
+    let pointerDown = false;
+    const priorCursor = host.style.cursor;
+    host.style.cursor = "default";
     // Avoid removing twice when both pointerdown(button=2) and contextmenu fire.
     let rightClickHandled = false;
 
@@ -218,6 +217,8 @@ export function useCalibrateSession(
     };
 
     const onPointerDown = (ev: PointerEvent) => {
+      pointerDown = true;
+      host.style.cursor = "grabbing";
       if (ev.button === 2) {
         if (tryRemoveAt(ev.clientX, ev.clientY)) {
           rightClickHandled = true;
@@ -239,6 +240,7 @@ export function useCalibrateSession(
         return;
       }
       dragIndex = idx;
+      useCalibrateStore.getState().beginPointEdit();
       orbit.enabled = false;
       ev.preventDefault();
       ev.stopPropagation();
@@ -246,6 +248,10 @@ export function useCalibrateSession(
 
     const onPointerMove = (ev: PointerEvent) => {
       if (dragIndex === null) {
+        const overPoint = nearestMapIndex(
+          world, ev.clientX, ev.clientY, useCalibrateStore.getState().mapPoints,
+        ) >= 0;
+        host.style.cursor = pointerDown ? "grabbing" : overPoint ? "crosshair" : "default";
         return;
       }
       const map = pickScenePoint(world, ev.clientX, ev.clientY);
@@ -257,19 +263,26 @@ export function useCalibrateSession(
         `ss-cal-marker-${dragIndex}`,
       );
       if (mesh) {
-        mesh.position.set(map[0], map[1], map[2] + MARKER_RADIUS);
+        mesh.position.set(map[0], map[1], map[2]);
       }
       useCalibrateStore.getState().moveMapPoint(dragIndex, map);
       ev.preventDefault();
       ev.stopPropagation();
     };
 
-    const endDrag = () => {
-      if (dragIndex === null) {
-        return;
-      }
+    const endDrag = (ev: PointerEvent) => {
+      pointerDown = false;
+      if (dragIndex !== null) useCalibrateStore.getState().endPointEdit();
+      host.style.cursor = nearestMapIndex(
+        world, ev.clientX, ev.clientY, useCalibrateStore.getState().mapPoints,
+      ) >= 0 ? "crosshair" : "default";
       dragIndex = null;
       orbit.enabled = true;
+    };
+    const onPointerLeave = () => {
+      if (!pointerDown) {
+        host.style.cursor = "default";
+      }
     };
 
     const onDblClick = (ev: MouseEvent) => {
@@ -296,14 +309,19 @@ export function useCalibrateSession(
     host.addEventListener("pointermove", onPointerMove, true);
     host.addEventListener("pointerup", endDrag, true);
     host.addEventListener("pointercancel", endDrag, true);
+    host.addEventListener("pointerleave", onPointerLeave, true);
+    window.addEventListener("pointerup", endDrag);
     host.addEventListener("dblclick", onDblClick, true);
     host.addEventListener("contextmenu", onContextMenu, true);
     return () => {
       orbit.enabled = true;
+      host.style.cursor = priorCursor;
       host.removeEventListener("pointerdown", onPointerDown, true);
       host.removeEventListener("pointermove", onPointerMove, true);
       host.removeEventListener("pointerup", endDrag, true);
       host.removeEventListener("pointercancel", endDrag, true);
+      host.removeEventListener("pointerleave", onPointerLeave, true);
+      window.removeEventListener("pointerup", endDrag);
       host.removeEventListener("dblclick", onDblClick, true);
       host.removeEventListener("contextmenu", onContextMenu, true);
     };
@@ -315,10 +333,10 @@ export function useCalibrateSession(
       return;
     }
     const group = world.entityRoot;
-    const markers: Mesh[] = [];
+    const markers: Points[] = [];
     const labels: HTMLDivElement[] = [];
-    const mats: MeshBasicMaterial[] = [];
-    const geo = new SphereGeometry(MARKER_RADIUS, 12, 12);
+    const mats: PointsMaterial[] = [];
+    const geo = new BufferGeometry().setFromPoints([new Vector3()]);
     const proj = new Vector3();
 
     const discardTail = (from: number) => {
@@ -335,12 +353,22 @@ export function useCalibrateSession(
     const ensureCount = (n: number) => {
       while (markers.length < n) {
         const i = markers.length;
-        const mat = new MeshBasicMaterial({
+        const mat = new PointsMaterial({
           color: calibrationPointColorHex(i),
-          depthTest: true,
-          depthWrite: true,
+          size: CALIBRATION_POINT_RADIUS_PX * 2,
+          sizeAttenuation: false,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
         });
-        const m = new Mesh(geo, mat);
+        mat.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <clipping_planes_fragment>",
+            "#include <clipping_planes_fragment>\nif (distance(gl_PointCoord, vec2(0.5)) > 0.5) discard;",
+          );
+        };
+        const m = new Points(geo, mat);
+        m.renderOrder = 1000;
         m.name = `ss-cal-marker-${i}`;
         m.userData.ssCalMarker = true;
         m.frustumCulled = false;
@@ -371,7 +399,7 @@ export function useCalibrateSession(
       ensureCount(points.length);
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
-        markers[i].position.set(p[0], p[1], p[2] + MARKER_RADIUS);
+        markers[i].position.set(p[0], p[1], p[2]);
         mats[i].color.set(calibrationPointColorHex(i));
         const el = labels[i];
         const text = String(i + 1);
@@ -403,16 +431,15 @@ export function useCalibrateSession(
       for (let i = 0; i < markers.length; i++) {
         const el = labels[i];
         proj.copy(markers[i].position);
-        proj.z += MARKER_RADIUS;
         proj.project(cam);
         if (proj.z > 1 || proj.z < -1) {
           el.style.display = "none";
           continue;
         }
         el.style.display = "";
-        el.style.transform = `translate(-50%, -120%) translate(${
+        el.style.transform = `translate(-50%, -100%) translate(${(
           (proj.x * 0.5 + 0.5) * w
-        }px, ${(-proj.y * 0.5 + 0.5) * h}px)`;
+        )}px, ${(-proj.y * 0.5 + 0.5) * h - CALIBRATION_POINT_RADIUS_PX - 4}px)`;
       }
     };
     world.onFrame.add(updateLabels);

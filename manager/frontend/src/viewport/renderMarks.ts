@@ -30,6 +30,7 @@ import {
 } from "./markAssets";
 import {
   colorFromTrackId,
+  regionDwellRows,
   trackIdFromMarkKey,
 } from "./marks";
 import { getViewportState, useViewportStore } from "./store";
@@ -156,8 +157,8 @@ function createTrackIndicator(trackColor: string): Sprite {
   return sprite;
 }
 
-/** Build the legacy CSS2D-style label card (`category #id` + Dwell row). */
-function createMarkLabelElement(title: string): HTMLDivElement {
+/** Build a tracked-object label with an optional per-region dwell list. */
+export function createMarkLabelElement(title: string): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "ss-vlabel ss-vlabel--mark";
 
@@ -165,17 +166,40 @@ function createMarkLabelElement(title: string): HTMLDivElement {
   header.className = "ss-vlabel--mark-id";
   header.textContent = title;
 
-  const row = document.createElement("div");
-  row.className = "ss-vlabel--mark-row";
-  row.append("Dwell: ");
-  const dwell = document.createElement("span");
-  dwell.dataset.field = "dwell";
-  dwell.textContent = "—";
-  row.appendChild(dwell);
+  const dwell = document.createElement("div");
+  dwell.className = "ss-vlabel--mark-dwell";
+  dwell.hidden = true;
+  const heading = document.createElement("div");
+  heading.className = "ss-vlabel--mark-row";
+  heading.textContent = "Dwell Time:";
+  const list = document.createElement("ul");
+  list.className = "ss-vlabel--mark-dwell-list";
+  dwell.append(heading, list);
 
-  el.appendChild(header);
-  el.appendChild(row);
+  el.append(header, dwell);
   return el;
+}
+
+export function updateMarkDwellLabel(label: HTMLDivElement, rows: ReturnType<typeof regionDwellRows>, showTelemetry = true): void {
+  const dwell = label.querySelector<HTMLDivElement>(".ss-vlabel--mark-dwell")!;
+  const signature = JSON.stringify([showTelemetry, rows.map(row => [row.regionId, row.name, row.seconds.toFixed(1)])]);
+  if (dwell.dataset.signature === signature) {
+    return;
+  }
+  dwell.dataset.signature = signature;
+  dwell.hidden = !showTelemetry || rows.length === 0;
+  const list = dwell.querySelector<HTMLUListElement>(".ss-vlabel--mark-dwell-list")!;
+  list.replaceChildren(...rows.map(row => {
+    const item = document.createElement("li");
+    item.className = "ss-vlabel--mark-row";
+    const name = document.createElement("span");
+    name.className = "ss-vlabel--mark-region-name";
+    name.textContent = row.name;
+    const seconds = document.createElement("span");
+    seconds.textContent = `${row.seconds.toFixed(1)} s`;
+    item.append(name, seconds);
+    return item;
+  }));
 }
 
 /**
@@ -255,7 +279,7 @@ function trackColorFor(entity: MarkEntity): string {
   return colorFromTrackId(trackIdFromMarkKey(entity.id));
 }
 
-function createTrailRibbon(trackColor: string): Mesh {
+export function createTrailRibbon(trackColor: string): Mesh {
   const geometry = new BufferGeometry();
   // Placeholder attributes so the mesh is valid before the first sample.
   geometry.setAttribute("position", new BufferAttribute(new Float32Array(9), 3));
@@ -265,13 +289,12 @@ function createTrailRibbon(trackColor: string): Mesh {
     transparent: true,
     opacity: 0.85,
     depthWrite: false,
-    // Stay readable over the map GLB from every orbit angle.
-    depthTest: false,
+    depthTest: true,
     side: DoubleSide,
   });
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 6;
+  mesh.renderOrder = -1;
   mesh.visible = false;
   mesh.name = "trail";
   return mesh;
@@ -428,18 +451,19 @@ export function attachMarkRenderer(
   const labelEls = new Map<string, HTMLDivElement>();
   const trailPts = new Map<string, Vector3[]>();
 
-  const ensureLabel = (id: string, name: string) => {
+  const ensureLabel = (entity: MarkEntity) => {
+    const { id, name } = entity;
     let el = labelEls.get(id);
     if (!el) {
       el = createMarkLabelElement(name);
       labelLayer.appendChild(el);
       labelEls.set(id, el);
-      return el;
     }
     const header = el.querySelector(".ss-vlabel--mark-id");
     if (header && header.textContent !== name) {
       header.textContent = name;
     }
+    updateMarkDwellLabel(el, regionDwellRows(entity, getViewportState().entities), getViewportState().showTelemetry);
     return el;
   };
 
@@ -483,7 +507,7 @@ export function attachMarkRenderer(
         nodes = buildMarkNodes(e, catalog);
         markRoot.add(nodes.group);
         markNodes.set(e.id, nodes);
-        ensureLabel(e.id, e.name);
+        ensureLabel(e);
       }
       const asset = catalog.assetOf(e.className);
       const nextSig = assetBodySig(asset, e.className);
@@ -516,7 +540,7 @@ export function attachMarkRenderer(
         });
       }
       layoutChrome(nodes);
-      ensureLabel(e.id, e.name);
+      ensureLabel(e);
       updateTrail(e.id, e.position[0], e.position[1], showTrails);
     }
     for (const [id, nodes] of markNodes) {
@@ -568,8 +592,12 @@ export function attachMarkRenderer(
 
   const projV = new Vector3();
   const updateLabels = () => {
-    const show = getViewportState().showLabels;
+    const { showLabels, showTelemetry } = getViewportState();
+    const show = (showLabels || showTelemetry) && world.markRoot.visible;
     if (!show) {
+      for (const element of labelEls.values()) {
+        element.style.display = "none";
+      }
       return;
     }
     const cam = world.getActiveCamera();
@@ -600,9 +628,9 @@ export function attachMarkRenderer(
 
   // Hide mark labels when the label overlay is off.
   const unsubscribeLabels = useViewportStore.subscribe((s, prev) => {
-    if (s.showLabels !== prev.showLabels) {
+    if (s.showLabels !== prev.showLabels || s.showTelemetry !== prev.showTelemetry) {
       for (const el of labelEls.values()) {
-        el.style.display = s.showLabels ? "" : "none";
+        el.style.display = s.showLabels || s.showTelemetry ? "" : "none";
       }
     }
   });

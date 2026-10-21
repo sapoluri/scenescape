@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { SceneObjectMark } from "../scene/map/liveMarks";
 import { getViewportState, useViewportStore } from "./store";
-import type { MarkEntity } from "./types";
+import type { MarkEntity, ViewportEntity } from "./types";
 
 /**
  * Live tracked-object marks for the 3D viewport.
@@ -27,6 +27,31 @@ const STALE_AFTER_MS = 5000;
 const PRUNE_INTERVAL_MS = 2000;
 const MIN_MOVE_M = 0.05;
 export const DEFAULT_MARK_COLOR = "#64d2ff";
+
+export function parseRegionDwells(regions: SceneObjectMark["regions"]): NonNullable<MarkEntity["regionDwells"]> {
+  if (!regions || typeof regions !== "object" || Array.isArray(regions)) {
+    return [];
+  }
+  return Object.entries(regions).flatMap(([regionId, value]) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return [];
+    }
+    const { entered, dwell } = value as { entered?: unknown; dwell?: unknown };
+    return entered && typeof dwell === "number" && Number.isFinite(dwell) && dwell >= 0
+      ? [{ regionId, seconds: dwell }]
+      : [];
+  });
+}
+
+export function regionDwellRows(mark: MarkEntity, entities: Record<string, ViewportEntity>) {
+  const candidates = Object.values(entities);
+  return (mark.regionDwells ?? []).map(({ regionId, seconds }) => {
+    const region = candidates.find(entity => entity.type === "region" && entity.id === regionId);
+    const sensor = candidates.find(entity => entity.type === "sensor" &&
+      (entity.id === regionId || entity.name.replace(/\s/g, "_") === regionId));
+    return { regionId, name: region?.name || sensor?.name || regionId, seconds };
+  }).sort((left, right) => left.name.localeCompare(right.name) || left.regionId.localeCompare(right.regionId));
+}
 
 /** Normalize a SceneObjectMark translation (meters, x/y plane) to [x, y]. */
 export function parseMarkPosition(
@@ -74,9 +99,9 @@ export function markKey(id: string | number): string {
   return `${MARK_ID_PREFIX}${id}`;
 }
 
-/** Label text matching legacy 3D UI: `category #objectId`. */
+/** Label text with the same short id used for the track color. */
 export function markLabel(className: string, objectId: string | number): string {
-  return `${className} #${objectId}`;
+  return `${className} ${colorFromTrackId(objectId)}`;
 }
 
 /** Raw tracker id from a `mark:` store key (or pass-through). */
@@ -171,6 +196,7 @@ export function buildMarkEntities(
       position: [x, y, 0],
       heading,
       speed: Math.hypot(dx, dy),
+      regionDwells: parseRegionDwells(m.regions),
     });
   }
   return entities;

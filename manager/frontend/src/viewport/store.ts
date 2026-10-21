@@ -18,6 +18,7 @@ export interface ViewportUiState {
   showLabels: boolean;
   showTrails: boolean;
   showFrustums: boolean;
+  showTelemetry: boolean;
   activeTool: ToolId;
   /**
    * Camera entity ids whose live JPEGs are projected onto the scene map
@@ -114,6 +115,7 @@ function isPoseOnlyPatch(
 
 interface ViewportStore extends ViewportUiState {
   entities: Record<string, ViewportEntity>;
+  typeVisibility: Partial<Record<ViewportEntity["type"], boolean>>;
   /**
    * Bumped on structural (non-mark) entity changes so the three.js layer
    * can reconcile without re-hashing on every live-mark update.
@@ -136,6 +138,7 @@ interface ViewportStore extends ViewportUiState {
   ) => void;
   /** Partial update of one entity. */
   updateEntity: (id: string, patch: Partial<ViewportEntity>) => void;
+  setTypeVisible: (type: ViewportEntity["type"], visible: boolean) => void;
   removeEntity: (id: string) => void;
   /** Batch remove by id. `fromMarks` skips structVersion (live track churn). */
   removeEntities: (
@@ -169,7 +172,7 @@ interface ViewportStore extends ViewportUiState {
   /** Set the Project-all overlay override (does not change per-camera values). */
   setProjectAllOpacity: (opacity: number) => void;
   toggleOverlay: (
-    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums",
+    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums" | "showTelemetry",
   ) => void;
   /**
    * Snapshot the current structural state onto the undo stack. Call BEFORE
@@ -188,6 +191,7 @@ const initialUi: ViewportUiState = {
   showLabels: true,
   showTrails: true,
   showFrustums: true,
+  showTelemetry: false,
   activeTool: "live",
   projectCameraIds: [],
   projectOpacityById: {},
@@ -217,6 +221,7 @@ function structuralSnapshot(
 export const useViewportStore = create<ViewportStore>()((set, get) => ({
   ...initialUi,
   entities: {},
+  typeVisibility: {},
   structVersion: 0,
   poseVersion: 0,
   editFocus: 0,
@@ -252,7 +257,9 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
         }
       }
       for (const e of entities) {
-        next[e.id] = e;
+        next[e.id] = opts?.fromMarks
+          ? { ...e, visible: next[e.id]?.visible ?? s.typeVisibility[e.type] ?? e.visible }
+          : e;
       }
       return {
         entities: next,
@@ -279,6 +286,17 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       };
     }),
   removeEntity: (id) => get().removeEntities([id]),
+  setTypeVisible: (type, visible) =>
+    set((state) => ({
+      typeVisibility: { ...state.typeVisibility, [type]: visible },
+      entities: Object.fromEntries(
+        Object.entries(state.entities).map(([id, entity]) => [
+          id,
+          entity.type === type ? { ...entity, visible } : entity,
+        ]),
+      ),
+      structVersion: state.structVersion + 1,
+    })),
   removeEntities: (ids, opts) =>
     set((s) => {
       if (ids.length === 0) {
@@ -339,6 +357,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
     getPersistState().clearBaselines();
     return set((s) => ({
       entities: {},
+      typeVisibility: {},
       selectedId: null,
       projectCameraIds: [],
       structVersion: s.structVersion + 1,

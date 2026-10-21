@@ -48,26 +48,28 @@ export function ProjectionOpacitySlider({
       onPointerDown={(ev) => ev.stopPropagation()}
     >
       <span className="ss-viewport-bar-label">Overlay</span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={pct}
-        onChange={(ev) => {
-          const next = Number(ev.target.value) / 100;
-          if (projectAll) {
-            getViewportState().setProjectAllOpacity(next);
-          } else if (cameraId) {
-            getViewportState().setProjectOpacity(cameraId, next);
+      <span className="ss-cal-wizard-opacity-track">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={pct}
+          onChange={(ev) => {
+            const next = Number(ev.target.value) / 100;
+            if (projectAll) {
+              getViewportState().setProjectAllOpacity(next);
+            } else if (cameraId) {
+              getViewportState().setProjectOpacity(cameraId, next);
+            }
+          }}
+          aria-label={
+            projectAll
+              ? "Projection opacity override for all cameras"
+              : "Projection opacity"
           }
-        }}
-        aria-label={
-          projectAll
-            ? "Projection opacity override for all cameras"
-            : "Projection opacity"
-        }
-      />
+        />
+      </span>
       <span className="ss-cal-wizard-opacity-val">{pct}%</span>
     </label>
   );

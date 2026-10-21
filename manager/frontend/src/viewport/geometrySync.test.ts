@@ -7,6 +7,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dispatchSpy = vi.fn();
 vi.stubGlobal("document", { getElementById: () => null });
 vi.stubGlobal("window", { dispatchEvent: dispatchSpy });
+vi.stubGlobal(
+  "CustomEvent",
+  class {
+    constructor(
+      public type: string,
+      public init: { detail?: unknown },
+    ) {}
+  },
+);
 
 import {
   resetGeometryModel,
@@ -19,8 +28,9 @@ import {
   seedEntitiesFromGeometry,
   snapshotGeometry,
   writeRegionToModel,
+  writeTripwireToModel,
 } from "./geometrySync";
-import type { RegionEntity } from "./types";
+import type { RegionEntity, TripwireEntity } from "./types";
 
 beforeEach(() => {
   resetGeometryModel();
@@ -50,6 +60,7 @@ describe("seedEntitiesFromGeometry", () => {
   it("maps roi rows to region entities", () => {
     upsertRoiMeta("uuid-1", {
       title: "Dock",
+      color: "#64d2ff",
       points: [
         [0, 0],
         [4, 0],
@@ -61,6 +72,7 @@ describe("seedEntitiesFromGeometry", () => {
     });
     upsertTripMeta("trip-1", {
       title: "Gate",
+      color: "#bf5af2",
       points: [
         [1, 1],
         [5, 5],
@@ -72,6 +84,7 @@ describe("seedEntitiesFromGeometry", () => {
       id: "uuid-1",
       type: "region",
       name: "Dock",
+      color: "#64d2ff",
       min: [0, 0],
       max: [4, 3],
       height: 2.5,
@@ -85,6 +98,7 @@ describe("seedEntitiesFromGeometry", () => {
       name: "Gate",
       a: [1, 1],
       b: [5, 5],
+      color: "#bf5af2",
     });
   });
 });
@@ -103,7 +117,7 @@ describe("writeRegionToModel", () => {
       ],
       min: [2, 2],
       max: [6, 6],
-      height: 1,
+      height: 2.5,
       color: "#30d158",
       volumetric: false,
       bufferSize: 0,
@@ -116,8 +130,48 @@ describe("writeRegionToModel", () => {
       [6, 2],
       [6, 6],
     ]);
+    expect(snap.rois[0].height).toBe(entity.height);
+    expect(snap.rois[0].volumetric).toBe(false);
+    expect(snap.rois[0].color).toBe(entity.color);
+    expect(snap.rois[0].color).toBe(entity.color);
     expect(dispatchSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: "ss-roi-dirty" }),
     );
+  });
+
+  it("persists tripwire display color separately from geometry", () => {
+    const entity: TripwireEntity = {
+      id: "trip-color",
+      type: "tripwire",
+      name: "Colored gate",
+      visible: true,
+      points: [
+        [1, 2],
+        [4, 5],
+      ],
+      a: [1, 2],
+      b: [4, 5],
+      color: "#bf5af2",
+    };
+    writeTripwireToModel(entity);
+    expect(snapshotGeometry().trips[0].color).toBe(entity.color);
+  });
+
+  it("writes tripwire color to the geometry model", () => {
+    const entity: TripwireEntity = {
+      id: "trip-color",
+      type: "tripwire",
+      name: "Colored gate",
+      visible: true,
+      points: [
+        [1, 2],
+        [4, 5],
+      ],
+      a: [1, 2],
+      b: [4, 5],
+      color: "#bf5af2",
+    };
+    writeTripwireToModel(entity);
+    expect(snapshotGeometry().trips[0].color).toBe(entity.color);
   });
 });

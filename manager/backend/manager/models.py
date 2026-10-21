@@ -327,7 +327,8 @@ class Scene(models.Model):
     jdata = []
     for region in self.regions.all():
       rdict = {'title': region.name, 'points': [], 'uuid':str(region.uuid),
-               'volumetric': region.volumetric, 'height': region.height, 'buffer_size': region.buffer_size}
+               'color': region.color, 'volumetric': region.volumetric,
+               'height': region.height, 'buffer_size': region.buffer_size}
       thresholds, range_max = region.get_sectors()
       rdict['sectors'] = {'thresholds':thresholds, 'range_max':range_max}
 
@@ -341,7 +342,8 @@ class Scene(models.Model):
   def tripwireJSON(self):
     jdata = []
     for tripwire in self.tripwires.all():
-      rdict = {'title': tripwire.name, 'points': [], 'uuid':str(tripwire.uuid)}
+      rdict = {'title': tripwire.name, 'points': [], 'uuid':str(tripwire.uuid),
+               'color': tripwire.color}
       for point in tripwire.points.all():
         # FIXME - UI should be handling scaling
         rdict['points'].append([point.x, point.y])
@@ -635,6 +637,8 @@ class Sensor(models.Model):
              'radius': self.singletonsensor.radius,
              'x': self.singletonsensor.map_x,
              'y': self.singletonsensor.map_y,
+             'z': self.singletonsensor.map_z,
+             'color': self.singletonsensor.color,
              'points': []}
     for point in self.singletonsensor.points.all():
       rdict['points'].append([point.x, point.y])
@@ -893,6 +897,8 @@ class Cam(Sensor):
 class SingletonSensor(Sensor):
   map_x = models.FloatField(default=None, null=True, blank=True)
   map_y = models.FloatField(default=None, null=True, blank=True)
+  map_z = models.FloatField(default=0.0)
+  color = models.CharField(max_length=7, default='#bf5af2')
   area = models.CharField(max_length=16, choices=AREA_CHOICES, default='scene')
   radius = models.FloatField(default=None, null=True, blank=True)
   visible = models.BooleanField(default=False)
@@ -961,6 +967,7 @@ class SceneLog(models.Model):
 
 class BoundingBox(models.Model):
   name = models.CharField(max_length=200)
+  color = models.CharField(max_length=7, blank=True, default='')
 
   def boundingBox(self):
     tx = None
