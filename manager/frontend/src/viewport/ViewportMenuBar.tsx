@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChromeBootstrap } from "../chrome/useChromeBootstrap";
+import { useWorkspaceEditing } from "../lib/editMode";
 import { activeNavFromPath } from "../chrome/types";
 import "./ViewportMenuBar.css";
 
@@ -46,6 +47,7 @@ export function ViewportMenuBar({
   mqttConnected = null,
 }: Props) {
   const chrome = useChromeBootstrap();
+  const canEdit = useWorkspaceEditing();
   const [menu, setMenu] = useState<MenuId>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const active = activeNavFromPath(
@@ -272,7 +274,7 @@ export function ViewportMenuBar({
               role="menu"
               hidden={menu !== "admin"}
             >
-              {chrome.isStaff ? (
+              {chrome.isStaff && chrome.isSuperuser && canEdit ? (
                 <>
                   <a
                     className="ss-vmenu-item ss-admin-link"

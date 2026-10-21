@@ -105,7 +105,7 @@ class ListThings(generics.ListAPIView):
 
 class SceneImportAPIView(APIView):
   authentication_classes = [authentication.TokenAuthentication]
-  permission_classes = [permissions.IsAuthenticated]
+  permission_classes = [IsAdminOrReadOnly]
 
   def post(self, request, *args, **kwargs):
     if "zipFile" not in request.FILES:
@@ -691,7 +691,7 @@ class ACLCheck(APIView):
 class GenerateSceneMesh(APIView):
   """POST /api/v1/scene/<uuid>/generate-mesh/ — Token auth (superuser)."""
   authentication_classes = [authentication.TokenAuthentication]
-  permission_classes = [permissions.IsAdminUser]
+  permission_classes = [IsAdminOrReadOnly]
 
   def post(self, request, pk):
     scene = Scene.objects.filter(pk=pk).first()
@@ -712,7 +712,7 @@ class GenerateSceneMesh(APIView):
 class GenerateSceneMeshStatus(APIView):
   """GET /api/v1/scene/<uuid>/generate-mesh-status/?request_id= — Token auth."""
   authentication_classes = [authentication.TokenAuthentication]
-  permission_classes = [permissions.IsAdminUser]
+  permission_classes = [IsAdminOrReadOnly]
 
   def get(self, request, pk):
     scene = Scene.objects.filter(pk=pk).first()

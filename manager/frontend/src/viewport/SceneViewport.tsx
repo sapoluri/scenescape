@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Stats from "three/addons/libs/stats.module.js";
 import { useAppToast } from "../components/ToastProvider";
+import { useWorkspaceEditing, workspaceEditingAllowed } from "../lib/editMode";
 import { saveAllDirtyEntities } from "../lib/entityPersist";
 import type {
   SceneCameraBootstrap,
@@ -117,6 +118,7 @@ function ToolHeader({
   sensors: SceneSensorBootstrap[];
 }) {
   const toast = useAppToast();
+  const canEdit = useWorkspaceEditing();
   const activeTool = useViewportStore((s) => s.activeTool);
   const setTool = useViewportStore((s) => s.setTool);
   const canUndo = useViewportStore((s) => s.past.length > 0);
@@ -155,6 +157,7 @@ function ToolHeader({
   const dirty = dirtyCount > 0;
 
   const onSaveAll = async () => {
+    if (!workspaceEditingAllowed()) return;
     if (saving || !dirty || !authToken || !sceneId) {
       return;
     }
@@ -184,6 +187,10 @@ function ToolHeader({
       }
       setRoiDirty(false);
       setTripDirty(false);
+      if (!result.errors.length) {
+        window.dispatchEvent(new CustomEvent("ss-roi-dirty", { detail: false }));
+        window.dispatchEvent(new CustomEvent("ss-trip-dirty", { detail: false }));
+      }
     } finally {
       setSaving(false);
     }
@@ -202,6 +209,7 @@ function ToolHeader({
       }
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
         ev.preventDefault();
+        if (!workspaceEditingAllowed()) return;
         void onSaveAll();
       }
     };
@@ -221,9 +229,9 @@ function ToolHeader({
   };
 
   return (
-    <ViewportToolbar>
+    <ViewportToolbar label={canEdit ? "Edit tools" : "View tools"}>
       <div className="ss-tools-group" role="group" aria-label="Tools">
-        {TOOLS.map((t) => {
+        {TOOLS.filter(tool => canEdit || tool.id === "live" || tool.id === "measure").map((t) => {
           const disabled =
             !isToolEnabledInScene(t.id, Boolean(sceneId)) ||
             (t.id === "scale" && !scaleEnabled);
@@ -247,6 +255,7 @@ function ToolHeader({
           );
         })}
       </div>
+      {canEdit ? <>
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <div className="ss-tools-group" role="group" aria-label="History">
         <button
@@ -293,6 +302,7 @@ function ToolHeader({
           aria-hidden="true"
         />
       </button>
+      </> : null}
     </ViewportToolbar>
   );
 }

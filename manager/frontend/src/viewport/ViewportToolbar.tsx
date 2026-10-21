@@ -22,7 +22,7 @@ function readLayout(): ToolbarLayout {
   }
 }
 
-export function ViewportToolbar({ children }: { children: ReactNode }) {
+export function ViewportToolbar({ children, label = "Edit tools" }: { children: ReactNode; label?: string }) {
   const [layout, setLayout] = useState(readLayout);
   const contentId = useId();
   const vertical = layout.orientation === "vertical";
@@ -43,7 +43,7 @@ export function ViewportToolbar({ children }: { children: ReactNode }) {
     <div
       className={`ss-viewport-tools is-${layout.orientation}${layout.collapsed ? " is-collapsed" : ""}`}
       role="toolbar"
-      aria-label="Edit tools"
+      aria-label={label}
       aria-orientation={layout.orientation}
     >
       <div className="ss-tools-layout-header" role="group" aria-label="Toolbar layout">

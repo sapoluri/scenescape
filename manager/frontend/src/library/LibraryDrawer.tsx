@@ -197,7 +197,7 @@ export function LibraryDrawer({
         ) : filtered.length === 0 ? (
           <p className="ss-lib-drawer-status">
             {assets.length === 0
-              ? "No classes yet. Create the first one below."
+              ? onSelectAsset ? "No classes yet. Create the first one below." : "No classes available."
               : "No classes match the search."}
           </p>
         ) : (
@@ -207,8 +207,9 @@ export function LibraryDrawer({
                 <button
                   type="button"
                   className="ss-lib-card"
+                  disabled={!onSelectAsset}
                   onClick={() => onSelectAsset?.(a.uid)}
-                  title={`Edit ${a.name}`}
+                  title={onSelectAsset ? `Edit ${a.name}` : a.name}
                 >
                   <span
                     className="ss-lib-card-swatch"
@@ -231,13 +232,13 @@ export function LibraryDrawer({
         )}
       </div>
       <div className="ss-lib-drawer-footer">
-        <button
+        {onSelectAsset ? <button
           type="button"
           className="ss-lib-new-btn"
           onClick={() => onSelectAsset?.(null)}
         >
           + New class
-        </button>
+        </button> : null}
         <span className="ss-lib-hint">
           <kbd>B</kbd> toggles
         </span>

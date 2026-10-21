@@ -10,6 +10,7 @@ import { attachShapeHandles, createShapeHandle, moveShapeVertex } from "./shapeH
 import { getViewportState, useViewportStore } from "./store";
 import type { RegionEntity, SensorEntity, TripwireEntity } from "./types";
 import type { ViewportWorld } from "./world";
+import { useEditModeStore } from "../lib/editMode";
 
 function region(): RegionEntity {
   return {
@@ -65,6 +66,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  useEditModeStore.getState().leaveWorkspace();
   vi.unstubAllGlobals();
 });
 
@@ -99,6 +101,19 @@ function harness(shape: RegionEntity | TripwireEntity | SensorEntity = region())
 }
 
 describe("floor shape handles", () => {
+  it("removes handles immediately in view-only mode and ignores vertex drags", () => {
+    const { scene, pointer } = harness();
+    const handles = scene.getObjectByName("shape-vertex-handles")!;
+    expect(handles.children.length).toBeGreaterThan(0);
+    useEditModeStore.getState().enterWorkspace(false);
+    expect(handles.children).toHaveLength(0);
+    pointer("pointerdown", [0, 0], 1);
+    pointer("pointermove", [2, 2], 1);
+    pointer("pointerup", [2, 2]);
+    const entity = getViewportState().entities["region-1"] as RegionEntity;
+    expect(entity.points[0]).toEqual([0, 0]);
+  });
+
   it("uses circular floor geometry rendered above translucent objects", () => {
     const handle = createShapeHandle("#30d158");
     const fill = handle.children[0] as Mesh;

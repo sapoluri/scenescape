@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { activateSceneTab, tabForSheetAction } from "../lib/sceneTab";
+import { workspaceEditingAllowed } from "../lib/editMode";
 import {
   clearSheetQuery,
   parseSheetQuery,
@@ -27,6 +28,7 @@ export function useSheetFromQuery() {
 
   const open = useCallback(
     (action: Exclude<SheetAction, null>, id: string | null = null) => {
+      if (!workspaceEditingAllowed()) return;
       setSheet({ action, id });
       const tab = tabForSheetAction(action);
       if (tab) activateSceneTab(tab);

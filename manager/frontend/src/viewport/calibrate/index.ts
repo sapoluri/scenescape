@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getViewportState } from "../store";
+import { workspaceEditingAllowed } from "../../lib/editMode";
 import { useVisualizeStore } from "../visualize/visualizeStore";
 import { getCalibrateState, useCalibrateStore } from "./calibrateStore";
 
@@ -11,6 +12,7 @@ export function enterCameraCalibrate(args: {
   sensorId: string;
   cameraName: string;
 }): void {
+  if (!workspaceEditingAllowed()) return;
   const cur = getCalibrateState();
   if (
     cur.active &&

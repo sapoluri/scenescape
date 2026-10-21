@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { api } from "./rest";
+import { assertWorkspaceWriteAllowed } from "./editMode";
 
 const AUTOCALIB_PROXY_BASE = "/api/v1/autocalibration";
 
@@ -43,6 +44,7 @@ export function humanAutocalibMessage(
 export async function registerSceneForAutocalibration(
   sceneId: string,
 ): Promise<{ status?: string; message?: string; sceneId?: string }> {
+  assertWorkspaceWriteAllowed("POST");
   try {
     const resp = await fetch(
       `${AUTOCALIB_PROXY_BASE}/scenes/${encodeURIComponent(sceneId)}/registration`,
@@ -225,6 +227,7 @@ export async function startCameraAutocalibration(
   imageBase64: string,
   intrinsics: number[][],
 ): Promise<{ status?: string; message?: string }> {
+  assertWorkspaceWriteAllowed("POST");
   const resp = await fetch(
     `${AUTOCALIB_PROXY_BASE}/cameras/${encodeURIComponent(cameraUid)}/calibration`,
     {

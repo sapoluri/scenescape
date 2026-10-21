@@ -23,6 +23,7 @@ import {
 } from "../admin/AdminListApp";
 import { loadUiBootstrap, type UiBootstrapPage } from "../lib/uiBootstrap";
 import { SCENE_TAB_EVENT } from "../lib/sceneTab";
+import { useWorkspaceEditing } from "../lib/editMode";
 import "./OpenSceneDialog.css";
 import "./OpenAdminListDialog.css";
 
@@ -121,6 +122,7 @@ export function OpenAdminListDialog({
   onClose,
   refreshToken = 0,
 }: Props) {
+  const canEdit = useWorkspaceEditing();
   const [boot, setBoot] = useState<AdminListBootstrap | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +221,8 @@ export function OpenAdminListDialog({
               {error}
             </p>
           ) : boot ? (
-            <AdminListApp bootstrap={boot} />
+            <AdminListApp bootstrap={canEdit ? boot : { ...boot, isSuperuser: false,
+              primaryAction: undefined, rows: boot.rows.map(row => ({ ...row, actions: [] })) }} />
           ) : null}
         </div>
       </div>

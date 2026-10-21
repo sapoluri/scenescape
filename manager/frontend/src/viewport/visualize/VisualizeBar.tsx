@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useWorkspaceEditing } from "../../lib/editMode";
+
 import { useEffect } from "react";
 import { Button } from "../../components/Button";
 import type { SceneCameraBootstrap } from "../../scene/types";
@@ -25,6 +27,7 @@ export function VisualizeBar({
   isSuperuser = false,
 }: Props): React.JSX.Element {
   const cameraId = useVisualizeStore((s) => s.cameraId);
+  const canEdit = useWorkspaceEditing();
   const cameraName = useVisualizeStore((s) => s.cameraName);
   const exit = useVisualizeStore((s) => s.exit);
   const entities = useViewportStore((s) => s.entities);
@@ -131,7 +134,7 @@ export function VisualizeBar({
             <i className="bi bi-cast" aria-hidden="true" />
             <span>Project</span>
           </Button>
-          {isSuperuser ? (
+          {isSuperuser && canEdit ? (
             <Button
               variant="secondary"
               className="ss-btn--sm"

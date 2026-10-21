@@ -8,6 +8,12 @@ import { useCalibrateStore } from "../viewport/calibrate/calibrateStore";
 import { useViewportStore } from "../viewport/store";
 import { Properties } from "./Properties";
 import type { ManualIntrinsics } from "../viewport/calibrate/types";
+import { useEditModeStore } from "../lib/editMode";
+
+vi.mock("../lib/editMode", async importOriginal => {
+  const original = await importOriginal<typeof import("../lib/editMode")>();
+  return { ...original, useWorkspaceEditing: () => original.workspaceEditingAllowed() };
+});
 
 vi.mock("../viewport/store", async importOriginal => {
   const original = await importOriginal<typeof import("../viewport/store")>();
@@ -26,12 +32,31 @@ vi.mock("../viewport/calibrate/calibrateStore", async importOriginal => {
 });
 
 const originalViewport = useViewportStore.getState();
+const originalEditMode = useEditModeStore.getState();
 afterEach(() => {
+  useEditModeStore.setState(originalEditMode);
   useCalibrateStore.getState().exit();
   useViewportStore.setState(originalViewport);
 });
 
 describe("calibration manual-input controls", () => {
+  it("shows non-editable camera Details but keeps projection available to viewers", () => {
+    useEditModeStore.getState().enterWorkspace(false);
+    useViewportStore.setState({ selectedId: "camera", entities: {
+      camera: { id: "camera", type: "camera", name: "Camera 1", visible: true,
+        position: [0, 0, 3], rotation: [0, 0, 0], restRotation: [0, 0, 0], target: [0, 0, 0],
+        fov: 60, posed: true, color: "#0a84ff" },
+    } });
+    const markup = renderToStaticMarkup(<Properties sceneName="Scene" sceneId="scene" />);
+    expect(markup).toContain('aria-label="Details"');
+    expect(markup).toContain("Camera 1");
+    expect(markup).toContain("Project frame");
+    expect(markup).not.toContain('type="number"');
+    expect(markup).not.toContain("Intrinsics");
+    expect(markup).not.toContain("Save");
+    expect(markup).not.toContain("Calibrate</");
+  });
+
   const states = (["dfov", "focal", "neither"] as ManualIntrinsics[])
     .flatMap(mode => [true, false].map(manualDistortion => ({ mode, manualDistortion })));
   it.each(states)("renders $mode mode with manual distortion=$manualDistortion", ({ mode, manualDistortion }) => {

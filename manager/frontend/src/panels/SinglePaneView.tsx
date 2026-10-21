@@ -17,6 +17,9 @@ import {
 import { LibraryDrawer } from "../library/LibraryDrawer";
 import { MarkEditor } from "../library/MarkEditor";
 import { watchSessionExpiry } from "../lib/session";
+import { useEditModeStore, useWorkspaceEditing } from "../lib/editMode";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { countDirtyPersistable } from "../viewport/persistStore";
 import { useChildStatusMqtt } from "../mqtt/useChildStatusMqtt";
 import type {
   SceneCameraBootstrap,
@@ -178,6 +181,27 @@ export function SinglePaneView({
   sceneChrome = null,
   directoryRefreshToken = 0,
 }: SinglePaneViewProps) {
+  const canEdit = useWorkspaceEditing();
+  const editSurfaceIds = useEditModeStore(state => state.editSurfaceIds);
+  const setEditSurface = useEditModeStore(state => state.setEditSurface);
+  const [editBlocked, setEditBlocked] = useState(false);
+  const [editBlockedReason, setEditBlockedReason] = useState("Save or discard your changes before turning off Edit.");
+  const geometryDirtyRef = useRef({ roi: false, tripwire: false });
+  useLayoutEffect(() => {
+    useEditModeStore.getState().enterWorkspace(isSuperuser);
+    return () => useEditModeStore.getState().leaveWorkspace();
+  }, [isSuperuser]);
+  useEffect(() => {
+    const onDirty = (event: Event) => {
+      geometryDirtyRef.current[event.type === "ss-roi-dirty" ? "roi" : "tripwire"] = Boolean((event as CustomEvent<boolean>).detail);
+    };
+    window.addEventListener("ss-roi-dirty", onDirty);
+    window.addEventListener("ss-trip-dirty", onDirty);
+    return () => {
+      window.removeEventListener("ss-roi-dirty", onDirty);
+      window.removeEventListener("ss-trip-dirty", onDirty);
+    };
+  }, []);
   useEffect(() => watchSessionExpiry(authToken), [authToken]);
   useEffect(() => {
     useLightingStore.getState().setIntensity(DEFAULT_LIGHT_INTENSITY);
@@ -226,6 +250,10 @@ export function SinglePaneView({
   const [editorAsset, setEditorAsset] = useState<string | null | undefined>(
     undefined,
   );
+  useEffect(() => {
+    setEditSurface("mark-editor", editorAsset !== undefined);
+    return () => setEditSurface("mark-editor", false);
+  }, [editorAsset, setEditSurface]);
   const [exportOpen, setExportOpen] = useState(false);
   const [sceneDialogOpen, setSceneDialogOpen] = useState(false);
   const [adminListKind, setAdminListKind] = useState<OpenAdminListKind | null>(
@@ -464,6 +492,32 @@ export function SinglePaneView({
     setAdminListKind("sensors");
   }, []);
 
+  const changeEditMode = (enabled: boolean) => {
+    if (!isSuperuser) return;
+    if (!enabled && useCalibrateStore.getState().active) {
+      setEditBlockedReason("Close calibration before turning off Edit.");
+      setEditBlocked(true);
+      return;
+    }
+    if (!enabled && editSurfaceIds.length > 0) {
+      setEditBlockedReason("Close the active editing panel before turning off Edit.");
+      setEditBlocked(true);
+      return;
+    }
+    if (!enabled && (countDirtyPersistable() > 0 || useCalibrateStore.getState().dirty ||
+      geometryDirtyRef.current.roi || geometryDirtyRef.current.tripwire)) {
+      setEditBlockedReason("Save or discard your changes before turning off Edit.");
+      setEditBlocked(true);
+      return;
+    }
+    if (!enabled) {
+      useCalibrateStore.getState().exit();
+      getViewportState().setTool("live");
+      setEditorAsset(undefined);
+    }
+    useEditModeStore.getState().setEditing(enabled);
+  };
+
   return (
     <div className="ss-single-pane">
       <div className="ss-sp-chrome">
@@ -481,6 +535,8 @@ export function SinglePaneView({
           onModeChange={(m) => setReplayMode(m === "replay")}
           onExportScene={() => setExportOpen(true)}
           sceneChrome={sceneChrome}
+          isSuperuser={isSuperuser}
+          onEditChange={changeEditMode}
         />
       </div>
       <div className="ss-sp-body" ref={bodyRef}>
@@ -616,7 +672,7 @@ export function SinglePaneView({
                     hidden={dockTab !== "outliner" && showTelemetry}
                   >
                     <Outliner
-                      isSuperuser={isSuperuser}
+                      isSuperuser={isSuperuser && canEdit}
                       authToken={authToken}
                       cameras={cameras}
                       sensors={sensors}
@@ -667,7 +723,7 @@ export function SinglePaneView({
                     onKeyDown={onPropsSplitKeyDown}
                   />
                   <div className="ss-sp-dock-props-head">
-                    <span className="ss-sp-dock-props-title">Properties</span>
+                    <span className="ss-sp-dock-props-title">{canEdit ? "Properties" : "Details"}</span>
                     <button
                       type="button"
                       className="ss-sp-dock-props-close"
@@ -753,13 +809,13 @@ export function SinglePaneView({
         onClose={() => setLibraryOpen(false)}
         onOpen={() => setLibraryOpen(true)}
         authToken={authToken}
-        onSelectAsset={(uid) => {
+        onSelectAsset={canEdit ? (uid) => {
           setEditorAsset(uid);
           setLibraryOpen(false);
-        }}
+        } : undefined}
         refreshToken={libraryRefresh}
       />
-      {editorAsset !== undefined && (
+      {canEdit && editorAsset !== undefined && (
         <MarkEditor
           assetId={editorAsset}
           authToken={authToken}
@@ -779,7 +835,7 @@ export function SinglePaneView({
           window.location.assign(`/${uid}/`);
         }}
         authToken={authToken}
-        isSuperuser={isSuperuser}
+        isSuperuser={isSuperuser && canEdit}
       />
       <SceneExportDialog
         open={exportOpen}
@@ -797,6 +853,11 @@ export function SinglePaneView({
         }}
         refreshToken={directoryRefresh}
       />
+      <ConfirmDialog open={editBlocked} title="Unsaved changes" alert
+        confirmLabel="Keep editing" onConfirm={() => setEditBlocked(false)}
+        onCancel={() => setEditBlocked(false)}>
+        <p>{editBlockedReason}</p>
+      </ConfirmDialog>
     </div>
   );
 }

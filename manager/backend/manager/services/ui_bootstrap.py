@@ -126,6 +126,7 @@ def build_chrome_bootstrap(request) -> dict:
     "authenticated": authenticated,
     "username": user.username if authenticated else "",
     "isStaff": bool(authenticated and getattr(user, "is_staff", False)),
+    "isSuperuser": bool(authenticated and getattr(user, "is_superuser", False)),
     "isKubernetes": is_kubernetes,
     "appName": settings.APP_PROPER_NAME,
     "appVersion": settings.APP_VERSION_NUMBER,

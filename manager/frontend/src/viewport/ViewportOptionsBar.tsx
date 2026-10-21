@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect } from "react";
 import { useViewportStore } from "./store";
+import { useWorkspaceEditing } from "../lib/editMode";
 
 export type SceneChromeActions = {
   sceneName: string;
@@ -21,6 +22,8 @@ type Props = {
   onModeChange?: (mode: "live" | "replay") => void;
   onExportScene?: () => void;
   sceneChrome?: SceneChromeActions | null;
+  isSuperuser?: boolean;
+  onEditChange?: (enabled: boolean) => void;
 };
 
 function OverlayCheck({
@@ -90,7 +93,10 @@ export function ViewportOptionsBar({
   onModeChange,
   onExportScene,
   sceneChrome = null,
+  isSuperuser = false,
+  onEditChange,
 }: Props) {
+  const canEdit = useWorkspaceEditing();
   const ortho = useViewportStore((s) => s.ortho);
   const showGrid = useViewportStore((s) => s.showGrid);
   const showLabels = useViewportStore((s) => s.showLabels);
@@ -129,7 +135,7 @@ export function ViewportOptionsBar({
               <i className="bi bi-box-arrow-up" aria-hidden="true" />
               <span className="sr-only">Export</span>
             </button>
-            {sceneChrome.isSuperuser ? (
+            {sceneChrome.isSuperuser && canEdit ? (
               <a
                 className="ss-viewport-bar-btn"
                 id="scene-edit"
@@ -140,7 +146,7 @@ export function ViewportOptionsBar({
                 <i className="bi bi-pencil" aria-hidden="true" />
               </a>
             ) : null}
-            {sceneChrome.isSuperuser && sceneChrome.canDelete ? (
+            {sceneChrome.isSuperuser && canEdit && sceneChrome.canDelete ? (
               <button
                 type="button"
                 className="ss-viewport-bar-btn ss-viewport-bar-btn--danger"
@@ -197,6 +203,9 @@ export function ViewportOptionsBar({
           Ortho
         </button>
       </div>
+      {isSuperuser ? (
+        <OverlayCheck checked={canEdit} onChange={() => onEditChange?.(!canEdit)} label="Edit" title="Enable scene editing" />
+      ) : null}
       <span className="ss-viewport-bar-sep" aria-hidden="true" />
       <div
         className="ss-viewport-overlays"

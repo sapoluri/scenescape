@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useAppToast } from "../components/ToastProvider";
+import { useWorkspaceEditing } from "../lib/editMode";
 import { useChildStatusStore } from "../mqtt/childStatusStore";
 import {
   diagonalFovFromOptics,
@@ -1646,6 +1647,8 @@ export function Properties({
   isSuperuser?: boolean;
 }) {
   const selectedId = useViewportStore((s) => s.selectedId);
+  const canEdit = useWorkspaceEditing();
+  const projectedCameraIds = useViewportStore(s => s.projectCameraIds);
   const entities = useViewportStore((s) => s.entities);
   const e = selectedId ? entities[selectedId] : undefined;
   const camBoot =
@@ -1658,6 +1661,30 @@ export function Properties({
           (c) => c.id === e.id || c.restUid === e.id || c.restUid === e.restUid,
         )
       : undefined;
+
+  if (!canEdit) {
+    return (
+      <div className="ss-props" aria-label="Details">
+        {!e ? <EmptyProps sceneName={sceneName} /> : <>
+          <ReadField label="Name" value={e.name} />
+          <ReadField label="Type" value={e.type} />
+          {"position" in e && e.type !== "mark" ? <ReadField label="Position" value={e.position.map(value => fmt(value, 3)).join(", ")} /> : null}
+          {"rotation" in e ? <ReadField label="Rotation" value={e.rotation.map(value => fmt(value, 2)).join(", ")} /> : null}
+          {e.type === "mark" ? <MarkProps e={e} /> : null}
+          {e.type === "region" || e.type === "tripwire" ? <ReadField label="Points" value={String(e.points.length)} /> : null}
+          {e.type === "camera" ? <>
+            <ReadField label="Pose" value={e.posed ? "Calibrated" : "Unset"} />
+            <label className="ss-prop-check">
+              <input type="checkbox" checked={projectedCameraIds.includes(e.id)}
+                disabled={!e.posed} onChange={event => getViewportState().setProjectCameraEnabled(e.id, event.target.checked)} />
+              Project frame
+            </label>
+            <ProjectionOpacitySlider cameraId={e.id} />
+          </> : null}
+        </>}
+      </div>
+    );
+  }
 
   return (
     <div className="ss-props">

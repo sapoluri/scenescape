@@ -63,11 +63,31 @@ entity CRUD; it does not define island bootstrap or MQTT UI topics.
 
 Manager pages load chrome via the bootstrap API (no embedded `json_script`).
 
-- `authenticated`, `username`, `isStaff`, `isKubernetes`
+- `authenticated`, `username`, `isStaff`, `isSuperuser`, `isKubernetes`
 - `appName`, `appVersion`, `appGitCommit`, `docsVersion`
 - `urls` `{ home, scenes, cameras, sensors, models, assets, admin,
   signOut, docs, support, intel, intelLogo }`
 - `activeNav?` — `scenes` \| `cameras` \| `sensors` \| `models` \| `assets`
+
+#### Workspace editing and viewing
+
+The Edit checkbox beside Persp/Ortho is visible only to superusers. Turning
+it off enters view-only mode for the current workspace; non-superusers
+always use that interface. Unsaved configuration changes must be saved or
+discarded before leaving Edit mode. This is a browser interaction mode,
+not a replacement for server authorization or a database preference.
+
+View-only mode retains scene navigation, selection/Details, measurement,
+visibility, camera previews/projection, replay, overlays, smoothing, local
+lighting, panel layout, and scene archive export. It removes configuration
+editors, calibration, creation/import, delete/save/history/transform tools,
+and administration entry points. Workspace JSON/form writes and editing
+shortcuts are guarded independently of button visibility.
+
+Configuration writes, including scene import and mesh generation, require
+`is_superuser` on the backend; `is_staff` alone is insufficient. Authenticated
+safe reads remain permitted. Scene archive export uses read requests and
+creates the archive in the browser, so it remains available in view-only mode.
 
 #### Host-independent bootstrap API
 

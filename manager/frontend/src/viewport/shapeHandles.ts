@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useEditModeStore, workspaceEditingAllowed } from "../lib/editMode";
+
 import {
   CircleGeometry,
   DoubleSide,
@@ -162,7 +164,7 @@ export function attachShapeHandles(world: ViewportWorld): () => void {
     const next = selected?.type === "region" || selected?.type === "tripwire" ||
       (selected?.type === "sensor" && selected.areaMode === "poly" && selected.points.length >= 3)
       ? selected : null;
-    const enabled = !!next && next.visible !== false &&
+    const enabled = workspaceEditingAllowed() && !!next && next.visible !== false &&
       !useCalibrateStore.getState().active && !CREATION_TOOLS.includes(state.activeTool);
     if (next === previousShape && enabled === previousEnabled) {
       return;
@@ -287,7 +289,9 @@ export function attachShapeHandles(world: ViewportWorld): () => void {
   window.addEventListener("keydown", onKey, true);
   world.onFrame.add(layout);
   sync();
+  const unsubscribeEditMode = useEditModeStore.subscribe(sync);
   return () => {
+    unsubscribeEditMode();
     unsubscribe();
     unsubscribeCalibration();
     endDrag(true);

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { handleExpiredSession, tokenAuthHeaders } from "./session";
+import { assertWorkspaceWriteAllowed } from "./editMode";
 
 export type RestError = {
   status: number;
@@ -59,6 +60,7 @@ export async function restJson<T>(
   token: string,
   body?: unknown,
 ): Promise<T> {
+  assertWorkspaceWriteAllowed(method);
   const resp = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: "same-origin",
@@ -85,6 +87,7 @@ export async function restForm<T>(
   token: string,
   form: FormData,
 ): Promise<T> {
+  assertWorkspaceWriteAllowed(method);
   const resp = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: "same-origin",

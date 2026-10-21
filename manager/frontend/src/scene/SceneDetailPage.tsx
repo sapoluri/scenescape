@@ -10,6 +10,7 @@ import { SinglePaneView } from "../panels/SinglePaneView";
 import { GeometryBootstrap } from "./GeometryBootstrap";
 import { SceneWorkspaceSheets } from "../sheets/SceneWorkspaceSheets";
 import { deleteViaRest } from "../lib/restDelete";
+import { workspaceEditingAllowed } from "../lib/editMode";
 import { persistSceneGeometry } from "../lib/roiPersist";
 import { attachTelemetryCallbacks, useMqttConnected, useCameraRates } from "./useLiveChrome";
 import type { SceneDetailBootstrap } from "./types";
@@ -82,7 +83,7 @@ function SceneDetailInner({ bootstrap }: Props) {
   }, []);
 
   const confirmSceneDelete = useCallback(async () => {
-    if (!urls.sceneDelete) {
+    if (!urls.sceneDelete || !workspaceEditingAllowed()) {
       return;
     }
     setSceneDeleteBusy(true);

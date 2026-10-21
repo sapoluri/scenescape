@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { tokenAuthHeaders } from "./session";
+import { assertWorkspaceWriteAllowed } from "./editMode";
 
 const API_BASE = "/api/v1";
 
@@ -9,6 +10,7 @@ export async function startMeshGeneration(
   authToken: string,
   sceneId: string,
 ): Promise<string> {
+  assertWorkspaceWriteAllowed("POST");
   const resp = await fetch(
     `${API_BASE}/scene/${encodeURIComponent(sceneId)}/generate-mesh/`,
     {

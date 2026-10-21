@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useWorkspaceEditing, workspaceEditingAllowed } from "../lib/editMode";
+
 import {
   useCallback,
   useEffect,
@@ -253,6 +255,7 @@ function OutlinerRow({
   const selected = selectedId === entity.id;
   const rowRef = useRef<HTMLDivElement>(null);
   const camera = entity.type === "camera" ? (entity as CameraEntity) : null;
+  const canEdit = useWorkspaceEditing();
   const posed = Boolean(camera?.posed);
 
   useEffect(() => {
@@ -308,7 +311,7 @@ function OutlinerRow({
         />
       )}
       {entity.type === "child" && <ChildStatusBadge entity={entity} />}
-      {entity.type === "child" && entity.editHref ? (
+      {canEdit && entity.type === "child" && entity.editHref ? (
         <a
           className="ss-outliner-edit"
           href={entity.editHref}
@@ -342,7 +345,7 @@ function OutlinerRow({
           <i className="bi bi-cast" aria-hidden="true" />
         </button>
       ) : null}
-      {camera && isSuperuser && cameraCard ? (
+      {canEdit && camera && isSuperuser && cameraCard ? (
         <button
           type="button"
           className="ss-outliner-row-action"
@@ -360,7 +363,7 @@ function OutlinerRow({
           <i className="bi bi-bullseye" aria-hidden="true" />
         </button>
       ) : null}
-      {deletable ? (
+      {canEdit && deletable ? (
         <button
           type="button"
           className="ss-outliner-delete"
@@ -424,6 +427,7 @@ export function Outliner({
   previewOpen = false,
   onPreviewOpenChange,
 }: OutlinerProps) {
+  const canEdit = useWorkspaceEditing();
   const toast = useAppToast();
   const entities = useViewportStore((s) => s.entities);
   const lightIntensity = useLightingStore((s) => s.intensity);
@@ -473,6 +477,7 @@ export function Outliner({
 
   const requestDelete = useCallback(
     (entity: ViewportEntity) => {
+      if (!workspaceEditingAllowed()) return;
       if (
         !canDeleteEntity(entity, cameras, sensors, children, isSuperuser)
       ) {
@@ -514,7 +519,7 @@ export function Outliner({
   }, [requestDelete]);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) {
+    if (!deleteTarget || !workspaceEditingAllowed()) {
       return;
     }
     setDeleteBusy(true);
@@ -592,8 +597,8 @@ export function Outliner({
 
   const renderGroup = ({ type, label, addTool, addHref, addLabel }: (typeof GROUPS)[number]) => {
         const items = Object.values(entities).filter((e) => e.type === type);
-        const showSheetAdd = Boolean(isSuperuser && addHref);
-        const showToolAdd = Boolean(addTool);
+        const showSheetAdd = Boolean(isSuperuser && canEdit && addHref);
+        const showToolAdd = Boolean(canEdit && addTool);
         if (type !== "mark" && items.length === 0 && !showSheetAdd && !showToolAdd) {
           return null;
         }

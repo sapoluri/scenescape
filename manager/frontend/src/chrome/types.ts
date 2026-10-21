@@ -13,6 +13,7 @@ export type ChromeBootstrap = {
   authenticated: boolean;
   username: string;
   isStaff: boolean;
+  isSuperuser?: boolean;
   isKubernetes: boolean;
   appName: string;
   appVersion: string;

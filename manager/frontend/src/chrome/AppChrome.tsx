@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AboutModal } from "./AboutModal";
 import { NavTrailingControls } from "./NavTrailingControls";
+import { useWorkspaceEditing } from "../lib/editMode";
 import {
   activeNavFromPath,
   type ChromeActiveNav,
@@ -26,6 +27,7 @@ type Props = {
  * Open / Help / Admin / brand live on the viewport menu bar instead.
  */
 export function AppChrome({ bootstrap }: Props) {
+  const canEdit = useWorkspaceEditing();
   const active = useMemo(
     () => bootstrap.activeNav ?? activeNavFromPath(window.location.pathname),
     [bootstrap.activeNav],
@@ -217,7 +219,7 @@ export function AppChrome({ bootstrap }: Props) {
                     className="dropdown-menu dropdown-menu-right"
                     aria-labelledby="navbar-username"
                   >
-                    {bootstrap.isStaff ? (
+                    {bootstrap.isStaff && bootstrap.isSuperuser && canEdit ? (
                       <>
                         <a
                           className="dropdown-item ss-admin-link"

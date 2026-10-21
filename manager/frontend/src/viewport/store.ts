@@ -10,6 +10,7 @@ import {
 import { getPersistState } from "./persistStore";
 import type { ToolId, ViewportEntity, ViewPreset } from "./types";
 import { readSmoothTracksPreference, writeSmoothTracksPreference } from "./trackSmoothing";
+import { workspaceEditingAllowed } from "../lib/editMode";
 
 export interface ViewportUiState {
   selectedId: string | null;
@@ -377,7 +378,10 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       }
       return { selectedId: id, activeTool: "live" };
     }),
-  setTool: (activeTool) => set({ activeTool }),
+  setTool: (activeTool) => {
+    if (!workspaceEditingAllowed() && activeTool !== "live" && activeTool !== "measure") return;
+    set({ activeTool });
+  },
   beginEditing: (id) =>
     set((s) => ({
       selectedId: id,
@@ -463,6 +467,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
       future: [],
     })),
   undo: () => {
+    if (!workspaceEditingAllowed()) return;
     const s = get();
     const prev = s.past[s.past.length - 1];
     if (!prev) {
@@ -488,6 +493,7 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
     });
   },
   redo: () => {
+    if (!workspaceEditingAllowed()) return;
     const s = get();
     const nextSnap = s.future[s.future.length - 1];
     if (!nextSnap) {

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+import { useEditModeStore, useWorkspaceEditing, workspaceEditingAllowed } from "../lib/editMode";
+
 import {
   useCallback,
   useEffect,
@@ -90,12 +92,26 @@ export function SceneWorkspaceSheets({
   onDirectoryChanged,
 }: Props) {
   const { sheet, open, close } = useSheetFromQuery();
+  const canEdit = useWorkspaceEditing();
+  const setEditSurface = useEditModeStore(state => state.setEditSurface);
+  const editSurfaceOpen = canEdit && [
+    "cam-create", "cam-edit", "sensor-create", "sensor-edit",
+    "child-create", "child-edit", "scene-manage",
+  ].includes(sheet.action || "");
+  useEffect(() => {
+    setEditSurface("workspace-sheet", editSurfaceOpen);
+    return () => setEditSurface("workspace-sheet", false);
+  }, [editSurfaceOpen, setEditSurface]);
+  useEffect(() => {
+    if (!canEdit && sheet.action) close();
+  }, [canEdit, sheet.action, close]);
 
   const openSheet = useCallback(
     (action: Exclude<SheetAction, null>, id: string | null = null) => {
+      if (!isSuperuser || !workspaceEditingAllowed()) return;
       open(action, id);
     },
-    [open],
+    [open, isSuperuser],
   );
 
   const closeSheet = useCallback(() => {
@@ -287,7 +303,7 @@ export function SceneWorkspaceSheets({
     close();
   }, [isSuperuser, sheet.action, sheet.id, camByPk, camBySensorId, close]);
 
-  if (!isSuperuser) {
+  if (!isSuperuser || !canEdit) {
     return null;
   }
 

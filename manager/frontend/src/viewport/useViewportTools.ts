@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from "react";
 import { useAppToast } from "../components/ToastProvider";
+import { useWorkspaceEditing, workspaceEditingAllowed } from "../lib/editMode";
 import {
   BufferGeometry,
   Euler,
@@ -188,6 +189,7 @@ interface Draft {
 
 /** Selected poly sensor waiting for (or mid-draw) floor vertices. */
 function sensorNeedsPolyDraw(): SensorEntity | null {
+  if (!workspaceEditingAllowed()) return null;
   const s = getViewportState();
   const e = s.selectedId ? s.entities[s.selectedId] : undefined;
   if (!e || e.type !== "sensor" || e.areaMode !== "poly") {
@@ -200,8 +202,15 @@ function sensorNeedsPolyDraw(): SensorEntity | null {
 }
 
 export function useViewportTools(world: ViewportWorld | null): void {
+  const canEdit = useWorkspaceEditing();
   useEffect(() => world ? attachShapeHandles(world) : undefined, [world]);
   const draftRef = useRef<Draft | null>(null);
+  useEffect(() => {
+    if (canEdit || !world || !draftRef.current) return;
+    world.scene.remove(draftRef.current.preview);
+    disposeGroup(draftRef.current.preview);
+    draftRef.current = null;
+  }, [canEdit, world]);
   const finishDraftRef = useRef<(() => void) | null>(null);
   const measureRef = useRef<{
     /** First floor point (set on first click). */
@@ -752,7 +761,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         showToast(message, "info", { timeoutMs: keepVisible ? 0 : undefined });
       },
     );
-    if (selectedSensorPolyPending) {
+    if (canEdit && selectedSensorPolyPending) {
       persistent = true;
       world.host.setAttribute("data-placement", "sensor-poly");
       showToast(
@@ -767,7 +776,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
         dismissToast();
       }
     };
-  }, [world, activeTool, selectedSensorPolyPending, showToast, dismissToast]);
+  }, [world, activeTool, selectedSensorPolyPending, showToast, dismissToast, canEdit]);
   // Calibrate uses double-click to add points; left-drag must still orbit.
   const calActive = useCalibrateStore((s) => s.active);
 
@@ -787,9 +796,10 @@ export function useViewportTools(world: ViewportWorld | null): void {
     const id = getViewportState().selectedId;
     const entity = id ? getViewportState().entities[id] : undefined;
     const nodes = id ? world.entityNodes.get(id) : undefined;
-    const drawingSensorPoly = selectedSensorPolyPending;
+    const drawingSensorPoly = canEdit && selectedSensorPolyPending;
 
     const canTransform =
+      canEdit &&
       !calActive &&
       nodes &&
       entity &&
@@ -860,6 +870,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
     structVersion,
     calActive,
     selectedSensorPolyPending,
+    canEdit,
   ]);
 
   // Drop an in-progress sensor polygon draft when selection / mode changes.
@@ -924,6 +935,11 @@ export function useViewportTools(world: ViewportWorld | null): void {
       }
       const s = getViewportState();
       const mod = ev.ctrlKey || ev.metaKey;
+      const keyName = ev.key.toLowerCase();
+      if (!workspaceEditingAllowed() && (
+        (mod && ["z", "y", "s"].includes(keyName)) ||
+        ["w", "e", "r", "g", "t", "c", "s", "delete", "backspace", "enter"].includes(keyName)
+      )) return;
       if (mod && ev.key.toLowerCase() === "z") {
         ev.preventDefault();
         if (ev.shiftKey) {
