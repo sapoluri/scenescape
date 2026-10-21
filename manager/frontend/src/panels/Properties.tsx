@@ -906,11 +906,11 @@ function CameraProps({
       </div>
       {optics ? (
         <>
+          <span className="ss-prop-section">Intrinsics</span>
           {calibrating ? (
-            <fieldset className="ss-prop-manual-intrinsics">
-              <legend>Manually set:</legend>
+            <fieldset className="ss-prop-manual-intrinsics" aria-label="Intrinsics mode">
               {([
-                ["dfov", "dFOV"], ["focal", "fx/fy"], ["neither", "Neither"],
+                ["neither", "Auto"], ["dfov", "dFOV"], ["focal", "fx/fy"],
               ] as [ManualIntrinsics, string][]).map(([mode, label]) => (
                 <label key={mode}>
                   <input
@@ -921,7 +921,6 @@ function CameraProps({
                     onChange={() => setManualIntrinsics(mode)}
                   />
                   <span>{label}</span>
-                  {mode === "neither" ? <small>(requires 6+ point pairs)</small> : null}
                 </label>
               ))}
             </fieldset>
@@ -933,7 +932,6 @@ function CameraProps({
             readOnly={!calibrating || manualIntrinsics !== "dfov"}
             onCommit={onFovCommit}
           />
-          <span className="ss-prop-section">Intrinsics (px)</span>
           <div className="ss-prop-grid2">
             <NumField
               label="fx"
@@ -970,17 +968,14 @@ function CameraProps({
               <label>
                 <input
                   type="checkbox"
-                  aria-label="Manually set distortion"
-                  checked={calibrationLocks.k1}
-                  onChange={event => setOpticsLock("k1", event.target.checked)}
+                  aria-label="Auto distortion"
+                  checked={!calibrationLocks.k1}
+                  onChange={event => setOpticsLock("k1", !event.target.checked)}
                 />
-                <span>Manually set</span>
+                <span>Auto</span>
               </label>
             ) : null}
           </div>
-          {calibrating && !calibrationLocks.k1 ? (
-            <small className="ss-prop-estimation-requirement">Automatic k1 (requires 8+ point pairs)</small>
-          ) : null}
           <div className="ss-prop-grid3">
             <NumField
               label="k1"

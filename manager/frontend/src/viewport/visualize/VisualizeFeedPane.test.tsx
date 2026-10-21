@@ -20,14 +20,18 @@ vi.mock("./useLiveCameraImage", () => ({
 }));
 
 describe("active camera telemetry", () => {
-  it.each([false, true])("matches Telemetry=%s beneath the active image", enabled => {
+  it.each([false, true])("matches Telemetry=%s in the header without repeating the camera name", enabled => {
     state.showTelemetry = enabled;
     const markup = renderToStaticMarkup(<VisualizeFeedPane cameraRates={{ camera1: "10.20 FPS" }} />);
     expect(markup.includes('aria-label="Active camera telemetry"')).toBe(enabled);
     expect(markup.includes("10.20 FPS")).toBe(enabled);
     expect(markup).not.toContain("FPS fps");
+    expect(markup.match(/Camera 1/g)).toHaveLength(1);
+    expect(markup).not.toContain("ss-viz-feed-telemetry");
     if (enabled) {
-      expect(markup.indexOf('class="ss-viz-feed-telemetry"')).toBeGreaterThan(markup.indexOf('class="ss-viz-feed-img"'));
+      const header = markup.match(/<div class="ss-viz-feed-bar">[\s\S]*?<\/div>/)![0];
+      expect(header).toContain('class="ss-viz-feed-fps"');
+      expect(header).toContain("10.20 FPS");
     }
   });
 });

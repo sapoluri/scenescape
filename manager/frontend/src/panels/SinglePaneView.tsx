@@ -42,7 +42,7 @@ import { OpenSceneDialog, useOpenSceneHotkey } from "./OpenSceneDialog";
 import { LivePreviewPane, ProjectionFeedHost } from "./LivePreviewPane";
 import { Outliner } from "./Outliner";
 import { Properties } from "./Properties";
-import { clampDockWidth, DEFAULT_DOCK_WIDTH, readDockWidth, writeDockWidth } from "./dockSizing";
+import { clampDockWidth, readDockWidth, writeDockWidth } from "./dockSizing";
 import { Telemetry } from "./Telemetry";
 import { ReplayPanel } from "../replay/ReplayPanel";
 import "./Outliner.css";
@@ -317,14 +317,6 @@ export function SinglePaneView({
     setResizingDock(true);
   };
 
-  const onDockResizeKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
-    event.preventDefault();
-    applyDockWidth(event.key === "Home" ? DEFAULT_DOCK_WIDTH :
-      dockWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
-    writeDockWidth(dockWidthRef.current);
-  };
-
   const applyPreviewHeight = useCallback((clientY: number) => {
     const main = dockMainRef.current;
     if (!main) {
@@ -448,12 +440,15 @@ export function SinglePaneView({
 
   const pickTab = useCallback(
     (id: DockTab) => {
+      if (id === "telemetry" && !showTelemetry) {
+        return;
+      }
       setDockTab(id);
       if (dockCollapsed) {
         setCollapsed(false);
       }
     },
-    [dockCollapsed, setCollapsed],
+    [dockCollapsed, setCollapsed, showTelemetry],
   );
 
   const openSceneDialog = useCallback(() => {
@@ -532,32 +527,27 @@ export function SinglePaneView({
               aria-label="Resize side panel"
               aria-valuenow={Math.round(dockWidth)}
               title="Resize side panel"
-              tabIndex={0}
               onPointerDown={onDockResizeDown}
               onPointerMove={onSplitPointerMove}
               onPointerUp={onSplitPointerUp}
               onPointerCancel={onSplitPointerUp}
-              onKeyDown={onDockResizeKey}
-            />
+            >
+              <i className="bi bi-three-dots-vertical" aria-hidden="true" />
+            </div>
           ) : null}
+          <button
+            type="button"
+            className="ss-sp-dock-props-close ss-sp-dock-collapse"
+            aria-label={dockCollapsed ? "Expand panel" : "Collapse panel"}
+            aria-expanded={!dockCollapsed}
+            aria-controls="ss-sp-dock-main"
+            title={dockCollapsed ? "Expand panel" : "Collapse panel"}
+            onClick={() => setCollapsed(!dockCollapsed)}
+          >
+            <i className={`bi ${dockCollapsed ? "bi-chevron-left" : "bi-chevron-right"}`} aria-hidden="true" />
+          </button>
           <div className="ss-sp-dock-rail">
             <div className="ss-sp-dock-rail-inner">
-              <button
-                type="button"
-                className="ss-sp-dock-toggle"
-                aria-expanded={!dockCollapsed}
-                aria-controls="ss-sp-dock-main"
-                title={dockCollapsed ? "Expand panel" : "Collapse panel"}
-                onClick={() => setCollapsed(!dockCollapsed)}
-              >
-                <i
-                  className={`bi ${dockCollapsed ? "bi-chevron-left" : "bi-chevron-right"}`}
-                  aria-hidden="true"
-                />
-                <span className="sr-only">
-                  {dockCollapsed ? "Expand panel" : "Collapse panel"}
-                </span>
-              </button>
               {dockCollapsed ? (
                 <div
                   className="ss-sp-dock-rail-tabs"
@@ -565,11 +555,12 @@ export function SinglePaneView({
                   aria-label="Outliner and Telemetry"
                   aria-orientation="vertical"
                 >
-                  {DOCK_TABS.filter(tab => showTelemetry || tab.id !== "telemetry").map((t) => (
+                  {DOCK_TABS.map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       role="tab"
+                      disabled={t.id === "telemetry" && !showTelemetry}
                       aria-selected={dockTab === t.id}
                       className={`ss-sp-dock-rail-tab${dockTab === t.id ? " is-active" : ""}`}
                       onClick={() => pickTab(t.id)}
@@ -584,6 +575,8 @@ export function SinglePaneView({
           </div>
           <div
             id="ss-sp-dock-main"
+            inert={dockCollapsed}
+            aria-hidden={dockCollapsed}
             ref={dockMainRef}
             className={[
               "ss-sp-dock-main",
@@ -595,16 +588,18 @@ export function SinglePaneView({
           >
             <div className="ss-sp-dock-editor" ref={editorRef}>
               <div className="ss-sp-dock-tabs-pane">
+                <div className="ss-sp-dock-header">
                 <div
                   className="ss-sp-dock-tabs"
                   role="tablist"
                   aria-label="Outliner and Telemetry"
                 >
-                  {DOCK_TABS.filter(tab => showTelemetry || tab.id !== "telemetry").map((t) => (
+                  {DOCK_TABS.map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       role="tab"
+                      disabled={t.id === "telemetry" && !showTelemetry}
                       aria-selected={dockTab === t.id}
                       className={`ss-sp-dock-tab${dockTab === t.id ? " is-active" : ""}`}
                       onClick={() => pickTab(t.id)}
@@ -612,6 +607,7 @@ export function SinglePaneView({
                       {t.label}
                     </button>
                   ))}
+                </div>
                 </div>
                 <div className="ss-sp-dock-body">
                   {/* Keep both mounted so MQTT event listeners stay live. */}

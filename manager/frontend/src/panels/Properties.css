@@ -43,13 +43,6 @@
   border: 0;
 }
 
-.ss-prop-manual-intrinsics legend {
-  float: none;
-  margin: 0 0 4px;
-  font-size: 11.5px;
-  color: var(--ss-text-muted);
-}
-
 .ss-prop-manual-intrinsics label,
 .ss-prop-distortion-heading,
 .ss-prop-distortion-heading label {
@@ -67,12 +60,6 @@
   accent-color: var(--ss-brand);
 }
 
-.ss-prop-manual-intrinsics small,
-.ss-prop-estimation-requirement {
-  font-size: 10px;
-  color: var(--ss-text-muted);
-}
-
 .ss-prop-distortion-heading {
   gap: 12px;
 }
@@ -81,11 +68,6 @@
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
-}
-
-.ss-prop-input[readonly] {
-  color: var(--ss-text-muted);
-  cursor: default;
 }
 
 .ss-prop-value {

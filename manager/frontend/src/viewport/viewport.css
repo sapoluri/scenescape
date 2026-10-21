@@ -371,37 +371,122 @@
 
 /* Floating icon rail over the 3D view (Blender-style).
    Keep below `.ss-sp-chrome` / menubar menus (z-index 50). */
-.ss-viewport-tools.is-vertical {
+.ss-viewport-tools {
   position: absolute;
-  left: 12px;
-  top: 12px;
+  left: 0;
+  top: 0;
   z-index: 10;
-  flex-direction: column;
   flex-wrap: nowrap;
   align-items: center;
   width: auto;
-  max-width: none;
-  max-height: calc(100% - 24px);
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   overflow: visible;
   border: 1px solid var(--ss-border, var(--ss-card-border));
-  border-radius: 12px;
-  padding: 6px;
+  border-top: 0;
+  border-left: 0;
+  border-radius: 0;
+  padding: 4px;
   gap: 4px;
-  background: color-mix(in srgb, var(--ss-panel-bg, #1e1e21) 92%, transparent);
+  background: color-mix(in srgb, var(--ss-panel-bg, #1e1e21) 80%, transparent);
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
 }
 
+.ss-viewport-tools:hover,
+.ss-viewport-tools:focus-within {
+  background: var(--ss-panel-bg, #1e1e21);
+}
+
+.ss-viewport-tools.is-vertical,
+.ss-viewport-tools.is-vertical .ss-tools-content,
 .ss-viewport-tools.is-vertical .ss-tools-group {
   flex-direction: column;
+}
+
+.ss-tools-layout-header {
+  display: flex;
+  flex: none;
+  gap: 0;
+}
+
+.ss-viewport-tools.is-horizontal .ss-tools-layout-header {
+  flex-direction: column;
+}
+
+.ss-viewport-tools.is-horizontal {
+  padding-block: 2px;
+}
+
+.ss-tools-layout-button,
+.ss-sp-dock-props-close.ss-sp-dock-collapse {
+  width: 18px;
+  height: 14px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.ss-sp-dock-props-close.ss-sp-dock-collapse .bi {
+  font-size: inherit;
+  line-height: 1;
+}
+
+.ss-tools-layout-button {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--ss-text-muted);
+  cursor: pointer;
+}
+
+.ss-tools-layout-button:hover,
+.ss-tools-layout-button[aria-pressed="true"] {
+  color: var(--ss-text);
+  background: var(--ss-hover-bg);
+}
+
+.ss-tools-layout-button:focus-visible {
+  outline: 1px solid var(--ss-brand);
+  outline-offset: -1px;
+}
+
+:is(.ss-tools-layout-button, .ss-sp-dock-toggle, .ss-sp-dock-props-close, .ss-sp-dock-resize, .ss-live-preview-icon-btn) .bi {
+  opacity: 0.25;
+}
+
+:is(.ss-tools-layout-button, .ss-sp-dock-toggle, .ss-sp-dock-props-close, .ss-sp-dock-resize, .ss-live-preview-icon-btn):is(:hover, :focus-visible) .bi {
+  opacity: 1;
+}
+
+.ss-tools-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ss-tools-content[hidden] {
+  display: none;
+}
+
+.ss-viewport-tools .ss-tools-group {
+  flex: none;
   gap: 2px;
   background: transparent;
   border: none;
   padding: 0;
 }
 
-.ss-viewport-tools.is-vertical .ss-tool-btn {
+.ss-viewport-tools .ss-tool-btn {
   position: relative;
+  flex: none;
   width: 40px;
   height: 40px;
   justify-content: center;
@@ -409,7 +494,7 @@
   border-radius: 8px;
 }
 
-.ss-viewport-tools.is-vertical .ss-tool-btn .bi {
+.ss-viewport-tools .ss-tool-btn .bi {
   display: block;
   font-size: 22px;
   line-height: 1;
@@ -419,32 +504,6 @@
   width: 22px;
   height: 1px;
   align-self: center;
-}
-
-.ss-viewport-tools.is-vertical .ss-tool-btn::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--ss-panel-bg, #1e1e21);
-  color: var(--ss-text, #f5f5f7);
-  border: 1px solid var(--ss-border, var(--ss-card-border));
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.ss-viewport-tools.is-vertical .ss-tool-btn:hover::after,
-.ss-viewport-tools.is-vertical .ss-tool-btn:focus-visible::after {
-  opacity: 1;
 }
 
 .ss-vlabel--entity {

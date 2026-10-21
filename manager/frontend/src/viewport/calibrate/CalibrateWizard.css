@@ -251,10 +251,19 @@
 .ss-viewport.is-calibrating .ss-viewport-split,
 .ss-viewport.is-split .ss-viewport-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+  grid-template-columns: minmax(0, 1fr) 0.6rem minmax(0, var(--ss-camera-feed-width, 42%));
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+.ss-sp-dock-resize.ss-camera-feed-resize {
+  position: relative;
+  inset: auto;
+  width: 0.6rem;
+  box-sizing: border-box;
+  background: var(--ss-panel-bg, #1e1e21);
+  box-shadow: inset -1px 0 var(--ss-border, rgba(120, 120, 128, 0.25));
 }
 
 .ss-viewport.is-calibrating .ss-viewport-split-3d,

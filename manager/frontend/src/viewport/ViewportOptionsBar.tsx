@@ -98,6 +98,7 @@ export function ViewportOptionsBar({
   const setOrtho = useViewportStore((s) => s.setOrtho);
   const toggleOverlay = useViewportStore((s) => s.toggleOverlay);
   const [showTelemetry, toggleTelemetry] = useShowTelemetry();
+  const smoothTracks = useViewportStore((state) => state.smoothTracks);
   const showScene = !emptyScene && sceneChrome;
 
   return (
@@ -225,6 +226,12 @@ export function ViewportOptionsBar({
               onChange={toggleTelemetry}
               label="Telemetry"
               title="Show scene controller rate and camera preview FPS"
+            />
+            <OverlayCheck
+              checked={smoothTracks}
+              onChange={() => toggleOverlay("smoothTracks")}
+              label="Smooth"
+              title="Smooth tracks in viewer only"
             />
           </>
         ) : null}

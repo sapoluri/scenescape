@@ -45,15 +45,23 @@ describe("calibration manual-input controls", () => {
         fov: 60, posed: true, color: "#0a84ff" },
     } });
     const markup = renderToStaticMarkup(<Properties sceneName="Scene" sceneId="scene" />);
-    expect(markup).toContain("Manually set:");
-    expect(markup).toContain("(requires 6+ point pairs)");
+    expect(markup).toContain('aria-label="Intrinsics mode"');
+    expect(markup).not.toContain("<legend>Intrinsics Mode</legend>");
+    expect(markup).not.toContain("Intrinsics (px)");
+    expect(markup.indexOf('class="ss-prop-section">Intrinsics</span>')).toBeLessThan(markup.indexOf('aria-label="Intrinsics mode"'));
+    expect(markup.indexOf('aria-label="Intrinsics mode"')).toBeLessThan(markup.indexOf("Diagonal FOV"));
+    expect(markup.indexOf("Diagonal FOV")).toBeLessThan(markup.indexOf(">fx</label>"));
+    expect(markup).not.toContain("(requires 6+ point pairs)");
     const radios = markup.match(/<input[^>]*type="radio"[^>]*>/g)!;
     expect(radios).toHaveLength(3);
+    expect(radios.map(input => input.match(/value="([^"]+)"/)![1])).toEqual(["neither", "dfov", "focal"]);
+    expect(markup).toContain(">Auto</span>");
     expect(radios.filter(input => input.includes('checked=""'))).toHaveLength(1);
     expect(radios.find(input => input.includes(`value="${mode}"`))).toContain('checked=""');
-    const distortion = markup.match(/<input[^>]*aria-label="Manually set distortion"[^>]*>/)![0];
-    expect(distortion.includes('checked=""')).toBe(manualDistortion);
-    expect(markup.includes("(requires 8+ point pairs)")).toBe(!manualDistortion);
+    const distortion = markup.match(/<input[^>]*aria-label="Auto distortion"[^>]*>/)![0];
+    expect(distortion.includes('checked=""')).toBe(!manualDistortion);
+    expect(markup).not.toContain("Automatic k1");
+    expect(markup).not.toContain("(requires 8+ point pairs)");
     expect(markup).not.toContain("ss-prop-optics-lock");
     const numericInputs = markup.match(/<input[^>]*type="number"[^>]*>/g)!;
     const labels = [...markup.matchAll(/<label for="([^"]+)">([^<]+)<\/label>/g)];

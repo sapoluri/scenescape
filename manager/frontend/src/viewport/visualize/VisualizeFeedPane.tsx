@@ -193,6 +193,11 @@ export function VisualizeFeedPane({ cameraRates = {} }: { cameraRates?: Record<s
           {cameraName || "Camera"} · annotated
         </span>
         <span className="ss-viz-feed-hint">Scroll to zoom · drag to pan</span>
+        {showTelemetry ? (
+          <span className="ss-viz-feed-fps" role="group" aria-label="Active camera telemetry">
+            {formatCameraFps(sensorId ? cameraRates[sensorId] : undefined)}
+          </span>
+        ) : null}
       </div>
       <div
         ref={paneRef}
@@ -225,12 +230,6 @@ export function VisualizeFeedPane({ cameraRates = {} }: { cameraRates?: Record<s
           </p>
         )}
       </div>
-      {showTelemetry ? (
-        <div className="ss-viz-feed-telemetry" role="group" aria-label="Active camera telemetry">
-          <span>{cameraName || "Camera"}</span>
-          <span>{formatCameraFps(sensorId ? cameraRates[sensorId] : undefined)}</span>
-        </div>
-      ) : null}
     </div>
   );
 }

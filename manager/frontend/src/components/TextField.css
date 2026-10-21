@@ -139,6 +139,19 @@ select.ss-select-field {
   background: color-mix(in srgb, var(--ss-surface) 70%, var(--ss-elevated));
 }
 
+input[readonly],
+textarea[readonly],
+.ss-text-field-input[readonly],
+.ss-prop-input[readonly],
+input.form-control[readonly],
+textarea.form-control[readonly] {
+  opacity: 0.6;
+  color: var(--ss-text);
+  background-color: var(--ss-surface);
+  border-color: var(--ss-input-border-subtle);
+  cursor: default;
+}
+
 .ss-color-field-control {
   display: flex;
   align-items: center;

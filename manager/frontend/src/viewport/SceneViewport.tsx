@@ -33,6 +33,8 @@ import {
 import { VisualizeBar } from "./visualize/VisualizeBar";
 import { VisualizeFeedPane } from "./visualize/VisualizeFeedPane";
 import { useVisualizeStore } from "./visualize/visualizeStore";
+import { ViewportToolbar } from "./ViewportToolbar";
+import { CameraFeedSplit } from "./CameraFeedSplit";
 import "./viewport.css";
 import "./calibrate/CalibrateWizard.css";
 import {
@@ -219,12 +221,7 @@ function ToolHeader({
   };
 
   return (
-    <div
-      className="ss-viewport-tools is-vertical"
-      role="toolbar"
-      aria-label="Edit tools"
-      aria-orientation="vertical"
-    >
+    <ViewportToolbar>
       <div className="ss-tools-group" role="group" aria-label="Tools">
         {TOOLS.map((t) => {
           const disabled =
@@ -242,6 +239,7 @@ function ToolHeader({
               aria-disabled={disabled}
               aria-label={t.label}
               data-tip={tip}
+              title={tip}
               aria-pressed={activeTool === t.id}
             >
               <i className={`bi ${t.icon}`} aria-hidden="true" />
@@ -257,6 +255,7 @@ function ToolHeader({
               disabled={!sceneId || !canUndo}
           onClick={undo}
           data-tip="Undo (Ctrl+Z)"
+          title="Undo (Ctrl+Z)"
           aria-label="Undo"
         >
           <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
@@ -267,6 +266,7 @@ function ToolHeader({
               disabled={!sceneId || !canRedo}
           onClick={redo}
           data-tip="Redo (Ctrl+Shift+Z)"
+          title="Redo (Ctrl+Shift+Z)"
           aria-label="Redo"
         >
           <i className="bi bi-arrow-clockwise" aria-hidden="true" />
@@ -279,6 +279,7 @@ function ToolHeader({
             aria-disabled={!sceneId || !dirty || saving || !authToken}
         onClick={() => void onSaveAll()}
         aria-label={saving ? "Saving" : "Save all"}
+        title={saving ? "Saving" : dirty ? "Save all changes" : "Save all"}
         data-tip={
           saving
             ? "Saving?"
@@ -292,7 +293,7 @@ function ToolHeader({
           aria-hidden="true"
         />
       </button>
-    </div>
+    </ViewportToolbar>
   );
 }
 
@@ -513,7 +514,10 @@ export function SceneViewport({
             sensors={sensors}
           />
         ) : null}
-        <div className={splitActive ? "ss-viewport-split" : "ss-viewport-main"}>
+        <CameraFeedSplit
+          active={splitActive}
+          feed={calibrating ? <CalibrateFeedPane /> : <VisualizeFeedPane cameraRates={cameraRates} />}
+        >
           <div
             className={
               splitActive ? "ss-viewport-split-3d" : "ss-viewport-main-3d"
@@ -539,9 +543,7 @@ export function SceneViewport({
             />
             <ViewportPoweredBy />
           </div>
-          {calibrating ? <CalibrateFeedPane /> : null}
-          {visualizing && !calibrating ? <VisualizeFeedPane cameraRates={cameraRates} /> : null}
-        </div>
+        </CameraFeedSplit>
       </div>
     </div>
   );

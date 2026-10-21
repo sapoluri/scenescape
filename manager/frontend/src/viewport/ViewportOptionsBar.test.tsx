@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ViewportOptionsBar } from "./ViewportOptionsBar";
 
 const state = vi.hoisted(() => ({
-  ortho: false, showGrid: true, showLabels: true, showTrails: true, showTelemetry: false,
+  ortho: false, showGrid: true, showLabels: true, showTrails: true, showTelemetry: false, smoothTracks: false,
   setOrtho: () => {}, toggleOverlay: () => {},
 }));
 
@@ -15,6 +15,17 @@ vi.mock("./store", () => ({
 }));
 
 describe("telemetry overlay visibility", () => {
+  it.each([false, true])("shows an independent Smooth checkbox with state=%s", enabled => {
+    state.smoothTracks = enabled;
+    state.showTelemetry = false;
+    const markup = renderToStaticMarkup(<ViewportOptionsBar />);
+    expect(markup).toContain('title="Smooth tracks in viewer only"');
+    expect(markup.indexOf("Telemetry")).toBeLessThan(markup.indexOf("Smooth"));
+    const checkbox = markup.match(/<label[^>]*title="Smooth tracks in viewer only"[\s\S]*?<\/label>/)![0];
+    expect(checkbox.includes('checked=""')).toBe(enabled);
+    expect(checkbox).not.toContain('disabled=""');
+  });
+
   it.each([false, true])("matches scene rate visibility to Telemetry=%s", enabled => {
     state.showTelemetry = enabled;
     const markup = renderToStaticMarkup(<ViewportOptionsBar sceneChrome={{ sceneName: "Queuing", sceneRate: "40.0" }} />);

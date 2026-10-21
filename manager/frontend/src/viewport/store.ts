@@ -9,6 +9,7 @@ import {
 } from "./geometrySync";
 import { getPersistState } from "./persistStore";
 import type { ToolId, ViewportEntity, ViewPreset } from "./types";
+import { readSmoothTracksPreference, writeSmoothTracksPreference } from "./trackSmoothing";
 
 export interface ViewportUiState {
   selectedId: string | null;
@@ -19,6 +20,7 @@ export interface ViewportUiState {
   showTrails: boolean;
   showFrustums: boolean;
   showTelemetry: boolean;
+  smoothTracks: boolean;
   activeTool: ToolId;
   /**
    * Camera entity ids whose live JPEGs are projected onto the scene map
@@ -172,7 +174,7 @@ interface ViewportStore extends ViewportUiState {
   /** Set the Project-all overlay override (does not change per-camera values). */
   setProjectAllOpacity: (opacity: number) => void;
   toggleOverlay: (
-    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums" | "showTelemetry",
+    key: "showGrid" | "showLabels" | "showTrails" | "showFrustums" | "showTelemetry" | "smoothTracks",
   ) => void;
   /**
    * Snapshot the current structural state onto the undo stack. Call BEFORE
@@ -192,6 +194,7 @@ const initialUi: ViewportUiState = {
   showTrails: true,
   showFrustums: true,
   showTelemetry: false,
+  smoothTracks: readSmoothTracksPreference(),
   activeTool: "live",
   projectCameraIds: [],
   projectOpacityById: {},
@@ -449,7 +452,11 @@ export const useViewportStore = create<ViewportStore>()((set, get) => ({
   setProjectAllOpacity: (opacity) =>
     set({ projectAllOpacity: clampOpacity(opacity) }),
   toggleOverlay: (key) =>
-    set((s) => ({ [key]: !s[key] }) as Partial<ViewportStore>),
+    set((s) => {
+      const enabled = !s[key];
+      if (key === "smoothTracks") writeSmoothTracksPreference(enabled);
+      return { [key]: enabled } as Partial<ViewportStore>;
+    }),
   commitHistory: () =>
     set((s) => ({
       past: [...s.past, structuralSnapshot(s.entities)].slice(-HISTORY_LIMIT),

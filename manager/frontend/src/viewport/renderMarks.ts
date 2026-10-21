@@ -35,6 +35,7 @@ import {
 } from "./marks";
 import { getViewportState, useViewportStore } from "./store";
 import type { MarkEntity } from "./types";
+import { createTrackSmoother } from "./trackSmoothing";
 import type { ViewportWorld } from "./world";
 
 /**
@@ -450,6 +451,8 @@ export function attachMarkRenderer(
   const markNodes = new Map<string, MarkNodes>();
   const labelEls = new Map<string, HTMLDivElement>();
   const trailPts = new Map<string, Vector3[]>();
+  const smoother = createTrackSmoother();
+  let smoothingEnabled = getViewportState().smoothTracks;
 
   const ensureLabel = (entity: MarkEntity) => {
     const { id, name } = entity;
@@ -495,7 +498,12 @@ export function attachMarkRenderer(
   };
 
   const reconcileMarks = () => {
-    const { entities, showTrails } = getViewportState();
+    const { entities, showTrails, smoothTracks } = getViewportState();
+    if (smoothingEnabled !== smoothTracks) {
+      smoother.clear();
+      trailPts.clear();
+      smoothingEnabled = smoothTracks;
+    }
     const seen = new Set<string>();
     for (const e of Object.values(entities)) {
       if (e.type !== "mark" || !e.visible) {
@@ -519,7 +527,8 @@ export function attachMarkRenderer(
         // Class / library pose-size-color-model changed, or GLB arrived later.
         rebuildBody(nodes, e, catalog);
       }
-      nodes.group.position.set(e.position[0], e.position[1], 0);
+      const position = smoothTracks ? smoother.update(e.id, e.position) : e.position;
+      nodes.group.position.set(position[0], position[1], 0);
       // When the asset disables velocity heading, keep yaw at 0 (pose holds
       // the class orientation). Unknown classes keep the derived heading.
       // Apply yaw only to posed (body+indicator) so the trail ribbon stays put.
@@ -541,8 +550,9 @@ export function attachMarkRenderer(
       }
       layoutChrome(nodes);
       ensureLabel(e);
-      updateTrail(e.id, e.position[0], e.position[1], showTrails);
+      updateTrail(e.id, position[0], position[1], showTrails);
     }
+    smoother.retain(seen);
     for (const [id, nodes] of markNodes) {
       if (!seen.has(id)) {
         markRoot.remove(nodes.group);
@@ -647,6 +657,8 @@ export function attachMarkRenderer(
       disposeMarkNodes(nodes);
     }
     markNodes.clear();
+    smoother.clear();
+    trailPts.clear();
     for (const el of labelEls.values()) {
       el.remove();
     }

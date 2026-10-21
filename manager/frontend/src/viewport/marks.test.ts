@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MeshBasicMaterial } from "three";
-import { createMarkLabelElement, createTrailRibbon, updateMarkDwellLabel } from "./renderMarks";
+import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from "three";
+import { attachMarkRenderer, createMarkLabelElement, createTrailRibbon, updateMarkDwellLabel } from "./renderMarks";
+import { useViewportStore } from "./store";
+import type { ViewportWorld } from "./world";
 import {
   buildMarkEntities,
   colorFromTrackId,
@@ -15,7 +17,7 @@ import {
   regionDwellRows,
   trackIdFromMarkKey,
 } from "./marks";
-import type { RegionEntity, SensorEntity } from "./types";
+import type { MarkEntity, RegionEntity, SensorEntity } from "./types";
 
 describe("region dwell labels", () => {
   class Element {
@@ -23,8 +25,12 @@ describe("region dwell labels", () => {
     textContent = "";
     hidden = false;
     dataset: Record<string, string> = {};
+    style: Record<string, string> = {};
     children: Element[] = [];
     append(...children: Element[]) { this.children.push(...children); }
+    appendChild(child: Element) { this.children.push(child); return child; }
+    getContext() { return null; }
+    remove() { return; }
     replaceChildren(...children: Element[]) { this.children = children; }
     querySelector(selector: string): Element | null {
       for (const child of this.children) {
@@ -37,6 +43,47 @@ describe("region dwell labels", () => {
   }
 
   afterEach(() => vi.unstubAllGlobals());
+
+  it("smooths rendered positions and trails without changing raw track state", () => {
+    vi.stubGlobal("document", { createElement: () => new Element() });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const initial = useViewportStore.getState();
+    useViewportStore.setState({ entities: {}, smoothTracks: true, showTrails: true });
+    const markRoot = new Group();
+    const world = {
+      markRoot, labelLayer: new Element(), host: { clientWidth: 100, clientHeight: 100 },
+      onFrame: new Set<() => void>(), getActiveCamera: () => new PerspectiveCamera(),
+    } as unknown as ViewportWorld;
+    const cleanup = attachMarkRenderer(world);
+    const sample = (x: number): MarkEntity => ({
+      id: "mark:abcdef123", type: "mark", name: "person #abcdef", visible: true,
+      className: "person", color: "#abcdef", position: [x, 0, 0], heading: 0, speed: 0,
+    });
+    try {
+      useViewportStore.getState().upsertEntities([sample(0)], { fromMarks: true });
+      useViewportStore.getState().upsertEntities([sample(9)], { fromMarks: true });
+      expect(markRoot.children[0].position.x).toBe(2.25);
+      const raw = useViewportStore.getState().entities["mark:abcdef123"] as MarkEntity;
+      expect(raw.position).toEqual([9, 0, 0]);
+      useViewportStore.setState({ showGrid: false });
+      expect(markRoot.children[0].position.x).toBe(2.25);
+      const trail = markRoot.children[0].getObjectByName("trail") as Mesh;
+      expect(trail.geometry.attributes.position.getX(0)).toBeCloseTo(0);
+      useViewportStore.getState().upsertEntities([sample(9)], { fromMarks: true });
+      expect(markRoot.children[0].position.x).toBe(3.9375);
+      useViewportStore.setState({ smoothTracks: false });
+      expect(markRoot.children[0].position.x).toBe(9);
+      useViewportStore.setState({ smoothTracks: true });
+      expect(markRoot.children[0].position.x).toBe(9);
+      useViewportStore.getState().upsertEntities([], { fromMarks: true, removeIds: [raw.id] });
+      expect(markRoot.children).toHaveLength(0);
+      useViewportStore.getState().upsertEntities([sample(30)], { fromMarks: true });
+      expect(markRoot.children[0].position.x).toBe(30);
+    } finally {
+      cleanup();
+      useViewportStore.setState(initial);
+    }
+  });
 
   it("lists named regions independently, updates seconds, and removes stale entries", () => {
     vi.stubGlobal("document", { createElement: () => new Element() });

@@ -275,13 +275,14 @@ export function ViewportMenuBar({
               {chrome.isStaff ? (
                 <>
                   <a
-                    className="ss-vmenu-item"
+                    className="ss-vmenu-item ss-admin-link"
                     id="nav-admin"
                     href={urls.admin}
                     target="admin"
                     role="menuitem"
                   >
-                    Admin
+                    <span>System Administration</span>
+                    <i className="bi bi-box-arrow-up-right" aria-hidden="true" />
                   </a>
                   <div className="ss-vmenu-sep" role="separator" />
                 </>

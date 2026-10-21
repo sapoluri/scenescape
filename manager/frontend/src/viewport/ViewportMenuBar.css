@@ -141,6 +141,20 @@
   font-weight: 600;
 }
 
+.ss-vmenu-item.ss-admin-link,
+.dropdown-item.ss-admin-link {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ss-admin-link .bi-box-arrow-up-right {
+  flex: none;
+  margin-left: auto;
+  position: relative;
+  top: -2px;
+}
+
 .ss-vmenu-sep {
   height: 1px;
   margin: 0.25rem 0;

@@ -220,12 +220,13 @@ export function AppChrome({ bootstrap }: Props) {
                     {bootstrap.isStaff ? (
                       <>
                         <a
-                          className="dropdown-item"
+                          className="dropdown-item ss-admin-link"
                           id="nav-admin"
                           href={urls.admin}
                           target="admin"
                         >
-                          Admin
+                          <span>System Administration</span>{" "}
+                          <i className="bi bi-box-arrow-up-right" aria-hidden="true" />
                         </a>
                         <div className="dropdown-divider" />
                       </>
