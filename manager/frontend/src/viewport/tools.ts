@@ -100,6 +100,26 @@ export const CREATION_TOOLS: ToolId[] = [
   "measure",
 ];
 
+export function attachPlacementGuidance(
+  host: Pick<HTMLElement, "setAttribute" | "removeAttribute">,
+  tool: ToolId,
+  notify: (message: string, persistent: boolean) => void,
+): () => void {
+  if (!CREATION_TOOLS.includes(tool)) {
+    host.removeAttribute("data-placement");
+    return () => undefined;
+  }
+  const persistent = tool === "region" || tool === "tripwire";
+  const message = persistent
+    ? `Continue clicking the scene floor to add ${tool} points. Press Enter to finish.`
+    : tool === "measure"
+      ? "Click the scene floor to start measuring."
+      : `Click the scene floor to place a ${tool}.`;
+  host.setAttribute("data-placement", tool);
+  notify(message, persistent);
+  return () => host.removeAttribute("data-placement");
+}
+
 /** Entities the scale gizmo can edit (planar geometry + scene map GLB). */
 export function entityCanScale(
   entity: { type: ViewportEntityType } | null | undefined,

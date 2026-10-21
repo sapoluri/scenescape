@@ -205,6 +205,10 @@
   height: 100%;
 }
 
+.ss-viewport-host[data-placement] canvas {
+  cursor: crosshair;
+}
+
 .ss-viewport-labels {
   position: absolute;
   inset: 0;

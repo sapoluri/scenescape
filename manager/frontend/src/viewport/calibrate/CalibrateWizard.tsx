@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAppToast } from "../../components/ToastProvider";
 import {
   frameToBase64,
@@ -50,6 +51,9 @@ export function CalibrateWizard({
   const priorPose = useCalibrateStore((s) => s.priorPose);
   const exit = useCalibrateStore((s) => s.exit);
   const undoPoint = useCalibrateStore((s) => s.undoPoint);
+  const redoPoint = useCalibrateStore((s) => s.redoPoint);
+  const canUndo = useCalibrateStore((s) => s.pastPoints.length > 0 && !s.pointEditStart);
+  const canRedo = useCalibrateStore((s) => s.futurePoints.length > 0 && !s.pointEditStart);
   const resetPoints = useCalibrateStore((s) => s.resetPoints);
   const markClean = useCalibrateStore((s) => s.markClean);
   const enter = useCalibrateStore((s) => s.enter);
@@ -57,6 +61,7 @@ export function CalibrateWizard({
     camPoints.length === mapPoints.length ? camPoints.length : 0;
   const hasPoints = camPoints.length > 0 || mapPoints.length > 0;
   const [busy, setBusy] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoReady, setAutoReady] = useState(false);
@@ -95,12 +100,18 @@ export function CalibrateWizard({
   };
 
   const onExit = () => {
-    if (dirty && !window.confirm("Discard unsaved calibration changes?")) {
+    if (dirty) {
+      setConfirmExit(true);
       return;
     }
     restorePrior();
     exit();
   };
+
+  const confirmExitRef = useRef(confirmExit);
+  confirmExitRef.current = confirmExit;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
 
   const onAutoCalibrate = async () => {
     if (!sensorId || !optics || autoBusy) {
@@ -222,13 +233,12 @@ export function CalibrateWizard({
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        onExit();
+      if (ev.key === "Escape" && !confirmExitRef.current) {
+        onExitRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- exit once
   }, []);
 
   const stepLabel = updatingPose
@@ -292,12 +302,23 @@ export function CalibrateWizard({
         <div className="ss-cal-wizard-buttons">
           <Button
             variant="secondary"
-            className="ss-btn--sm"
-            disabled={!hasPoints || busy}
+            className="ss-btn--sm ss-cal-wizard-history"
+            disabled={!canUndo || busy || autoBusy}
             onClick={undoPoint}
-            title="Undo last point"
+            title="Undo calibration edit"
+            aria-label="Undo calibration edit"
           >
-            Undo
+            <i className="bi bi-arrow-counterclockwise" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="secondary"
+            className="ss-btn--sm ss-cal-wizard-history"
+            disabled={!canRedo || busy || autoBusy}
+            onClick={redoPoint}
+            title="Redo calibration edit"
+            aria-label="Redo calibration edit"
+          >
+            <i className="bi bi-arrow-clockwise" aria-hidden="true" />
           </Button>
           <Button
             variant="secondary"
@@ -321,7 +342,7 @@ export function CalibrateWizard({
           </Button>
           <Button
             variant="primary"
-            className={`ss-btn--sm${dirty && pairCount >= 4 ? " ss-btn--dirty" : ""}`}
+            className={`ss-btn--sm ss-cal-wizard-save${dirty && pairCount >= 4 ? " ss-btn--dirty" : ""}`}
             disabled={!canSave}
             onClick={onSave}
             title={
@@ -333,7 +354,7 @@ export function CalibrateWizard({
             }
           >
             <i className="bi bi-check-lg" aria-hidden="true" />
-            {busy ? "Saving…" : savedFlash ? "Saved" : "Save"}
+            <span>{busy ? "Saving…" : savedFlash ? "Saved" : "Save"}</span>
           </Button>
           <button
             type="button"
@@ -346,6 +367,20 @@ export function CalibrateWizard({
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmExit}
+        title="Discard calibration changes?"
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onConfirm={() => {
+          setConfirmExit(false);
+          restorePrior();
+          exit();
+        }}
+        onCancel={() => setConfirmExit(false)}
+      >
+        <p>Your calibration changes have not been saved.</p>
+      </ConfirmDialog>
     </div>
   );
 }

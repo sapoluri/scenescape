@@ -207,6 +207,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
       CALIBRATION_POINT_HIT_PX / (baseFitRef.current * viewRef.current.scale),
     );
     if (idx >= 0) {
+      useCalibrateStore.getState().beginPointEdit();
       dragRef.current = { kind: "point", index: idx };
       setCursor("grabbing");
     } else {
@@ -257,6 +258,7 @@ export function CalibrateFeedPane(): React.JSX.Element {
     if (!dragRef.current) {
       return;
     }
+    if (dragRef.current.kind === "point") useCalibrateStore.getState().endPointEdit();
     dragRef.current = null;
     const [x, y] = clientToImage(ev.clientX, ev.clientY);
     setCursor(nearestCamIndex(

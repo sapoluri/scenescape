@@ -57,6 +57,12 @@ const GROUPS: {
   addHref?: string;
   addLabel?: string;
 }[] = [
+  {
+    type: "camera",
+    label: "Cameras",
+    addTool: "camera",
+    addLabel: "Add camera",
+  },
   { type: "map", label: "Scene map" },
   {
     type: "region",
@@ -69,12 +75,6 @@ const GROUPS: {
     label: "Tripwires",
     addTool: "tripwire",
     addLabel: "Add tripwire",
-  },
-  {
-    type: "camera",
-    label: "Cameras",
-    addTool: "camera",
-    addLabel: "Add camera",
   },
   {
     type: "sensor",
@@ -590,13 +590,11 @@ export function Outliner({
   const deleteConfirmLabel =
     deleteTarget?.type === "child" ? "Unlink" : "Delete";
 
-  return (
-    <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
-      {GROUPS.map(({ type, label, addTool, addHref, addLabel }) => {
+  const renderGroup = ({ type, label, addTool, addHref, addLabel }: (typeof GROUPS)[number]) => {
         const items = Object.values(entities).filter((e) => e.type === type);
         const showSheetAdd = Boolean(isSuperuser && addHref);
         const showToolAdd = Boolean(addTool);
-        if (items.length === 0 && !showSheetAdd && !showToolAdd) {
+        if (type !== "mark" && items.length === 0 && !showSheetAdd && !showToolAdd) {
           return null;
         }
         const isCollapsed = collapsed.has(type);
@@ -770,7 +768,11 @@ export function Outliner({
             </div>
           </div>
         );
-      })}
+      };
+
+  return (
+    <div className="ss-outliner" role="listbox" aria-label="Scene outliner">
+      {GROUPS.filter(group => group.type !== "mark").map(renderGroup)}
       <div className={`ss-outliner-group${collapsed.has("lighting") ? " is-collapsed" : ""}`}>
         <div className="ss-outliner-group-header">
           <button
@@ -820,6 +822,7 @@ export function Outliner({
           </label>
         </div>
       </div>
+      {GROUPS.filter(group => group.type === "mark").map(renderGroup)}
       <ConfirmDialog
         open={deleteTarget != null}
         title={deleteTitle}

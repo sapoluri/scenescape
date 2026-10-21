@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef } from "react";
+import { useAppToast } from "../components/ToastProvider";
 import {
   BufferGeometry,
   Euler,
@@ -31,7 +32,7 @@ import {
 } from "./geometrySync";
 import { scenePoseFromObject } from "../placement/poseThree";
 import { getViewportState, useViewportStore } from "./store";
-import { CREATION_TOOLS, entityCanScale } from "./tools";
+import { attachPlacementGuidance, CREATION_TOOLS, entityCanScale } from "./tools";
 import { attachShapeHandles, replaceShapePoints } from "./shapeHandles";
 import type {
   CameraEntity,
@@ -728,6 +729,7 @@ export function useViewportTools(world: ViewportWorld | null): void {
 
   /* ---------------- gizmo attach + transform baking -------------------- */
   const activeTool = useViewportStore((s) => s.activeTool);
+  const { show: showToast, dismiss: dismissToast } = useAppToast();
   const selectedId = useViewportStore((s) => s.selectedId);
   const structVersion = useViewportStore((s) => s.structVersion);
   const selectedSensorPolyPending = useViewportStore((s) => {
@@ -736,6 +738,36 @@ export function useViewportTools(world: ViewportWorld | null): void {
       !!e && e.type === "sensor" && e.areaMode === "poly" && e.points.length < 3
     );
   });
+
+  useEffect(() => {
+    if (!world) {
+      return;
+    }
+    let persistent = false;
+    const clearPlacement = attachPlacementGuidance(
+      world.host,
+      activeTool,
+      (message, keepVisible) => {
+        persistent = keepVisible;
+        showToast(message, "info", { timeoutMs: keepVisible ? 0 : undefined });
+      },
+    );
+    if (selectedSensorPolyPending) {
+      persistent = true;
+      world.host.setAttribute("data-placement", "sensor-poly");
+      showToast(
+        "Continue clicking the scene floor to add sensor polygon points. Press Enter to finish.",
+        "info",
+        { timeoutMs: 0 },
+      );
+    }
+    return () => {
+      clearPlacement();
+      if (persistent) {
+        dismissToast();
+      }
+    };
+  }, [world, activeTool, selectedSensorPolyPending, showToast, dismissToast]);
   // Calibrate uses double-click to add points; left-drag must still orbit.
   const calActive = useCalibrateStore((s) => s.active);
 

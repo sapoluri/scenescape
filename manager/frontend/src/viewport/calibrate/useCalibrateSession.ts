@@ -240,6 +240,7 @@ export function useCalibrateSession(
         return;
       }
       dragIndex = idx;
+      useCalibrateStore.getState().beginPointEdit();
       orbit.enabled = false;
       ev.preventDefault();
       ev.stopPropagation();
@@ -271,6 +272,7 @@ export function useCalibrateSession(
 
     const endDrag = (ev: PointerEvent) => {
       pointerDown = false;
+      if (dragIndex !== null) useCalibrateStore.getState().endPointEdit();
       host.style.cursor = nearestMapIndex(
         world, ev.clientX, ev.clientY, useCalibrateStore.getState().mapPoints,
       ) >= 0 ? "crosshair" : "default";

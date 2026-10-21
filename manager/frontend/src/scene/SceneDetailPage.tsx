@@ -11,7 +11,7 @@ import { GeometryBootstrap } from "./GeometryBootstrap";
 import { SceneWorkspaceSheets } from "../sheets/SceneWorkspaceSheets";
 import { deleteViaRest } from "../lib/restDelete";
 import { persistSceneGeometry } from "../lib/roiPersist";
-import { useMqttConnected, useCameraRates } from "./useLiveChrome";
+import { attachTelemetryCallbacks, useMqttConnected, useCameraRates } from "./useLiveChrome";
 import type { SceneDetailBootstrap } from "./types";
 import "./SceneDetailPage.css";
 
@@ -62,10 +62,9 @@ function SceneDetailInner({ bootstrap }: Props) {
 
   useEffect(() => {
     const setSceneRateCb = (hz: string) => setSceneRate(hz || "--");
-    window.ssSceneTelemetry = {
-      ...(window.ssSceneTelemetry || {}),
+    const detachCallbacks = attachTelemetryCallbacks({
       setSceneRate: setSceneRateCb,
-    };
+    });
     const onSceneRate = (ev: Event) => {
       const detail = (ev as CustomEvent<{ hz: string }>).detail;
       if (detail?.hz !== undefined) {
@@ -76,6 +75,7 @@ function SceneDetailInner({ bootstrap }: Props) {
     window.addEventListener("ss-scene-rate", onSceneRate);
     window.addEventListener("ss-telemetry-clear", onClear);
     return () => {
+      detachCallbacks();
       window.removeEventListener("ss-scene-rate", onSceneRate);
       window.removeEventListener("ss-telemetry-clear", onClear);
     };

@@ -23,6 +23,9 @@ export function Toast({ message, onDismiss, timeoutMs = 4000 }: Props) {
       return;
     }
     const ms = message.timeoutMs ?? timeoutMs;
+    if (ms <= 0) {
+      return;
+    }
     const t = window.setTimeout(onDismiss, ms);
     return () => window.clearTimeout(t);
   }, [message, onDismiss, timeoutMs]);

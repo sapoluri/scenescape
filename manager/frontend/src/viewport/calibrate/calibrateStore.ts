@@ -5,6 +5,13 @@ import { create } from "zustand";
 import type { CalibrateStep, CameraOptics } from "./types";
 import { zipCalibratePairs } from "./types";
 
+type PointSnapshot = {
+  camPoints: [number, number][];
+  mapPoints: [number, number, number][];
+};
+
+export const CALIBRATION_HISTORY_LIMIT = 50;
+
 export type CalibrateState = {
   active: boolean;
   /** Viewport / bootstrap camera entity id (DB pk string). */
@@ -17,6 +24,10 @@ export type CalibrateState = {
   /** Floor / scene points (meters, Z-up). Paired with camPoints by index. */
   mapPoints: [number, number, number][];
   dirty: boolean;
+  pastPoints: PointSnapshot[];
+  futurePoints: PointSnapshot[];
+  pointEditStart: PointSnapshot | null;
+  savedPointsKey: string;
   optics: CameraOptics | null;
   /** Latest calibration JPEG object URL (for map coverage projection). */
   feedImageUrl: string | null;
@@ -65,6 +76,9 @@ export type CalibrateState = {
   removeCamPointAt: (index: number) => void;
   removeMapPointAt: (index: number) => void;
   undoPoint: () => void;
+  redoPoint: () => void;
+  beginPointEdit: () => void;
+  endPointEdit: () => void;
   resetPoints: () => void;
   /**
    * Replace both sides (e.g. AprilTag result or loaded stored transforms).
@@ -95,6 +109,27 @@ function afterPoints(
   };
 }
 
+function pointsKey(points: PointSnapshot): string {
+  return JSON.stringify([points.camPoints, points.mapPoints]);
+}
+
+function snapshot(points: PointSnapshot): PointSnapshot {
+  return {
+    camPoints: points.camPoints.map(([x, y]) => [x, y]),
+    mapPoints: points.mapPoints.map(([x, y, z]) => [x, y, z]),
+  };
+}
+
+function editPoints(state: CalibrateState, points: PointSnapshot) {
+  if (pointsKey(state) === pointsKey(points)) return state;
+  return {
+    ...afterPoints(points.camPoints, points.mapPoints, pointsKey(points) !== state.savedPointsKey),
+    pastPoints: state.pointEditStart ? state.pastPoints :
+      [...state.pastPoints, snapshot(state)].slice(-CALIBRATION_HISTORY_LIMIT),
+    futurePoints: state.pointEditStart ? state.futurePoints : [],
+  };
+}
+
 const idle = {
   active: false,
   cameraId: null as string | null,
@@ -104,6 +139,10 @@ const idle = {
   camPoints: [] as [number, number][],
   mapPoints: [] as [number, number, number][],
   dirty: false,
+  pastPoints: [] as PointSnapshot[],
+  futurePoints: [] as PointSnapshot[],
+  pointEditStart: null as PointSnapshot | null,
+  savedPointsKey: JSON.stringify([[], []]),
   optics: null as CameraOptics | null,
   feedImageUrl: null as string | null,
   previewPose: null as CalibrateState["previewPose"],
@@ -139,11 +178,11 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
   setUpdatingPose: (updatingPose) => set({ updatingPose }),
   addCamPoint: (pt) =>
     set((s) =>
-      afterPoints([...s.camPoints, pt], s.mapPoints, true),
+      editPoints(s, { camPoints: [...s.camPoints, pt], mapPoints: s.mapPoints }),
     ),
   addMapPoint: (pt) =>
     set((s) =>
-      afterPoints(s.camPoints, [...s.mapPoints, pt], true),
+      editPoints(s, { camPoints: s.camPoints, mapPoints: [...s.mapPoints, pt] }),
     ),
   moveCamPoint: (index, pt) =>
     set((s) => {
@@ -152,7 +191,7 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
       }
       const camPoints = s.camPoints.slice();
       camPoints[index] = pt;
-      return afterPoints(camPoints, s.mapPoints, true);
+      return editPoints(s, { camPoints, mapPoints: s.mapPoints });
     }),
   moveMapPoint: (index, pt) =>
     set((s) => {
@@ -161,58 +200,66 @@ export const useCalibrateStore = create<CalibrateState>()((set) => ({
       }
       const mapPoints = s.mapPoints.slice();
       mapPoints[index] = pt;
-      return afterPoints(s.camPoints, mapPoints, true);
+      return editPoints(s, { camPoints: s.camPoints, mapPoints });
     }),
   removeCamPointAt: (index) =>
     set((s) => {
       if (index < 0 || index >= s.camPoints.length) {
         return s;
       }
-      return afterPoints(
-        s.camPoints.filter((_, i) => i !== index),
-        s.mapPoints,
-        true,
-      );
+      return editPoints(s, {
+        camPoints: s.camPoints.filter((_, i) => i !== index),
+        mapPoints: s.mapPoints,
+      });
     }),
   removeMapPointAt: (index) =>
     set((s) => {
       if (index < 0 || index >= s.mapPoints.length) {
         return s;
       }
-      return afterPoints(
-        s.camPoints,
-        s.mapPoints.filter((_, i) => i !== index),
-        true,
-      );
+      return editPoints(s, {
+        camPoints: s.camPoints,
+        mapPoints: s.mapPoints.filter((_, i) => i !== index),
+      });
     }),
   undoPoint: () =>
     set((s) => {
-      if (s.camPoints.length === 0 && s.mapPoints.length === 0) {
-        return s;
-      }
-      if (s.camPoints.length > s.mapPoints.length) {
-        return afterPoints(s.camPoints.slice(0, -1), s.mapPoints, true);
-      }
-      if (s.mapPoints.length > s.camPoints.length) {
-        return afterPoints(s.camPoints, s.mapPoints.slice(0, -1), true);
-      }
-      // Equal counts: drop the last index from both sides.
-      return afterPoints(
-        s.camPoints.slice(0, -1),
-        s.mapPoints.slice(0, -1),
-        s.camPoints.length > 1 || s.dirty,
-      );
+      const previous = s.pastPoints[s.pastPoints.length - 1];
+      if (!previous || s.pointEditStart) return s;
+      return {
+        ...afterPoints(previous.camPoints, previous.mapPoints, pointsKey(previous) !== s.savedPointsKey),
+        pastPoints: s.pastPoints.slice(0, -1),
+        futurePoints: [...s.futurePoints, snapshot(s)].slice(-CALIBRATION_HISTORY_LIMIT),
+      };
     }),
+  redoPoint: () => set((s) => {
+    const next = s.futurePoints[s.futurePoints.length - 1];
+    if (!next || s.pointEditStart) return s;
+    return {
+      ...afterPoints(next.camPoints, next.mapPoints, pointsKey(next) !== s.savedPointsKey),
+      pastPoints: [...s.pastPoints, snapshot(s)].slice(-CALIBRATION_HISTORY_LIMIT),
+      futurePoints: s.futurePoints.slice(0, -1),
+    };
+  }),
+  beginPointEdit: () => set((s) => s.pointEditStart ? s : { pointEditStart: snapshot(s) }),
+  endPointEdit: () => set((s) => {
+    if (!s.pointEditStart) return s;
+    const changed = pointsKey(s.pointEditStart) !== pointsKey(s);
+    return {
+      pointEditStart: null,
+      pastPoints: changed ? [...s.pastPoints, s.pointEditStart].slice(-CALIBRATION_HISTORY_LIMIT) : s.pastPoints,
+      futurePoints: changed ? [] : s.futurePoints,
+    };
+  }),
   resetPoints: () =>
-    set({
-      camPoints: [],
-      mapPoints: [],
-      dirty: true,
-      step: "pick",
-    }),
+    set((s) => editPoints(s, { camPoints: [], mapPoints: [] })),
   replacePoints: (camPoints, mapPoints, dirty = true) =>
-    set(afterPoints(camPoints, mapPoints, dirty)),
-  markClean: () => set({ dirty: false }),
+    set((s) => dirty ? editPoints(s, { camPoints, mapPoints }) : {
+      ...afterPoints(camPoints, mapPoints, false),
+      savedPointsKey: pointsKey({ camPoints, mapPoints }),
+      pastPoints: [], futurePoints: [], pointEditStart: null,
+    }),
+  markClean: () => set((s) => ({ dirty: false, savedPointsKey: pointsKey(s) })),
 }));
 
 export function getCalibrateState(): CalibrateState {

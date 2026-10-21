@@ -27,7 +27,7 @@
 .ss-cal-wizard--calibration {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem 0.75rem;
 }
 
@@ -88,14 +88,14 @@
 
 .ss-cal-wizard-main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
   min-width: 0;
 }
 
 .ss-cal-wizard-actions {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-self: end;
   gap: 0.45rem;
   min-width: max-content;
@@ -103,18 +103,43 @@
 
 .ss-cal-wizard-buttons {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem;
   flex: none;
 }
 
 .ss-cal-wizard--calibration .ss-btn {
-  align-items: baseline;
+  align-items: center;
+  height: 28px;
+  box-sizing: border-box;
   line-height: 1.2;
 }
 
 .ss-cal-wizard-buttons .ss-sp-dock-props-close {
-  align-self: center;
+  width: 28px;
+  height: 28px;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-history {
+  width: 28px;
+  padding: 0;
+  align-items: center;
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-save {
+  position: relative;
+  min-width: 4.5rem;
+  padding-inline: 0.65rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-cal-wizard-save.ss-btn--dirty:not(:disabled)::after {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
 }
 
 .ss-viz-bar.ss-cal-wizard--calibration {
@@ -135,6 +160,10 @@
 }
 
 .ss-viz-opacity-slot .ss-cal-wizard-opacity {
+  transform: translateY(3px);
+}
+
+.ss-cal-wizard--calibration .ss-cal-wizard-opacity {
   transform: translateY(3px);
 }
 
