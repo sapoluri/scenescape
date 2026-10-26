@@ -199,6 +199,7 @@ the ingest topics match the analytics publisher.
 
 - **Unit:** topic parsers, normalizers, dedup keys, timeline merge (`tests/sscape_tests/scene_metadata/`).
 - **Integration:** Timescale container in `tests/compose/compose.scene-metadata.yml`; ingest sample payloads; query timeline.
+- **Attribute accuracy:** `person_attribute_check` scores `person-attributes-recognition-crossroad-0238` and requires MCP to return those labels and confidences. Lab_000 is not the expected attribute source; its tracks have no appearance fields.
 - **Functional (follow-up):** Full `SCENESCAPE_SPEC` profile with analytics publishing.
 
 ---

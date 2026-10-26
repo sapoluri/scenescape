@@ -51,10 +51,20 @@ def test_validate_rejects_empty_and_oversized_filters():
     validate_attributes({f'attr_{index}': 'yes' for index in range(17)})
 
 
+QUERY_SOURCES = (
+  'attributes.py',
+  'store.py',
+  'query_app.py',
+  'mcp_server.py',
+  'projection.py',
+)
+
+
 def test_query_server_does_not_hardcode_attribute_names():
-  """is_male and scarf_color must stay out of the server so the filter stays generic."""
-  source = '\n'.join(path.read_text() for path in SERVER_SRC.glob('*.py'))
+  """Model head names stay out of the query path so the filter stays generic."""
+  source = '\n'.join((SERVER_SRC / name).read_text() for name in QUERY_SOURCES)
   assert 'is_male' not in source
+  assert 'has_bag' not in source
   assert 'scarf_color' not in source
   assert 'has_backpack' not in source
 

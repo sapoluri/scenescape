@@ -37,7 +37,7 @@ Investigator tools: `query_events`, `identity_timeline`, `region_activity`,
 `query_events` takes an `attributes` map of metadata name to label. Names are
 not registered in the server. A classifier field is queryable as soon as it
 is stored on an event, including fields from
-`person-attributes-recognition-crossroad-0238` (`is_male`, `has_backpack`, …)
+`person-attributes-recognition-crossroad-0238` (`is_male`, `has_bag`, …)
 and any later name. A match is a classificationPolicy object whose `label`
 equals the requested value, or a scalar stored under that key.
 
@@ -54,30 +54,27 @@ With Timescale and Mosquitto (`tests/compose/compose.scene-metadata.yml`):
 3. `GET /v1/identities/{id}/timeline` returns `track_started`, `region_enter`, and `tripwire_cross`.
 4. `python3 -m scene_metadata.mcp_server` exposes the same reads (`mcp>=1.12,<2`).
 
-## Lab_000 attribute demo
+## Person attribute accuracy
 
-PhysicalAI-SmartSpaces Lab_000 is not in this repository. On a machine with
-internet access and Timescale running, this downloads the calibration, map, and
-ground truth (not the RGB videos) and checks three steps:
+Lab_000 tracks have no appearance attributes. This check does not compare
+against that dataset. It runs
+`person-attributes-recognition-crossroad-0238` (Open Model Zoo 2023.0, FP32,
+CPU) on two fixed BGR frames and requires the event log, the `HAS_ATTRIBUTE`
+projection, and the MCP tools to return that model's own output.
 
-1. Attribute metadata is stored on `attribute_observed` and `track_started` rows.
-2. Each metadata key is projected to a `HAS_ATTRIBUTE` graph edge.
-3. The MCP tools `query_events` and `identity_attributes` return those values.
+Each of the seven heads is stored as a classificationPolicy object. `label` is
+`true` when the score is above 0.5. `confidence` is the score. `model_name` is
+the model id. The query server does not list the head names.
 
-Lab_000 labels have no clothing or gender fields. The stored attributes are
-track facts (`north_entries`, `tripwire_crossings`, `cameras_before_north`) in
-the same `{label, model_name, confidence}` object the retail pipeline writes
-for `person-attributes-recognition-crossroad-0238`. The query path does not
-list those names.
+A machine with internet access downloads the IR (about 87 MB) into
+`scene_metadata/.cache/` or `PERSON_ATTR_MODEL_DIR`. The weights are not in
+git. Timescale must already be running. Python packages: `openvino` and
+`numpy` (`pip install 'openvino==2025.3.0' numpy`).
 
 ```bash
 export SCENE_METADATA_DATABASE_URL=postgresql://scenescape:scenescape@127.0.0.1:5432/scene_metadata
-PYTHONPATH=scene_metadata/src python3 -m scene_metadata.physicalai_demo
+PYTHONPATH=scene_common/src:scene_metadata/src python3 -m scene_metadata.person_attribute_check
 ```
-
-Files land in `tools/reid_evaluation/output/physicalai-lab-data`, which git
-ignores. Source: [nvidia/PhysicalAI-SmartSpaces](https://huggingface.co/datasets/nvidia/PhysicalAI-SmartSpaces)
-(CC-BY-4.0).
 
 ## Ingest topics
 
