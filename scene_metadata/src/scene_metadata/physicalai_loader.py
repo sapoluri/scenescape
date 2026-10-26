@@ -118,12 +118,15 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
       payload={'frame': last_frame},
     ))
     seen_cameras: set[str] = set()
+    anchor_camera = None
     in_region = False
     prev_x = None
     for frame, obj in samples:
       loc = obj.get('3d location') or [None, None, None]
       x, y = loc[0], loc[1]
       visible = set((obj.get('2d bounding box visible') or {}))
+      if anchor_camera is None and visible:
+        anchor_camera = min(visible)
       for camera_id in sorted(visible - seen_cameras):
         events.append(EventEnvelope(
           occurred_at=_when(frame),
@@ -136,6 +139,25 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
           track_id=identity,
           source_message_id=f'cam-{identity}-{camera_id}-{frame}',
           payload={'frame': frame},
+        ))
+        events.append(EventEnvelope(
+          occurred_at=_when(frame),
+          event_type='reid_link',
+          source_topic=f'physicalai/reid/{identity}',
+          deployment_id=deployment_id,
+          scene_id=SCENE_ID,
+          camera_id=camera_id,
+          identity_id=identity,
+          track_id=identity,
+          source_message_id=f'reid-{identity}-{camera_id}-{frame}',
+          payload={
+            'frame': frame,
+            'global_id': identity,
+            'camera_id': camera_id,
+            'anchor_camera': anchor_camera,
+            'score': 1.0,
+            'method': 'ground_truth_object_id',
+          },
         ))
       seen_cameras |= visible
       inside = y is not None and y > REGION_Y
@@ -182,6 +204,26 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
             'from_x': prev_x,
             'to_x': x,
             'rule': 'x = -2.5',
+            'cameras_visible': sorted(visible),
+            'reid_cameras': sorted(seen_cameras),
+          },
+        ))
+        events.append(EventEnvelope(
+          occurred_at=_when(frame),
+          event_type='reid_at_crossing',
+          source_topic=f'physicalai/reid/{identity}',
+          deployment_id=deployment_id,
+          scene_id=SCENE_ID,
+          tripwire_id=TRIPWIRE_ID,
+          identity_id=identity,
+          track_id=identity,
+          source_message_id=f'reid-cross-{identity}-{frame}',
+          payload={
+            'frame': frame,
+            'global_id': identity,
+            'cameras_visible': sorted(visible),
+            'reid_cameras': sorted(seen_cameras),
+            'method': 'ground_truth_object_id',
           },
         ))
       prev_x = x
