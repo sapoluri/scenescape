@@ -5,6 +5,15 @@ networks:
   scenescape-test:
 
 services:
+  scene-metadata-mqtt:
+    image: eclipse-mosquitto:2
+    networks:
+      - scenescape-test
+    ports:
+      - '1883:1883'
+    volumes:
+      - ./mosquitto-anonymous.conf:/mosquitto/config/mosquitto.conf:ro
+
   scene-metadata-db:
     image: timescale/timescaledb:latest-pg16
     environment:

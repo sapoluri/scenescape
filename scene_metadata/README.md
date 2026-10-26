@@ -34,6 +34,15 @@ python3 -m scene_metadata.mcp_server
 Investigator tools: `query_events`, `identity_timeline`, `region_activity`,
 `tripwire_crossings`. Operator: `get_system_status`.
 
+## Verified ingest path
+
+With Timescale and Mosquitto (`tests/compose/compose.scene-metadata.yml`):
+
+1. `SCENE_METADATA_MQTT_ENABLED=true BROKER=127.0.0.1:1883 python3 -m scene_metadata.server`
+2. Publish `scenescape/data/scene/{scene}/person`, `scenescape/event/region/{scene}/{region}/count`, and `scenescape/event/tripwire/{scene}/{tripwire}/objects`.
+3. `GET /v1/identities/{id}/timeline` returns `track_started`, `region_enter`, and `tripwire_cross`.
+4. `python3 -m scene_metadata.mcp_server` exposes the same reads (`mcp>=1.12,<2`).
+
 ## Ingest topics
 
 - `scenescape/data/scene/+/+` — track_started / track_lost (Option A)

@@ -53,7 +53,7 @@ class MqttIngest:
       raise RuntimeError('MQTT ingest is not connected')
     self._pubsub.loopForever()
 
-  def _on_connect(self):
+  def _on_connect(self, _userdata=None, _flags=None, _rc=None, *_args):
     assert self._pubsub is not None
     self._pubsub.subscribe(SCENE_TOPIC)
     self._pubsub.subscribe(REGION_TOPIC)

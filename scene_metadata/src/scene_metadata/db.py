@@ -56,7 +56,30 @@ class Database:
     sql = self._sql_path.read_text(encoding='utf-8')
     with self.connection() as conn:
       conn.execute(sql)
+      self._apply_retention(conn)
       conn.commit()
+
+  def _apply_retention(self, conn) -> None:
+    days = os.environ.get('SCENE_METADATA_RETENTION_DAYS')
+    if not days:
+      return
+    try:
+      interval_days = int(days)
+    except ValueError:
+      log.warning(f'invalid SCENE_METADATA_RETENTION_DAYS={days!r}')
+      return
+    if interval_days <= 0:
+      return
+    conn.execute(
+      """
+      SELECT add_retention_policy(
+        'scenescape_events',
+        drop_after => (%s || ' days')::interval,
+        if_not_exists => TRUE
+      )
+      """,
+      (interval_days,),
+    )
 
   def connection(self) -> Connection:
     if self._pool is None:

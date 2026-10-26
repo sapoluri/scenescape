@@ -180,6 +180,18 @@ Persona gating: `SCENE_METADATA_MCP_PERSONAS=investigator,operator,integrator` (
 | **3** | MCP investigator tools | Cursor can call `identity_timeline` against a running stack |
 | **4** | Compose profile + docs | Demo stack ingests from analytics-enabled scene |
 
+Phases 0–3 and the investigator MQTT path of phase 4 are implemented.
+`sample_data/compose/compose.scene-metadata-override.yml` and
+`tests/compose/compose.scene-metadata.yml` start Timescale and an anonymous
+Mosquitto. Live check (cloud agent, 2026-10-26): publish
+`scenescape/data/scene/...`, `scenescape/event/region/.../count`, and
+`scenescape/event/tripwire/.../objects`; `GET /v1/identities/{id}/timeline`
+returns `track_started`, `region_enter`, and `tripwire_cross`; SQL graph
+returns `ENTERED` and `CROSSED`; MCP tools `identity_timeline`,
+`region_activity`, `tripwire_crossings`, and `get_system_status` read that
+API. A full SceneScape analytics container is not required for this contract;
+the ingest topics match the analytics publisher.
+
 ---
 
 ## Testing
