@@ -41,7 +41,7 @@ class Database:
   def open(self) -> None:
     if self._pool is not None:
       return
-    self._pool = ConnectionPool(self._url, kwargs={'row_factory': dict_row})
+    self._pool = ConnectionPool(self._url, kwargs={'row_factory': dict_row}, open=True)
     self._apply_schema()
 
   def close(self) -> None:

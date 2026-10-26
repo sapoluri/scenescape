@@ -4,7 +4,7 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 CREATE TABLE IF NOT EXISTS scenescape_events (
-  event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL DEFAULT gen_random_uuid(),
   ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   occurred_at TIMESTAMPTZ NOT NULL,
   deployment_id TEXT NOT NULL DEFAULT 'default',
@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS scenescape_events (
   camera_id TEXT,
   source_topic TEXT NOT NULL,
   source_message_id TEXT,
-  payload JSONB NOT NULL DEFAULT '{}'::jsonb
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (occurred_at, event_id)
 );
 
 SELECT create_hypertable('scenescape_events', 'occurred_at', if_not_exists => TRUE);
@@ -38,7 +39,7 @@ CREATE INDEX IF NOT EXISTS scenescape_events_type_time
   ON scenescape_events (deployment_id, event_type, occurred_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS scenescape_events_dedup
-  ON scenescape_events (deployment_id, source_topic, source_message_id);
+  ON scenescape_events (occurred_at, deployment_id, source_topic, source_message_id);
 
 CREATE TABLE IF NOT EXISTS scenescape_graph_edges (
   edge_id BIGSERIAL PRIMARY KEY,

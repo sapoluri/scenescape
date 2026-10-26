@@ -5,6 +5,8 @@
 
 from typing import Any, Optional
 
+from psycopg.types.json import Json
+
 from scene_metadata.db import Database
 from scene_metadata.envelope import EventEnvelope
 from scene_metadata.projection import project_edges
@@ -31,6 +33,7 @@ class EventStore:
 
   def _insert_one(self, conn, event: EventEnvelope) -> bool:
     row = event.as_row()
+    row['payload'] = Json(row.get('payload') or {})
     cur = conn.execute(
       """
       INSERT INTO scenescape_events (
@@ -43,7 +46,7 @@ class EventStore:
         %(identity_id)s, %(camera_id)s, %(source_topic)s, %(source_message_id)s,
         %(payload)s::jsonb
       )
-      ON CONFLICT (deployment_id, source_topic, source_message_id) DO NOTHING
+      ON CONFLICT (occurred_at, deployment_id, source_topic, source_message_id) DO NOTHING
       RETURNING event_id
       """,
       row,
@@ -107,13 +110,30 @@ class EventStore:
     end: Optional[str] = None,
     limit: int = 500,
   ) -> list[dict[str, Any]]:
-    return self.query_events(
-      deployment_id=deployment_id,
-      identity_id=identity_id,
-      start=start,
-      end=end,
-      limit=limit,
-    )
+    """Merge events keyed by global identity or track id (investigator timeline)."""
+    clauses = ['deployment_id = %(deployment_id)s']
+    params: dict[str, Any] = {
+      'deployment_id': deployment_id,
+      'identity_id': identity_id,
+      'limit': limit,
+    }
+    clauses.append('(identity_id = %(identity_id)s OR track_id = %(identity_id)s)')
+    if start:
+      clauses.append('occurred_at >= %(start)s::timestamptz')
+      params['start'] = start
+    if end:
+      clauses.append('occurred_at <= %(end)s::timestamptz')
+      params['end'] = end
+    sql = f"""
+      SELECT event_id, occurred_at, ingested_at, event_type, scene_id, region_id,
+             tripwire_id, track_id, identity_id, camera_id, source_topic, payload
+      FROM scenescape_events
+      WHERE {' AND '.join(clauses)}
+      ORDER BY occurred_at ASC
+      LIMIT %(limit)s
+    """
+    with self._db.connection() as conn:
+      return list(conn.execute(sql, params))
 
   def ingest_stats(self, deployment_id: str) -> dict[str, Any]:
     with self._db.connection() as conn:

@@ -17,8 +17,7 @@ def project_edges(conn: Connection, event: EventEnvelope) -> None:
   edges = list(_edges_for_event(event))
   if not edges:
     return
-  conn.executemany(
-    """
+  sql = """
     INSERT INTO scenescape_graph_edges (
       deployment_id, relation, src_kind, src_id, dst_kind, dst_id,
       scene_id, valid_from, valid_to, payload
@@ -27,9 +26,9 @@ def project_edges(conn: Connection, event: EventEnvelope) -> None:
       %(dst_kind)s, %(dst_id)s, %(scene_id)s, %(valid_from)s, %(valid_to)s,
       %(payload)s::jsonb
     )
-    """,
-    edges,
-  )
+  """
+  for edge in edges:
+    conn.execute(sql, edge)
 
 
 def _entity(event: EventEnvelope) -> tuple[str, str] | None:

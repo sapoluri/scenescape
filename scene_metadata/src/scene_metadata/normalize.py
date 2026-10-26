@@ -59,30 +59,33 @@ def track_lifecycle_events(
   message_id = _message_id(source_topic, payload)
   events: list[EventEnvelope] = []
 
-  for track_id in sorted(started):
-    obj = next((o for o in objects if o.get('id') == track_id), {})
-    _, identity_id = _object_identity(obj if isinstance(obj, dict) else {})
+  for active_id in sorted(started):
+    obj = next((o for o in objects if o.get('id') == active_id), {})
+    local_track_id, identity_id = _object_identity(obj if isinstance(obj, dict) else {})
+    if local_track_id is None and identity_id is None:
+      local_track_id = active_id
     events.append(EventEnvelope(
       occurred_at=when,
       event_type='track_started',
       source_topic=source_topic,
       deployment_id=deployment_id,
       scene_id=topic.scene_id,
-      track_id=track_id,
-      identity_id=identity_id,
-      source_message_id=f'{message_id}:start:{track_id}',
+      track_id=local_track_id or active_id,
+      identity_id=identity_id or active_id,
+      source_message_id=f'{message_id}:start:{active_id}',
       payload={'category': topic.category, 'object': obj},
     ))
 
-  for track_id in sorted(lost):
+  for active_id in sorted(lost):
     events.append(EventEnvelope(
       occurred_at=when,
       event_type='track_lost',
       source_topic=source_topic,
       deployment_id=deployment_id,
       scene_id=topic.scene_id,
-      track_id=track_id,
-      source_message_id=f'{message_id}:lost:{track_id}',
+      track_id=active_id,
+      identity_id=active_id,
+      source_message_id=f'{message_id}:lost:{active_id}',
       payload={'category': topic.category},
     ))
 

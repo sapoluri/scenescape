@@ -6,13 +6,15 @@
 import os
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from scene_metadata.db import Database
 from scene_metadata.store import EventStore
 
-deployment_id = os.environ.get('SCENE_METADATA_DEPLOYMENT_ID', 'default')
+
+def _deployment_id() -> str:
+  return os.environ.get('SCENE_METADATA_DEPLOYMENT_ID', 'default')
 
 
 def create_app(database: Database | None = None) -> FastAPI:
@@ -33,18 +35,19 @@ def create_app(database: Database | None = None) -> FastAPI:
 
   @app.get('/v1/health')
   def health() -> dict[str, Any]:
-    stats = store.ingest_stats(deployment_id)
+    dep = _deployment_id()
+    stats = store.ingest_stats(dep)
     return {
       'status': 'ok',
       'component': 'scene-metadata',
-      'deployment_id': deployment_id,
+      'deployment_id': dep,
       'ingest': stats,
     }
 
   @app.post('/v1/events/query')
   def query_events(body: EventQuery) -> dict[str, Any]:
     events = store.query_events(
-      deployment_id=deployment_id,
+      deployment_id=_deployment_id(),
       start=body.start,
       end=body.end,
       scene_id=body.scene_id,
@@ -64,7 +67,7 @@ def create_app(database: Database | None = None) -> FastAPI:
     limit: int = 500,
   ) -> dict[str, Any]:
     events = store.identity_timeline(
-      deployment_id=deployment_id,
+      deployment_id=_deployment_id(),
       identity_id=identity_id,
       start=start,
       end=end,
@@ -80,7 +83,7 @@ def create_app(database: Database | None = None) -> FastAPI:
     limit: int = 500,
   ) -> dict[str, Any]:
     events = store.query_events(
-      deployment_id=deployment_id,
+      deployment_id=_deployment_id(),
       region_id=region_id,
       start=start,
       end=end,
@@ -97,7 +100,7 @@ def create_app(database: Database | None = None) -> FastAPI:
     limit: int = 500,
   ) -> dict[str, Any]:
     events = store.query_events(
-      deployment_id=deployment_id,
+      deployment_id=_deployment_id(),
       tripwire_id=tripwire_id,
       start=start,
       end=end,
@@ -108,6 +111,7 @@ def create_app(database: Database | None = None) -> FastAPI:
 
   @app.get('/v1/graph/identities/{identity_id}/regions')
   def graph_identity_regions(identity_id: str) -> dict[str, Any]:
+    dep = _deployment_id()
     with db.connection() as conn:
       rows = conn.execute(
         """
@@ -119,12 +123,13 @@ def create_app(database: Database | None = None) -> FastAPI:
         ORDER BY valid_from ASC
         LIMIT 500
         """,
-        (deployment_id, identity_id),
+        (dep, identity_id),
       )
     return {'identity_id': identity_id, 'edges': list(rows)}
 
   @app.get('/v1/graph/identities/{identity_id}/tripwires')
   def graph_identity_tripwires(identity_id: str) -> dict[str, Any]:
+    dep = _deployment_id()
     with db.connection() as conn:
       rows = conn.execute(
         """
@@ -136,7 +141,7 @@ def create_app(database: Database | None = None) -> FastAPI:
         ORDER BY valid_from ASC
         LIMIT 500
         """,
-        (deployment_id, identity_id),
+        (dep, identity_id),
       )
     return {'identity_id': identity_id, 'edges': list(rows)}
 

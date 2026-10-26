@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import uuid
 
 import pytest
 
@@ -30,7 +31,7 @@ def test_insert_and_query_timeline():
     scene_id='s1',
     region_id='r1',
     identity_id='gid-1',
-    source_message_id='integration-test-1',
+    source_message_id=f'integration-test-{uuid.uuid4()}',
     payload={'entered': [{'id': 'gid-1'}]},
   )
   assert store.insert_events([event]) == 1

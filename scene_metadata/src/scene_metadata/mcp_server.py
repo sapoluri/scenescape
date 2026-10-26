@@ -4,53 +4,13 @@
 """MCP stdio server — investigator-first tools over the Scene Metadata HTTP API."""
 
 import json
-import os
-import urllib.error
 import urllib.parse
-import urllib.request
 
 from mcp.server.fastmcp import FastMCP
 
-API_BASE = os.environ.get('SCENE_METADATA_API_URL', 'http://127.0.0.1:8080').rstrip('/')
-PERSONAS = {
-  p.strip()
-  for p in os.environ.get(
-    'SCENE_METADATA_MCP_PERSONAS', 'investigator,operator,integrator').split(',')
-  if p.strip()
-}
+from scene_metadata.api_client import get_json, persona_allowed, post_json
 
 mcp = FastMCP('scenescape-scene-metadata')
-
-
-def _get(path: str, query: dict | None = None) -> dict:
-  url = API_BASE + path
-  if query:
-    params = urllib.parse.urlencode({k: v for k, v in query.items() if v is not None})
-    if params:
-      url = f'{url}?{params}'
-  request = urllib.request.Request(url, headers={'Accept': 'application/json'})
-  try:
-    with urllib.request.urlopen(request, timeout=30) as response:
-      return json.loads(response.read().decode('utf-8'))
-  except urllib.error.HTTPError as err:
-    body = err.read().decode('utf-8', errors='replace')
-    raise RuntimeError(f'API {path} failed ({err.code}): {body}') from err
-
-
-def _post(path: str, payload: dict) -> dict:
-  data = json.dumps(payload).encode('utf-8')
-  request = urllib.request.Request(
-    API_BASE + path,
-    data=data,
-    headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
-    method='POST',
-  )
-  with urllib.request.urlopen(request, timeout=30) as response:
-    return json.loads(response.read().decode('utf-8'))
-
-
-def _allowed(persona: str) -> bool:
-  return persona in PERSONAS
 
 
 @mcp.tool()
@@ -65,9 +25,13 @@ def query_events(
   limit: int = 200,
 ) -> str:
   """Query the Timescale event log (investigator, operator, integrator)."""
-  if not (_allowed('investigator') or _allowed('operator') or _allowed('integrator')):
+  if not (
+    persona_allowed('investigator')
+    or persona_allowed('operator')
+    or persona_allowed('integrator')
+  ):
     raise RuntimeError('query_events is not enabled for configured MCP personas')
-  result = _post('/v1/events/query', {
+  result = post_json('/v1/events/query', {
     'start': start,
     'end': end,
     'scene_id': scene_id,
@@ -88,9 +52,9 @@ def identity_timeline(
   limit: int = 500,
 ) -> str:
   """Fused track + region + tripwire timeline for one global identity."""
-  if not _allowed('investigator'):
+  if not persona_allowed('investigator'):
     raise RuntimeError('identity_timeline requires investigator persona')
-  result = _get(
+  result = get_json(
     f'/v1/identities/{urllib.parse.quote(identity_id, safe="")}/timeline',
     {'start': start, 'end': end, 'limit': str(limit)},
   )
@@ -105,9 +69,9 @@ def region_activity(
   limit: int = 500,
 ) -> str:
   """Region enter/exit/count/object analytics events in a time window."""
-  if not _allowed('investigator'):
+  if not persona_allowed('investigator'):
     raise RuntimeError('region_activity requires investigator persona')
-  result = _get(
+  result = get_json(
     f'/v1/regions/{urllib.parse.quote(region_id, safe="")}/activity',
     {'start': start, 'end': end, 'limit': str(limit)},
   )
@@ -122,9 +86,9 @@ def tripwire_crossings(
   limit: int = 500,
 ) -> str:
   """Ordered tripwire crossing events."""
-  if not _allowed('investigator'):
+  if not persona_allowed('investigator'):
     raise RuntimeError('tripwire_crossings requires investigator persona')
-  result = _get(
+  result = get_json(
     f'/v1/tripwires/{urllib.parse.quote(tripwire_id, safe="")}/crossings',
     {'start': start, 'end': end, 'limit': str(limit)},
   )
@@ -134,9 +98,9 @@ def tripwire_crossings(
 @mcp.tool()
 def get_system_status() -> str:
   """Operator view: health and ingest lag stats."""
-  if not _allowed('operator'):
+  if not persona_allowed('operator'):
     raise RuntimeError('get_system_status requires operator persona')
-  return json.dumps(_get('/v1/health'), default=str)
+  return json.dumps(get_json('/v1/health'), default=str)
 
 
 def main() -> None:
