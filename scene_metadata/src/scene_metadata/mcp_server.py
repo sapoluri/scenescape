@@ -103,6 +103,21 @@ def tripwire_crossings(
 
 
 @mcp.tool()
+def identity_attributes(identity_id: str) -> str:
+  """Attributes projected onto the SQL graph for one identity.
+
+  Each edge is one metadata key from the event log. A key the server has not
+  listed before is returned the same way as any other.
+  """
+  if not persona_allowed('investigator'):
+    raise RuntimeError('identity_attributes requires investigator persona')
+  result = get_json(
+    f'/v1/graph/identities/{urllib.parse.quote(identity_id, safe="")}/attributes',
+  )
+  return json.dumps(result, default=str)
+
+
+@mcp.tool()
 def get_system_status() -> str:
   """Operator view: health and ingest lag stats."""
   if not persona_allowed('operator'):

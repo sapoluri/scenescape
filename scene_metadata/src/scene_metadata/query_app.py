@@ -138,6 +138,36 @@ def create_app(database: Database | None = None) -> FastAPI:
       )
     return {'identity_id': identity_id, 'edges': list(rows)}
 
+  @app.get('/v1/graph/identities/{identity_id}/attributes')
+  def graph_identity_attributes(identity_id: str) -> dict[str, Any]:
+    """Attributes projected from the event log. Names are not a fixed list."""
+    dep = _deployment_id()
+    with db.connection() as conn:
+      rows = conn.execute(
+        """
+        SELECT dst_id, scene_id, valid_from, payload
+        FROM scenescape_graph_edges
+        WHERE deployment_id = %s
+          AND relation = 'HAS_ATTRIBUTE'
+          AND src_kind = 'identity' AND src_id = %s
+          AND dst_kind = 'attribute'
+        ORDER BY dst_id ASC
+        LIMIT 500
+        """,
+        (dep, identity_id),
+      )
+    attributes = []
+    for row in rows:
+      payload = row.get('payload') or {}
+      attributes.append({
+        'name': payload.get('name'),
+        'label': payload.get('label'),
+        'model_name': payload.get('model_name'),
+        'confidence': payload.get('confidence'),
+        'valid_from': row.get('valid_from'),
+      })
+    return {'identity_id': identity_id, 'attributes': attributes}
+
   @app.get('/v1/graph/identities/{identity_id}/tripwires')
   def graph_identity_tripwires(identity_id: str) -> dict[str, Any]:
     dep = _deployment_id()

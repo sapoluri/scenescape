@@ -103,7 +103,7 @@ class EventStore:
              tripwire_id, track_id, identity_id, camera_id, source_topic, payload
       FROM scenescape_events
       WHERE {' AND '.join(clauses)}
-      ORDER BY occurred_at ASC
+      ORDER BY occurred_at ASC, source_message_id ASC
       LIMIT %(limit)s
     """
     with self._db.connection() as conn:
@@ -137,7 +137,7 @@ class EventStore:
              tripwire_id, track_id, identity_id, camera_id, source_topic, payload
       FROM scenescape_events
       WHERE {' AND '.join(clauses)}
-      ORDER BY occurred_at ASC
+      ORDER BY occurred_at ASC, source_message_id ASC
       LIMIT %(limit)s
     """
     with self._db.connection() as conn:

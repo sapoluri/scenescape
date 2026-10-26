@@ -154,6 +154,7 @@ Server: `python -m scene_metadata.mcp_server`
 Investigator tools (ship first):
 
 - `query_events` — optional `attributes` map (any payload metadata name → label; no allowlist)
+- `identity_attributes` — `HAS_ATTRIBUTE` edges projected from stored metadata
 - `identity_timeline`
 - `region_activity`
 - `tripwire_crossings`

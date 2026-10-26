@@ -91,3 +91,33 @@ def _edges_for_event(event: EventEnvelope) -> Iterable[dict[str, Any]]:
       'dst_id': event.tripwire_id,
       'payload': Json({'event_type': event.event_type}),
     }
+  yield from _attribute_edges(event, base, src_kind, src_id)
+
+
+def _attribute_edges(event, base, src_kind: str, src_id: str):
+  """Project every metadata key. New attribute names need no edge schema change."""
+  if event.event_type != 'attribute_observed':
+    return
+  metadata = (event.payload or {}).get('metadata')
+  if not isinstance(metadata, dict):
+    return
+  for name, value in metadata.items():
+    if name == 'reid' or not isinstance(value, dict) or not isinstance(value.get('label'), str):
+      continue
+    label = value['label']
+    if not label:
+      continue
+    yield {
+      **base,
+      'relation': 'HAS_ATTRIBUTE',
+      'src_kind': src_kind,
+      'src_id': src_id,
+      'dst_kind': 'attribute',
+      'dst_id': f'{name}={label}',
+      'payload': Json({
+        'name': name,
+        'label': label,
+        'model_name': value.get('model_name'),
+        'confidence': value.get('confidence'),
+      }),
+    }

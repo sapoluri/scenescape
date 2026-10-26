@@ -31,6 +31,59 @@ def _identity(object_id: int) -> str:
   return f'person-{object_id}'
 
 
+ATTRIBUTE_MODEL = 'physicalai-ground-truth'
+
+
+def dataset_attribute_labels(samples: list[tuple[int, dict]]) -> dict[str, str]:
+  """Facts an investigator can recompute from Lab_000 ground truth.
+
+  The tracking labels do not include clothing or gender. These values use the
+  same ``{label, model_name, confidence}`` object ``classificationPolicy`` writes
+  when the retail pipeline runs person-attributes-recognition-crossroad-0238.
+  """
+  entered = 0
+  crossings = 0
+  in_region = False
+  prev_x = None
+  first_enter = None
+  seen: set[str] = set()
+  linked_before: set[str] = set()
+  for _frame, obj in samples:
+    loc = obj.get('3d location') or [None, None, None]
+    x_pos, y_pos = loc[0], loc[1]
+    visible = set(obj.get('2d bounding box visible') or {})
+    new_cameras = visible - seen
+    inside = y_pos is not None and y_pos > REGION_Y
+    if inside and not in_region:
+      entered += 1
+      if first_enter is None:
+        first_enter = _frame
+    if first_enter is None:
+      linked_before |= new_cameras
+    seen |= visible
+    if prev_x is not None and x_pos is not None and (prev_x < TRIPWIRE_X) != (x_pos < TRIPWIRE_X):
+      crossings += 1
+    prev_x = x_pos
+    in_region = inside
+  return {
+    'north_entries': str(entered),
+    'tripwire_crossings': str(crossings),
+    'cameras_before_north': str(len(linked_before)),
+  }
+
+
+def classification_metadata(labels: dict[str, str]) -> dict[str, dict]:
+  """classificationPolicy object for each attribute name."""
+  return {
+    name: {
+      'label': label,
+      'model_name': ATTRIBUTE_MODEL,
+      'confidence': 1.0,
+    }
+    for name, label in labels.items()
+  }
+
+
 def _attr(sensor: dict, name: str):
   for item in sensor.get('attributes') or []:
     if item.get('name') == name:
@@ -95,6 +148,7 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
     identity = _identity(object_id)
     first_frame, first_obj = samples[0]
     last_frame, _last_obj = samples[-1]
+    metadata = classification_metadata(dataset_attribute_labels(samples))
     events.append(EventEnvelope(
       occurred_at=_when(first_frame),
       event_type='track_started',
@@ -104,7 +158,22 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
       identity_id=identity,
       track_id=identity,
       source_message_id=f'track-start-{identity}',
-      payload={'frame': first_frame, 'location': first_obj.get('3d location')},
+      payload={
+        'frame': first_frame,
+        'location': first_obj.get('3d location'),
+        'metadata': metadata,
+      },
+    ))
+    events.append(EventEnvelope(
+      occurred_at=_when(first_frame),
+      event_type='attribute_observed',
+      source_topic=f'physicalai/attribute/{identity}',
+      deployment_id=deployment_id,
+      scene_id=SCENE_ID,
+      identity_id=identity,
+      track_id=identity,
+      source_message_id=f'attr-{identity}',
+      payload={'frame': first_frame, 'metadata': metadata},
     ))
     events.append(EventEnvelope(
       occurred_at=_when(last_frame),
@@ -172,7 +241,7 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
           identity_id=identity,
           track_id=identity,
           source_message_id=f'region-enter-{identity}-{frame}',
-          payload={'frame': frame, 'location': loc, 'rule': 'y > 0'},
+          payload={'frame': frame, 'location': loc, 'rule': 'y > 0', 'metadata': metadata},
         ))
       elif in_region and not inside:
         events.append(EventEnvelope(
@@ -206,6 +275,7 @@ def track_events(ground_truth: dict, deployment_id: str) -> list[EventEnvelope]:
             'rule': 'x = -2.5',
             'cameras_visible': sorted(visible),
             'reid_cameras': sorted(seen_cameras),
+            'metadata': metadata,
           },
         ))
         events.append(EventEnvelope(
