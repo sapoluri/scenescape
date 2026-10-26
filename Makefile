@@ -235,7 +235,7 @@ $(IMAGE_FOLDERS):
 	@echo "DONE ====> Building folder $@"
 
 # Dependency on the common base image
-autocalibration controller manager analytics mapping cluster_analytics reid: build-common
+autocalibration controller manager analytics mapping cluster_analytics reid scene_metadata: build-common
 
 # Helper function to build images in parallel
 define parallel-build
