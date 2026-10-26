@@ -34,6 +34,17 @@ python3 -m scene_metadata.mcp_server
 Investigator tools: `query_events`, `identity_timeline`, `region_activity`,
 `tripwire_crossings`. Operator: `get_system_status`.
 
+`query_events` takes an `attributes` map of metadata name to label. Names are
+not registered in the server. A classifier field is queryable as soon as it
+is stored on an event, including fields from
+`person-attributes-recognition-crossroad-0238` (`is_male`, `has_backpack`, …)
+and any later name. A match is a classificationPolicy object whose `label`
+equals the requested value, or a scalar stored under that key.
+
+```json
+{"attributes": {"is_male": "male", "scarf_color": "crimson"}}
+```
+
 ## Verified ingest path
 
 With Timescale and Mosquitto (`tests/compose/compose.scene-metadata.yml`):

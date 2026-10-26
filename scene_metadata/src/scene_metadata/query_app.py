@@ -7,8 +7,9 @@ import os
 from typing import Any, Optional
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from scene_metadata.attributes import validate_attributes
 from scene_metadata.db import Database
 from scene_metadata.store import EventStore
 
@@ -31,7 +32,16 @@ def create_app(database: Database | None = None) -> FastAPI:
     region_id: Optional[str] = None
     tripwire_id: Optional[str] = None
     event_types: Optional[list[str]] = None
+    attributes: Optional[dict[str, str]] = None
     limit: int = Field(default=200, ge=1, le=2000)
+
+    @field_validator('attributes')
+    @classmethod
+    def check_attributes(cls, value: Optional[dict[str, str]]) -> Optional[dict[str, str]]:
+      """Accept any attribute name. Reject only empty or oversized filters."""
+      if value is None:
+        return None
+      return validate_attributes(value)
 
   @app.get('/v1/health')
   def health() -> dict[str, Any]:
@@ -55,6 +65,7 @@ def create_app(database: Database | None = None) -> FastAPI:
       region_id=body.region_id,
       tripwire_id=body.tripwire_id,
       event_types=body.event_types,
+      attributes=body.attributes,
       limit=body.limit,
     )
     return {'events': events, 'count': len(events)}

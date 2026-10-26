@@ -22,9 +22,15 @@ def query_events(
   region_id: str | None = None,
   tripwire_id: str | None = None,
   event_types: list[str] | None = None,
+  attributes: dict[str, str] | None = None,
   limit: int = 200,
 ) -> str:
-  """Query the Timescale event log (investigator, operator, integrator)."""
+  """Query the Timescale event log (investigator, operator, integrator).
+
+  ``attributes`` maps any metadata name to the label to match. A name this
+  server has never listed works the same as one a classifier just emitted.
+  Each value matches a classificationPolicy ``label`` or a scalar under that key.
+  """
   if not (
     persona_allowed('investigator')
     or persona_allowed('operator')
@@ -39,6 +45,7 @@ def query_events(
     'region_id': region_id,
     'tripwire_id': tripwire_id,
     'event_types': event_types,
+    'attributes': attributes,
     'limit': limit,
   })
   return json.dumps(result, default=str)

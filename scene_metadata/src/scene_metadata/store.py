@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from psycopg.types.json import Json
 
+from scene_metadata.attributes import attribute_clauses, validate_attributes
 from scene_metadata.db import Database
 from scene_metadata.envelope import EventEnvelope
 from scene_metadata.projection import project_edges
@@ -64,8 +65,14 @@ class EventStore:
     region_id: Optional[str] = None,
     tripwire_id: Optional[str] = None,
     event_types: Optional[list[str]] = None,
+    attributes: Optional[dict[str, str]] = None,
     limit: int = 200,
   ) -> list[dict[str, Any]]:
+    """Return events. ``attributes`` matches any payload key to a label.
+
+    Keys are not an allowlist. classificationPolicy objects (``label`` /
+    ``model_name`` / ``confidence``) and scalar values both match.
+    """
     clauses = ['deployment_id = %(deployment_id)s']
     params: dict[str, Any] = {'deployment_id': deployment_id, 'limit': limit}
     if start:
@@ -89,6 +96,7 @@ class EventStore:
     if event_types:
       clauses.append('event_type = ANY(%(event_types)s)')
       params['event_types'] = event_types
+    clauses.extend(attribute_clauses(validate_attributes(attributes), params))
 
     sql = f"""
       SELECT event_id, occurred_at, ingested_at, event_type, scene_id, region_id,
