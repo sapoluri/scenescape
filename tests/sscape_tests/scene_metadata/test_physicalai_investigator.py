@@ -20,7 +20,7 @@ pytestmark = pytest.mark.test_name('SC-SceneMetadata-PhysicalAI')
 
 DATA = Path(os.environ.get(
   'PHYSICALAI_LAB_DIR',
-  '/workspace/tools/reid_evaluation/output/physicalai-lab-data',
+  Path(__file__).resolve().parents[3] / 'tools' / 'reid_evaluation' / 'output' / 'physicalai-lab-data',
 ))
 DEPLOYMENT = 'physicalai-lab-000'
 
